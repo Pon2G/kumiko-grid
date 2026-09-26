@@ -209,7 +209,7 @@ Test Contract IDから正本を確認し、次のいずれかとして扱う。
 
 ### 9.5 機械検証とレビューの境界
 
-Test Contract validationは、正本内のIDの一意性とprefix、全test caseのID宣言、参照先の存在、生の `test()` / `it()` の不使用、Regression Issue番号が正の整数であることを機械検出する。Unit TestとBuildもCIで実行する。
+Test Contract validationは、正本内のIDの一意性とprefix、全test caseのID宣言、参照先の存在、生のVitest Test APIの不使用、Regression Issue番号が正の整数であることを機械検出する。Unit TestとBuildもCIで実行する。
 
 一方、assertionが契約を実際に検証しているか、境界条件が十分か、実装詳細を間接的に固定していないか、契約を置く正本が適切か、Regression testが本来の契約を表すか、不要な重複がないかは静的検査では判断せず、レビューで確認する。機械検証は良いテストを完全判定するものではなく、根拠を追跡できる構造を保証する。
 

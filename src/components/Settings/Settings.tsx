@@ -36,7 +36,7 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
             value={divisions}
             disabled={divisionsDisabled}
             aria-describedby={divisionsDisabled ? 'divisions-disabled-message' : undefined}
-            onChange={(event) => changeDivisions(Number(event.target.value))}
+            onChange={(event) => changeDivisions(event.target.valueAsNumber)}
           />
           <button type="button" disabled={divisionsDisabled} onClick={() => changeDivisions(divisions + 1)} aria-label="分割数を増やす">＋</button>
         </span>

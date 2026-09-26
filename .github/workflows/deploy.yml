@@ -35,6 +35,9 @@ jobs:
       - name: 依存関係をインストール
         run: npm ci --no-audit --no-fund
 
+      - name: Test Contractを検証
+        run: npm run test:contracts
+
       - name: Unit Testを実行
         run: npm test
 

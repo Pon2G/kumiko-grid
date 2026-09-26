@@ -177,12 +177,27 @@ merge前に少なくとも次を確認する。
 
 ## 10. Test / Build
 
+テストを追加・変更するときは、次の順に確認する。
+
+1. 検証する振る舞いを自然言語で説明する。
+2. `docs/spec.md` または `docs/architecture.md` に維持すべき契約があるか確認する。
+3. なければ契約として維持すべきか判断し、必要な場合だけ正本へTest Contract ID付きで記載する。
+4. 各test caseを `src/test/contractTest.ts` の `contractTest` で宣言し、正本のIDを指定する。
+5. Bug修正では `regression` に元Issue番号を指定する。
+6. 契約を壊す最小限の入力と観測可能結果だけを検証する。
+7. 規約検証、Unit Test、Buildを実行する。
+
 通常の検証:
 
 ```bash
+npm run test:contracts
 npm test
 npm run build
 ```
+
+`npm run test:contracts` はTypeScript ASTを解析し、コメントや文字列を生のtest callと誤認せずに、Test Contract IDとtest caseの対応を検証する。
+
+テストを含むPull Requestでは、機械検証に加えて、assertionが指定した契約を検証していること、契約外の実装詳細を固定していないこと、Regression testが本来の契約を検証していることをレビューする。
 
 依存関係をクリーンに導入する場合:
 

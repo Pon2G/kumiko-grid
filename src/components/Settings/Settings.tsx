@@ -3,13 +3,20 @@ import type { MirrorAxis } from '../../geometry/transform'
 
 interface SettingsProps {
   divisions: number
+  divisionsDisabled: boolean
   symmetry: Symmetry
   onDivisionsChange: (value: number) => void
   onSymmetryChange: (value: Symmetry) => void
 }
 
-export function Settings({ divisions, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
+export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
   const symmetryType = symmetry.type
+  const changeDivisions = (value: number) => {
+    if (Number.isInteger(value)) {
+      onDivisionsChange(Math.min(12, Math.max(2, value)))
+    }
+  }
+
   return (
     <aside className="panel settings" aria-labelledby="settings-title">
       <div className="panel-heading">
@@ -20,16 +27,20 @@ export function Settings({ divisions, symmetry, onDivisionsChange, onSymmetryCha
       <label className="field">
         <span>辺の分割数</span>
         <span className="number-input">
-          <button type="button" onClick={() => onDivisionsChange(Math.max(2, divisions - 1))} aria-label="分割数を減らす">−</button>
+          <button type="button" disabled={divisionsDisabled} onClick={() => changeDivisions(divisions - 1)} aria-label="分割数を減らす">−</button>
           <input
             type="number"
             min="2"
             max="12"
+            step="1"
             value={divisions}
-            onChange={(event) => onDivisionsChange(Math.min(12, Math.max(2, Number(event.target.value))))}
+            disabled={divisionsDisabled}
+            aria-describedby={divisionsDisabled ? 'divisions-disabled-message' : undefined}
+            onChange={(event) => changeDivisions(Number(event.target.value))}
           />
-          <button type="button" onClick={() => onDivisionsChange(Math.min(12, divisions + 1))} aria-label="分割数を増やす">＋</button>
+          <button type="button" disabled={divisionsDisabled} onClick={() => changeDivisions(divisions + 1)} aria-label="分割数を増やす">＋</button>
         </span>
+        {divisionsDisabled && <small id="divisions-disabled-message">分割数を変更するには、すべての線分を削除してください。</small>}
       </label>
 
       <fieldset>

@@ -15,7 +15,6 @@ export default function App() {
 
   useEffect(() => {
     setPendingAnchor(null)
-    setSegments([])
   }, [divisions])
 
   const addAnchor = (anchor: AnchorPoint) => {
@@ -44,7 +43,13 @@ export default function App() {
         <span className="version">MVP · 01</span>
       </header>
       <main>
-        <Settings divisions={divisions} symmetry={symmetry} onDivisionsChange={setDivisions} onSymmetryChange={setSymmetry} />
+        <Settings
+          divisions={divisions}
+          divisionsDisabled={segments.length > 0}
+          symmetry={symmetry}
+          onDivisionsChange={setDivisions}
+          onSymmetryChange={setSymmetry}
+        />
         <div className="workspace">
           <CellEditor
             divisions={divisions}

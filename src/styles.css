@@ -27,6 +27,8 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .number-input input { border-inline: 1px solid #d8d7cf; font-family: 'DM Mono', monospace; -moz-appearance: textfield; }
 .number-input input::-webkit-inner-spin-button { appearance: none; }
 .number-input button:hover { background: #e7e5dc; }
+.number-input button:disabled, .number-input input:disabled { color: #8b8a82; cursor: not-allowed; background: #eeece5; }
+.field small { color: #6b6961; line-height: 1.5; }
 .segmented-control { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid #c9c9c0; }
 .segmented-control button { min-height: 39px; padding: 5px; border: 0; background: transparent; font-size: 11px; }
 .segmented-control button.active, .axis-control button.active { color: white; background: #273a31; }

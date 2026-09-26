@@ -13,6 +13,7 @@ const sources = [
 
 const contracts = new Map()
 const errors = []
+const excludedSourceDirectories = new Set(['.git', 'coverage', 'dist', 'node_modules'])
 
 for (const source of sources) {
   const content = await readFile(path.join(root, source.file), 'utf8')
@@ -33,23 +34,27 @@ const collectSourceFiles = async (directory) => {
   const entries = await readdir(directory, { withFileTypes: true })
   const files = await Promise.all(entries.map(async (entry) => {
     const target = path.join(directory, entry.name)
-    if (entry.isDirectory()) return collectSourceFiles(target)
+    if (entry.isDirectory()) {
+      return excludedSourceDirectories.has(entry.name) ? [] : collectSourceFiles(target)
+    }
     return /\.tsx?$/.test(entry.name) ? [target] : []
   }))
   return files.flat()
 }
 
-const isTestFile = (file) => testFiles.suffixes.some((suffix) => file.endsWith(`.${suffix}`))
-
 const property = (object, name) => object.properties.find((item) =>
-  ts.isPropertyAssignment(item)
+  item.name
   && ((ts.isIdentifier(item.name) && item.name.text === name)
     || (ts.isStringLiteral(item.name) && item.name.text === name)),
 )
 
-const sourceFiles = (await Promise.all(
+const contractTestFiles = (await Promise.all(
   testFiles.roots.map((directory) => collectSourceFiles(path.join(root, directory))),
-)).flat()
+)).flat().filter((file) =>
+  testFiles.suffixes.some((suffix) => file.endsWith(`.${suffix}`)),
+)
+const contractTestFileSet = new Set(contractTestFiles)
+const sourceFiles = await collectSourceFiles(root)
 const canonicalWrapper = path.join(root, 'src/test/contractTest.ts')
 const rawTestNames = ['test', 'it']
 
@@ -62,7 +67,7 @@ for (const file of sourceFiles) {
     true,
     file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   )
-  const testFile = isTestFile(file)
+  const testFile = contractTestFileSet.has(file)
   let testCount = 0
   let importsCanonicalWrapper = false
 
@@ -122,16 +127,18 @@ for (const file of sourceFiles) {
           errors.push(`${relativeFile}:${line}: contractTestのmetadataはobject literalで指定してください`)
         } else {
           const contract = property(metadata, 'contract')
-          if (!contract || !ts.isStringLiteral(contract.initializer)) {
+          if (!contract || !ts.isPropertyAssignment(contract)
+            || !ts.isStringLiteral(contract.initializer)) {
             errors.push(`${relativeFile}:${line}: contractは文字列リテラルで指定してください`)
           } else if (!contracts.has(contract.initializer.text)) {
             errors.push(`${relativeFile}:${line}: Test Contract ID ${contract.initializer.text} は正本に存在しません`)
           }
           const regression = property(metadata, 'regression')
-          if (regression && (!ts.isNumericLiteral(regression.initializer)
+          if (regression && (!ts.isPropertyAssignment(regression)
+            || !ts.isNumericLiteral(regression.initializer)
             || !Number.isInteger(Number(regression.initializer.text))
             || Number(regression.initializer.text) <= 0)) {
-            errors.push(`${relativeFile}:${line}: regressionは正のIssue番号で指定してください`)
+            errors.push(`${relativeFile}:${line}: regressionは正のIssue番号を数値リテラルで指定してください`)
           }
         }
       }

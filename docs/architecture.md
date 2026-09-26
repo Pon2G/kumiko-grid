@@ -118,8 +118,10 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 
 Edge Division Pointは辺の始点から終点への線形補間で求める。
 
+<!-- test-contract: ARCH-GEOMETRY-MIRROR-MEDIAN -->
 mirrorは選択した頂点と対辺中点を結ぶ中線に対して両端点を鏡映する。
 
+<!-- test-contract: ARCH-GEOMETRY-ROTATION-CENTROID -->
 rotationalは正三角形の重心を中心として120°、240°回転する。
 
 <!-- test-contract: ARCH-LAYOUT-LOCAL-COORDINATE -->

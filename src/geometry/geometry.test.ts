@@ -17,12 +17,13 @@ describe('正三角形のgeometry', () => {
     })
   })
 
-  contractTest({ contract: 'SPEC-SYMMETRY-MIRROR' }, '頂点と対辺中点を結ぶ軸に対してPointを鏡映する', () => {
+  contractTest({ contract: 'ARCH-GEOMETRY-MIRROR-MEDIAN' }, '頂点と対辺中点を結ぶ軸に対してPointを鏡映する', () => {
     const midpoint = { x: 0.5, y: TRIANGLE_HEIGHT }
     expectPoint(reflectPoint(canonicalTriangle.B, canonicalTriangle.A, midpoint), canonicalTriangle.C)
   })
 
-  contractTest({ contract: 'SPEC-SYMMETRY-ROTATIONAL' }, '正三角形の重心を中心に頂点を120°回転する', () => {
+  contractTest({ contract: 'ARCH-GEOMETRY-ROTATION-CENTROID' }, '正三角形の重心を中心に頂点を120°と240°回転する', () => {
     expectPoint(rotatePoint(canonicalTriangle.A, triangleCentroid(), 120), canonicalTriangle.C)
+    expectPoint(rotatePoint(canonicalTriangle.A, triangleCentroid(), 240), canonicalTriangle.B)
   })
 })

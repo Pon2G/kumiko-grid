@@ -195,7 +195,9 @@ npm test
 npm run build
 ```
 
-`npm run test:contracts` はTypeScript ASTを解析し、コメントや文字列を生のtest callと誤認せずに、Test Contract IDとtest caseの対応を検証する。
+Vitestと `npm run test:contracts` は `test-files.json` の対象定義を共有する。テストファイルの配置やsuffixを変更するときはこの定義を更新し、片方の検証だけをすり抜ける対象を作らない。
+
+`npm run test:contracts` はTypeScript ASTを解析し、コメントや文字列を生のtest callと誤認せずに、Test Contract IDとtest caseの対応を検証する。Vitestのnamespace importも、生のtest caseを隠せるためテストファイルでは使用しない。
 
 テストを含むPull Requestでは、機械検証に加えて、assertionが指定した契約を検証していること、契約外の実装詳細を固定していないこと、Regression testが本来の契約を検証していることをレビューする。
 

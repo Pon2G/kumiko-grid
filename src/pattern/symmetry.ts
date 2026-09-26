@@ -12,6 +12,9 @@ export interface RenderedSegment extends PointSegment {
   generated: boolean
 }
 
+/** 描画モデルの内部表現を利用側へ漏らさず、派生Segmentかを判定する。 */
+export const isDerivedSegment = (segment: RenderedSegment) => segment.generated
+
 const oppositeEdge = {
   A: ['B', 'C'],
   B: ['A', 'C'],

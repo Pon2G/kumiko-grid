@@ -4,6 +4,7 @@ import process from 'node:process'
 import ts from 'typescript'
 
 const root = process.cwd()
+const testFiles = JSON.parse(await readFile(path.join(root, 'test-files.json'), 'utf8'))
 const contractPattern = /<!-- test-contract: ((?:SPEC|ARCH)-[A-Z0-9-]+) -->/g
 const sources = [
   { file: 'docs/spec.md', prefix: 'SPEC-' },
@@ -33,7 +34,7 @@ const collectTestFiles = async (directory) => {
   const files = await Promise.all(entries.map(async (entry) => {
     const target = path.join(directory, entry.name)
     if (entry.isDirectory()) return collectTestFiles(target)
-    return /\.test\.tsx?$/.test(entry.name) ? [target] : []
+    return testFiles.suffixes.some((suffix) => entry.name.endsWith(`.${suffix}`)) ? [target] : []
   }))
   return files.flat()
 }
@@ -44,7 +45,11 @@ const property = (object, name) => object.properties.find((item) =>
     || (ts.isStringLiteral(item.name) && item.name.text === name)),
 )
 
-for (const file of await collectTestFiles(path.join(root, 'src'))) {
+const files = (await Promise.all(
+  testFiles.roots.map((directory) => collectTestFiles(path.join(root, directory))),
+)).flat()
+
+for (const file of files) {
   const relativeFile = path.relative(root, file)
   const source = ts.createSourceFile(
     file,
@@ -57,11 +62,15 @@ for (const file of await collectTestFiles(path.join(root, 'src'))) {
 
   const visit = (node) => {
     if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
-      && node.moduleSpecifier.text === 'vitest' && node.importClause?.namedBindings
-      && ts.isNamedImports(node.importClause.namedBindings)) {
-      for (const item of node.importClause.namedBindings.elements) {
-        if (['test', 'it'].includes(item.propertyName?.text ?? item.name.text)) {
-          errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: Vitestのtest/itを直接importせずcontractTestを使用してください`)
+      && node.moduleSpecifier.text === 'vitest' && node.importClause?.namedBindings) {
+      const bindings = node.importClause.namedBindings
+      if (ts.isNamespaceImport(bindings)) {
+        errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(bindings.getStart()).line + 1}: Vitestのnamespace importは生のtest/itを迂回できるため使用できません`)
+      } else {
+        for (const item of bindings.elements) {
+          if (['test', 'it'].includes(item.propertyName?.text ?? item.name.text)) {
+            errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: Vitestのtest/itを直接importせずcontractTestを使用してください`)
+          }
         }
       }
     }

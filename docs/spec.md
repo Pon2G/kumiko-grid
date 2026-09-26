@@ -122,7 +122,7 @@ Cell Editorとは別に文様全体を表示するPreview領域を持つ。
 Cell Patternを変更するとPreviewへ即時反映する。
 
 <!-- test-contract: SPEC-LAYOUT-TRIANGULAR-GRID -->
-現在は通常の正三角形平面充填を扱い、各行で一辺の半分ずつ横へずらした上向き三角形と下向き三角形を交互に組み合わせ、指定した行数と列数のCellを表示する。
+現在は通常の正三角形平面充填を扱い、上向き三角形と下向き三角形を交互に組み合わせ、指定した行数と列数のCellを表示する。
 
 下向きセルへCell Patternを配置するときは、画面座標の単純コピーではなく、セル自身のLocal Coordinateから配置変換する。
 

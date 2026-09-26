@@ -106,7 +106,7 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 ユーザーが定義した基本Segment群とSymmetry等の設定を持つ。
 
 <!-- test-contract: ARCH-PATTERN-DERIVED-SEGMENTS -->
-対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。描画用Segmentではユーザー入力を `generated: false`、対称操作で追加したコピーを `generated: true` として区別する。
+対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、その具体的なデータ表現は契約としない。
 
 ### CellPlacement
 

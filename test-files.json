@@ -1,0 +1,4 @@
+{
+  "roots": ["src"],
+  "suffixes": ["test.ts", "test.tsx"]
+}

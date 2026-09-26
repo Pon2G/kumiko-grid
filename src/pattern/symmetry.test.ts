@@ -1,23 +1,52 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect } from 'vitest'
+import { contractTest } from '../test/contractTest'
+import { canonicalTriangle } from '../geometry/triangle'
+import type { Point } from '../geometry/types'
 import type { CellPattern } from './cellPattern'
-import { expandPattern } from './symmetry'
+import { expandPattern, isDerivedSegment, type RenderedSegment } from './symmetry'
 
 const seed = { id: 'seed', start: { kind: 'vertex' as const, vertex: 'A' as const }, end: { kind: 'vertex' as const, vertex: 'B' as const } }
 
+const pointsAreClose = (actual: Point, expected: Point) =>
+  Math.abs(actual.x - expected.x) < 1e-10 && Math.abs(actual.y - expected.y) < 1e-10
+
+const expectSegment = (segments: RenderedSegment[], start: Point, end: Point) => {
+  expect(segments.some((segment) =>
+    pointsAreClose(segment.start, start) && pointsAreClose(segment.end, end),
+  )).toBe(true)
+}
+
 describe('CellPatternの対称展開', () => {
-  it.each([
-    [{ type: 'none' } as const, 1],
-    [{ type: 'mirror', axis: 'A' } as const, 2],
-    [{ type: 'rotational' } as const, 3],
-  ])('%oを期待する本数のSVG描画用Segmentへ展開する', (symmetry, count) => {
-    const pattern: CellPattern = { segments: [seed], symmetry }
-    const expanded = expandPattern(pattern)
-    expect(expanded).toHaveLength(count)
-    expect(expanded[0]).toMatchObject({ id: 'seed', generated: false, start: { x: 0.5, y: 0 } })
+  contractTest({ contract: 'SPEC-SYMMETRY-EXPANSION' }, '各Symmetryを期待する本数のSVG描画用Segmentへ展開する', () => {
+    const cases: Array<[CellPattern['symmetry'], number]> = [
+      [{ type: 'none' }, 1],
+      [{ type: 'mirror', axis: 'A' }, 2],
+      [{ type: 'rotational' }, 3],
+    ]
+    for (const [symmetry, count] of cases) {
+      const expanded = expandPattern({ segments: [seed], symmetry })
+      expect(expanded).toHaveLength(count)
+      expect(expanded.some(({ id }) => id === seed.id)).toBe(true)
+    }
   })
 
-  it('回転対称で追加されたすべてのコピーを自動生成として識別する', () => {
+  contractTest({ contract: 'ARCH-PATTERN-DERIVED-SEGMENTS' }, '基本Segmentを変更せず派生Segmentと区別できる', () => {
+    const pattern: CellPattern = { segments: [seed], symmetry: { type: 'rotational' } }
+    const expanded = expandPattern(pattern)
+    expect(pattern.segments).toEqual([seed])
+    expect(expanded.filter(isDerivedSegment)).toHaveLength(2)
+    expect(expanded.filter((segment) => !isDerivedSegment(segment))).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'SPEC-SYMMETRY-MIRROR' }, 'mirror Aは基本SegmentをAからCへのSegmentへ鏡映する', () => {
+    const expanded = expandPattern({ segments: [seed], symmetry: { type: 'mirror', axis: 'A' } })
+    expectSegment(expanded.filter(isDerivedSegment), canonicalTriangle.A, canonicalTriangle.C)
+  })
+
+  contractTest({ contract: 'SPEC-SYMMETRY-ROTATIONAL' }, 'rotationalは基本Segmentを120°と240°回転した位置へ配置する', () => {
     const expanded = expandPattern({ segments: [seed], symmetry: { type: 'rotational' } })
-    expect(expanded.map(({ generated }) => generated)).toEqual([false, true, true])
+    const derived = expanded.filter(isDerivedSegment)
+    expectSegment(derived, canonicalTriangle.C, canonicalTriangle.A)
+    expectSegment(derived, canonicalTriangle.B, canonicalTriangle.C)
   })
 })

@@ -3,7 +3,7 @@ import type { AnchorPoint } from '../../geometry/anchorPoint'
 import type { Segment } from '../../geometry/segment'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern } from '../../pattern/cellPattern'
-import { expandPattern } from '../../pattern/symmetry'
+import { expandPattern, isDerivedSegment } from '../../pattern/symmetry'
 
 interface CellEditorProps {
   divisions: number
@@ -43,10 +43,10 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
           {rendered.map((segment) => (
             <line
               key={segment.id}
-              className={segment.generated ? 'pattern-line generated' : 'pattern-line source'}
+              className={isDerivedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'}
               x1={px(segment.start.x)} y1={py(segment.start.y)}
               x2={px(segment.end.x)} y2={py(segment.end.y)}
-              onClick={() => !segment.generated && onDeleteSegment(segment.sourceId)}
+              onClick={() => !isDerivedSegment(segment) && onDeleteSegment(segment.sourceId)}
             />
           ))}
           {anchors.map((anchor) => {

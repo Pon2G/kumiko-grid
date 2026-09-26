@@ -105,7 +105,8 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 
 ユーザーが定義した基本Segment群とSymmetry等の設定を持つ。
 
-対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。
+<!-- test-contract: ARCH-PATTERN-DERIVED-SEGMENTS -->
+対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、その具体的なデータ表現は契約としない。
 
 ### CellPlacement
 
@@ -117,10 +118,13 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 
 Edge Division Pointは辺の始点から終点への線形補間で求める。
 
+<!-- test-contract: ARCH-GEOMETRY-MIRROR-MEDIAN -->
 mirrorは選択した頂点と対辺中点を結ぶ中線に対して両端点を鏡映する。
 
+<!-- test-contract: ARCH-GEOMETRY-ROTATION-CENTROID -->
 rotationalは正三角形の重心を中心として120°、240°回転する。
 
+<!-- test-contract: ARCH-LAYOUT-LOCAL-COORDINATE -->
 下向きCellでもAnchorPoint自体の意味は変えない。基準CellのLocal Coordinateを配置変換して向きを表現する。
 
 基準三角形の外接矩形高さを `height` とした場合、下向きCellへの基本変換は概念的に次で表現できる。
@@ -163,11 +167,53 @@ Reactはdivision数、選択中AnchorPoint、基本Segment群、Symmetry等の�
 
 ## 9. テスト設計
 
-geometry / pattern / layoutはReactなしでUnit Test可能にする。
+### 9.1 テストの目的と根拠
 
-浮動小数点Geometryは完全一致ではなく適切な許容誤差を使用する。
+テストは現在の実装結果を保存するものではなく、意図的に維持する契約を検証する。各test caseは、`docs/spec.md` のプロダクト・ドメイン上の契約、またはこの文書の長寿命な設計上の契約・不変条件のいずれかを根拠とする。根拠がない振る舞いを固定せず、維持すべき振る舞いなら正本へ契約を追加してから、または同じ変更でテストする。
 
-テストは内部実装の形ではなく、仕様として維持する振る舞いと不変条件を対象にする。
+テスト対象は次のとおりとする。
+
+- ユーザーから観測できる仕様上の振る舞い
+- モジュール境界、座標変換、ドメイン上の不変条件などの設計契約
+- バグ修正で明らかになった、本来維持すべき契約のRegression test
+
+内部配列の順序、privateな中間データ、特定アルゴリズム、内部IDの生成規則、同等の振る舞いを実現できるデータ表現、偶然のDOM構造は、それ自体が契約でない限り固定しない。snapshotや全体一致も、すべての差分が契約上意味を持つ場合に限り使用し、通常は必要な観測可能結果だけをassertする。
+
+### 9.2 Test Contract ID
+
+自動テストの根拠となる段落の直前に、次の形式で一意なTest Contract IDを定義する。
+
+```md
+<!-- test-contract: {SPECまたはARCH}-{意味のある名前} -->
+```
+
+- `SPEC-*` は `docs/spec.md`、`ARCH-*` は `docs/architecture.md` にだけ定義する。
+- IDは連番ではなく、大文字英数字とハイフンによる意味のある安定した名前とする。
+- 見出しや文章の移動では変更せず、契約の廃止・分割・統合時にだけ見直す。
+- test caseは `contractTest` のmetadataに正本で定義済みのIDを文字列リテラルとして宣言する。
+- Bug Issueに由来するRegression testは、契約に加えて正のIssue番号を `regression` に記録する。Issueは追加理由の履歴であり、契約の正本にはしない。
+
+### 9.3 レイヤー別の責務
+
+geometry / pattern / layoutはReactなしでUnit Test可能にし、pure function、ドメイン上の振る舞い、不変条件、境界条件を中心に検証する。浮動小数点Geometryは完全一致ではなく、契約上意味のある許容誤差を使用する。
+
+React UIのテストは、ユーザー操作とドメイン操作の接続、ユーザーに見える状態変化、UIにだけ存在する契約を対象とする。Geometryの数値計算など、ドメイン層で検証済みの契約をUI経由で重複して検証しない。
+
+### 9.4 テスト失敗時の判断
+
+Test Contract IDから正本を確認し、次のいずれかとして扱う。
+
+1. 契約が有効で実装が破った場合は、デグレとしてコードを修正する。
+2. 意図した仕様・設計変更の場合は正本を更新し、契約の意味に応じてIDを維持・分割・廃止してテストも更新する。
+3. assertionが契約外の実装詳細を固定していた場合は、契約に必要な範囲へテストを修正または削除する。
+
+### 9.5 機械検証とレビューの境界
+
+Test Contract validationは、正本内のIDの一意性とprefix、全test caseのID宣言、参照先の存在、生のVitest Test APIの不使用、Regression Issue番号が正の整数であることを機械検出する。Unit TestとBuildもCIで実行する。
+
+一方、assertionが契約を実際に検証しているか、境界条件が十分か、実装詳細を間接的に固定していないか、契約を置く正本が適切か、Regression testが本来の契約を表すか、不要な重複がないかは静的検査では判断せず、レビューで確認する。機械検証は良いテストを完全判定するものではなく、根拠を追跡できる構造を保証する。
+
+このvalidatorは、人間やCodexによる通常の開発で、契約IDの付け忘れ、存在しない契約の参照、生のTest API、不正なRegressionメタデータなどを検出するための規約検査である。意図的なあらゆる迂回を防ぐセキュリティ境界ではなく、その目的でimport graph解析や型解決を備えた複雑な静的解析器へ拡張しない。
 
 ## 10. 永続化とスキーマ
 

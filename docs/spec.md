@@ -45,7 +45,8 @@
 
 例として「BCを5等分した2番目の点」は `edge = BC`、`divisions = 5`、`index = 2` と表現する。
 
-座標値そのものは保存せず、相対表現から座標を計算する。これにより三角形の表示サイズが変わっても同じ文様を維持できる。
+<!-- test-contract: SPEC-ANCHOR-EDGE-DIVISION-COORDINATE -->
+座標値そのものは保存せず、edgeの始点から終点へ `index / divisions` の割合で線形補間し、相対表現から座標を計算する。これにより三角形の表示サイズが変わっても同じ文様を維持できる。
 
 線分同士の交点は現在のAnchorPointとして扱わない。
 
@@ -75,13 +76,18 @@ Cell Patternは、ユーザーが定義した基本Segmentと、それに適用�
 
 線対称。
 
+<!-- test-contract: SPEC-SYMMETRY-MIRROR -->
 正三角形の「頂点 → 対辺の中点」を結ぶ3本の軸から1本を選択し、基本Segmentを鏡映して追加する。
 
 #### rotational
 
+<!-- test-contract: SPEC-SYMMETRY-ROTATIONAL -->
 正三角形の重心を中心とする120度回転対称。
 
 基本Segmentを0°、120°、240°へ回転して配置する。
+
+<!-- test-contract: SPEC-SYMMETRY-EXPANSION -->
+1本の基本Segmentに対し、`none` は元の1本、`mirror` は元と鏡映の2本、`rotational` は0°、120°、240°の3本を描画用Segmentとして生成する。元のSegmentはユーザー入力として扱う。
 
 ## 6. Cell Editor
 
@@ -115,7 +121,8 @@ Cell Editorとは別に文様全体を表示するPreview領域を持つ。
 
 Cell Patternを変更するとPreviewへ即時反映する。
 
-現在は通常の正三角形平面充填を扱い、上向き三角形と下向き三角形を組み合わせて表示する。
+<!-- test-contract: SPEC-LAYOUT-TRIANGULAR-GRID -->
+現在は通常の正三角形平面充填を扱い、上向き三角形と下向き三角形を交互に組み合わせ、指定した行数と列数のCellを表示する。
 
 下向きセルへCell Patternを配置するときは、画面座標の単純コピーではなく、セル自身のLocal Coordinateから配置変換する。
 

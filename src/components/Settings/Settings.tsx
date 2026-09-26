@@ -14,7 +14,7 @@ export function Settings({ divisions, symmetry, onDivisionsChange, onSymmetryCha
     <aside className="panel settings" aria-labelledby="settings-title">
       <div className="panel-heading">
         <span className="eyebrow">01 / 設定</span>
-        <h2 id="settings-title">Pattern設定</h2>
+        <h2 id="settings-title">文様設定</h2>
       </div>
 
       <label className="field">
@@ -50,7 +50,7 @@ export function Settings({ divisions, symmetry, onDivisionsChange, onSymmetryCha
 
       {symmetry.type === 'mirror' && (
         <fieldset>
-          <legend>mirror軸</legend>
+          <legend>鏡映軸</legend>
           <div className="axis-control">
             {(['A', 'B', 'C'] as MirrorAxis[]).map((axis) => (
               <button

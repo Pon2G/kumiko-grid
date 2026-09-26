@@ -27,8 +27,8 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
     <section className="panel editor-panel" aria-labelledby="editor-title">
       <div className="panel-heading editor-heading">
         <div>
-          <span className="eyebrow">02 / CELL</span>
-          <h2 id="editor-title">Cell Editor</h2>
+          <span className="eyebrow">02 / セル</span>
+          <h2 id="editor-title">セルエディター</h2>
         </div>
         <span className="status-pill">{pendingAnchor ? '終点を選択' : '描画できます'}</span>
       </div>
@@ -68,9 +68,9 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
         </svg>
       </div>
       <div className="legend">
-        <span><i className="source-key" /> 種Segment</span>
+        <span><i className="source-key" /> 種となる線分</span>
         <span><i className="generated-key" /> 自動生成</span>
-        <span className="segment-count">種Segment：{pattern.segments.length}本</span>
+        <span className="segment-count">種となる線分：{pattern.segments.length}本</span>
       </div>
       {pattern.segments.length > 0 && <SegmentList segments={pattern.segments} onDelete={onDeleteSegment} />}
     </section>

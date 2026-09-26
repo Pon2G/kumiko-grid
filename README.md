@@ -534,5 +534,6 @@ READMEに明記されていない便利機能を大量に追加しない。
 - triangular-grid Layout StrategyによるPattern Preview
 - geometry / pattern / layoutのUnit Test
 - PC / スマートフォン向けResponsive UI
+- mainへのsquash & mergeおよび手動実行によるGitHub Pages自動デプロイ
 
-SVG保存、Preview範囲・線幅の変更、GitHub Pagesへの自動デプロイは、後続のMVPマイルストーンで実装予定。
+SVG保存、Preview範囲・線幅の変更は、後続のMVPマイルストーンで実装予定。

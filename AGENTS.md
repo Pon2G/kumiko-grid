@@ -1,238 +1,73 @@
 # プロジェクトルール
 
-このリポジトリで作業する際は、README.md をプロジェクト仕様の正本として扱うこと。
+このリポジトリで作業する際は、必要な内容だけを次の正本から確認する。
+
+- プロダクト仕様: `docs/spec.md`
+- 技術設計: `docs/architecture.md`
+- Git / GitHub / Codex Cloudの開発手順: `docs/development.md`
+- 今後の作業項目・既知の拡張候補: GitHub Issues
 
 ## 言語
 
-人間が読む文章は、原則として日本語で記述する。
+人間が読む文章は原則として日本語で記述する。
 
 日本語で記述するもの:
 
-- コードコメント
-- JSDoc / TSDoc
-- TODO / FIXME コメント
-- README、PLAN、その他Markdownドキュメント
-- テストケースの説明文（`describe`、`it`、`test` のタイトル）
+- コードコメント、JSDoc / TSDoc、TODO / FIXME
+- Markdownドキュメント
+- テスト名
 - Gitコミットメッセージ
-- Pull Requestのタイトルと本文
-- GitHub Issueのタイトルと本文
-- GitHub上で投稿するコメント
-- Codexの作業Summary、説明、レビューコメント
-- アプリケーション上でユーザーに表示するUI文言
+- Pull Request、Issue、GitHubコメント
+- Codexの作業Summary、レビューコメント
+- アプリケーションのUI文言
 
-ただし、以下は英語を使用する。
+変数名、関数名、型名、interface名、class名、ファイル名、ディレクトリ名、API名、内部データのキーなどは英語を使用する。既存の技術用語は不自然に日本語化しない。
 
-- 変数名
-- 関数名
-- 型名
-- interface名
-- class名
-- enumおよびenum値
-- ファイル名・ディレクトリ名
-- npm script名
-- API名
-- 外部ライブラリ由来の名称
-- URL
-- SVG / HTML / CSS / JavaScript / TypeScript等の標準仕様上の名称
-- JSON等の内部データ形式のキー
+## 実装原則
 
-既存の技術用語を不自然に日本語化しない。例えば、`AnchorPoint`、`Segment`、`CellPattern`、`LayoutStrategy`はそのまま使用してよい。
+- Cell PatternとLayoutの分離を維持する。
+- geometry / pattern / layoutのドメインロジックをReactコンポーネントへ直接持ち込まない。
+- 幾何学計算は可能な限りpure functionとして実装する。
+- Issueにない将来機能を推測だけで先回りして実装しない。
+- コードコメントは処理の逐語説明ではなく、座標系、数式、前提、不変条件、トレードオフなどコードだけでは分かりにくい意図を説明する。
+- テストは実装詳細ではなく、仕様として期待する振る舞いを検証する。
 
-## コードコメント
+## 既知の拡張を考慮する
 
-コードコメントは「コードを日本語に翻訳する」ためではなく、コードだけでは分かりにくい意図を説明するために使用する。
+データモデル、モジュール境界、Geometry、永続化など、将来の拡張性へ影響する設計判断を行う場合は、実装前にGitHub Issueの `design-context` ラベルを確認する。
 
-コメントを付けるべき箇所:
+- 変更領域に対応する `area:*` ラベルがある場合は、`design-context` と組み合わせてOpen / Closedを問わず関連Issueを読む。
+- 複数領域にまたがる変更や基盤的な設計変更では、必要に応じて `design-context` Issue全体を確認する。
+- `design-context` は実装指示ではない。対象Issueの機能を今回のスコープへ勝手に追加しない。
+- 現在の要件を不必要に複雑化してまで将来拡張へ備えない。一方、既知の拡張を理由なく困難にする設計も避ける。
+- 現在の要件と既知の拡張が衝突する場合は、判断と影響をPull Requestへ明記する。
 
-- 幾何学計算の前提や数式
-- 座標系・向き・回転方向などの約束
-- 一見不自然だが必要な処理
-- 将来変更すると壊れやすい不変条件
-- READMEのドメイン仕様とコードの対応関係
-- 実装上重要な理由やトレードオフ
+詳細な検索方法とIssue運用は `docs/development.md` を参照する。
 
-コメントを付けなくてよい箇所:
+## ドキュメント更新
 
-- コードをそのまま読めば明白な処理
-- 変数名や関数名を日本語で言い換えただけの説明
-- 1行ごとの逐語的な説明
+変更内容に応じて正本を更新する。
 
-悪い例:
+- ユーザー向けの現在の振る舞いやデータの意味が変わる: `docs/spec.md`
+- モジュール境界、座標系、データモデルなど長寿命な技術設計が変わる: `docs/architecture.md`
+- Git / PR / Codex Cloudの作業方法が変わる: `docs/development.md`
+- 今後実施する個別作業や既知の拡張候補が増える: GitHub Issue
 
-```ts
-// xに1を足す
-x += 1
-```
+同じ進捗や将来機能一覧を複数のMarkdownへ重複して記録しない。
 
-良い例:
+## 検証
 
-```ts
-// 正三角形のローカル座標系では、Aを上頂点として時計回りにB、Cを配置する。
-// 下向きセルでもAnchorPoint自体の意味を変えず、配置時の座標変換だけで反転させる。
-```
-
-## 公開APIのドキュメント
-
-geometry、pattern、layoutなどのドメインロジックについて、外部モジュールから利用されるexport済みの型・関数には、名前だけでは意図や前提が十分伝わらない場合にJSDocを追加する。
-
-特に以下は説明する。
-
-- 引数がどの座標系か
-- 角度の単位
-- 回転方向
-- 戻り値の意味
-- 許容値・不変条件
-- n等分点などのインデックス規則
-
-型から明白な内容を重複して書かない。
-
-## 幾何学ロジック
-
-幾何学処理では、座標値だけでなく「なぜその変換になるのか」が重要である。
-
-以下については、必要に応じて日本語コメントを残す。
-
-- 正三角形の基準座標
-- 重心計算
-- 120° / 240°回転
-- mirror軸
-- 上向き / 下向きCell間の変換
-- Edge Division Pointの座標解決
-- LayoutStrategyによるCell配置
-
-Reactコンポーネントには幾何学計算の詳細を持ち込まず、可能な限りpure functionとしてgeometry / pattern / layout層に実装する。
-
-## テスト
-
-テスト名は、失敗したときに仕様が理解できる日本語を書く。
-
-```ts
-it('BC辺を5等分した2番目の点を正しい座標へ解決する', () => {
-  // ...
-})
-```
-
-単なる実装詳細ではなく、期待する振る舞いをテストする。
-
-## Git
-
-コミットメッセージは日本語で、変更内容が分かる簡潔な文にする。
-
-例: `正三角形のAnchorPointモデルを追加`
-
-Pull Requestは日本語で記述し、最低限以下を含める。
-
-- 変更内容
-- 変更理由
-- 主な実装
-- テスト結果
-- 未確認事項・制約があればその内容
-
-Codexの実行環境などが原因でテストを実行できなかった場合は、成功したように扱わず、その理由を日本語で明記する。
-
-## 実装方針
-
-README.mdに記載されていない機能を、推測だけで大きく追加しない。
-
-仕様上の小さな曖昧さは合理的な仮定を置いて進めてよいが、その仮定が今後の設計に影響する場合はコードコメントまたはPLAN.mdへ記録する。
-
-コードの可読性を優先し、コメントで複雑なコードを正当化するのではなく、まずコード自体を単純にすること。
-
-## GitHub操作
-
-このリポジトリでは、GitHub上の状態確認・Pull Request操作・Issue操作には、原則としてGitHub CLI（`gh`）を使用する。
-
-GitHub上の状態について推測しない。作業開始時および作業完了前に、必要に応じて`gh`で実際の状態を確認する。
-
-### 作業開始時
-
-GitHubに関係する作業では、必要に応じて以下を確認する。
+実装変更後は原則として次を実行する。
 
 ```bash
-gh auth status
-git remote -v
-git branch --show-current
-gh repo view
+npm test
+npm run build
 ```
 
-現在のbranchに対応するPull Requestが存在する可能性がある場合は、次も確認する。
+実行できなかった場合は成功したように扱わず、その理由を明記する。
 
-```bash
-gh pr view --json number,title,state,url,headRefName,baseRefName
-```
+## GitHub作業
 
-`gh pr view`が成功した場合、そのPull Requestを既存PRとして扱う。
+Pull RequestやIssueを扱う場合は、作業前に `docs/development.md` を確認する。
 
-### 既存Pull Requestの更新
-
-現在のbranchに既存PRがある場合、新しいPull Requestを作成しない。
-
-以下の手順を基本とする。
-
-1. `gh pr view`でPR番号、head branch、base branchを確認する
-2. 必要に応じて`git fetch origin`でremoteの状態を取得する
-3. コードを変更する
-4. Test・Buildを実行する
-5. 変更をcommitする
-6. `git push`で既存PRのhead branchへ反映する
-7. 必要に応じて`gh pr edit`でPRタイトル・本文を更新する
-8. `gh pr view`で変更がGitHub上に反映されたことを確認する
-9. `gh pr checks`でCI状態を確認する
-
-既存PRの更新に`make_pr`や新規PR作成処理を代用しない。
-
-### 新規Pull Requestの作成
-
-現在のbranchに対応するPull Requestが存在しない場合のみ、新規PRを作成してよい。
-
-可能であればGitHub CLIを使用する。
-
-```bash
-gh pr create
-```
-
-作成後は必ず`gh pr view`でGitHub上にPRが存在することを確認する。
-
-### Pull Requestの編集
-
-PRのタイトル・本文・コメントなどGitHub上の情報を変更するときは、可能な限り`gh`を使用する。
-
-例:
-
-```bash
-gh pr edit
-gh pr comment
-gh pr checks
-```
-
-PR本文やタイトルを変更した場合も、操作後に`gh pr view`で実際の反映を確認する。
-
-### Issue
-
-Issueの確認・作成・更新についても、利用可能であれば`gh`を使用する。
-
-例:
-
-```bash
-gh issue view
-gh issue create
-gh issue comment
-```
-
-### 完了報告
-
-「GitHubへ反映した」「PRを更新した」「PRを作成した」と報告してよいのは、GitHub上の状態を`gh`で確認できた場合だけとする。
-
-ローカルまたはCodex実行環境内でcommitしただけの場合は、「PRを更新した」と表現しない。
-
-GitHubへのpushやAPI操作に失敗した場合は、成功したように扱わず、以下を確認して報告する。
-
-- どこまで完了したか
-- どのコマンドが失敗したか
-- 認証・権限・ネットワーク・branch状態のどれが原因と考えられるか
-
-### 認証情報
-
-GitHub token、PAT、Secretなどの値を、出力・ログ・commit・Pull Request・Issue・コメントへ記載してはならない。
-
-認証エラーが発生した場合もtokenそのものを表示せず、`gh auth status`等で状態だけを確認する。
+GitHub上の状態を推測せず、利用可能な手段で実際のbranch、PR、CI状態を確認する。認証情報やSecretの値は出力・commit・Issue・PRへ記載しない。

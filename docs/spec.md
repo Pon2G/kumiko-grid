@@ -95,6 +95,8 @@ Cell Patternは、ユーザーが定義した基本Segmentと、それに適用�
 - ユーザーが入力した基本Segment
 - 対称操作によって生成されたSegment
 
+Cell Editorでは、ユーザーが入力した基本Segmentと対称操作によって生成されたSegmentを視覚的に区別する。
+
 基本操作:
 
 1. nを指定する

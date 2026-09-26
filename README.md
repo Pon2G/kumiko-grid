@@ -520,3 +520,19 @@ GeometryロジックはUIに依存せずテスト可能にする。
 READMEに明記されていない便利機能を大量に追加しない。
 
 まずMVPを完成させる。
+
+---
+
+19. Implementation Status
+
+現在、MVPの最初の実装マイルストーンとして以下を実装済み。
+
+- React + TypeScript + Viteのプロジェクト基盤
+- 正三角形、辺のn等分点、AnchorPoint、Segmentのgeometryモデル
+- none / mirror / rotationalの対称変換
+- AnchorPoint選択とSegment削除が可能なCell Editor
+- triangular-grid Layout StrategyによるPattern Preview
+- geometry / pattern / layoutのUnit Test
+- PC / スマートフォン向けResponsive UI
+
+SVG保存、Preview範囲・線幅の変更、GitHub Pagesへの自動デプロイは、後続のMVPマイルストーンで実装予定。

@@ -29,15 +29,17 @@ for (const source of sources) {
   }
 }
 
-const collectTestFiles = async (directory) => {
+const collectSourceFiles = async (directory) => {
   const entries = await readdir(directory, { withFileTypes: true })
   const files = await Promise.all(entries.map(async (entry) => {
     const target = path.join(directory, entry.name)
-    if (entry.isDirectory()) return collectTestFiles(target)
-    return testFiles.suffixes.some((suffix) => entry.name.endsWith(`.${suffix}`)) ? [target] : []
+    if (entry.isDirectory()) return collectSourceFiles(target)
+    return /\.tsx?$/.test(entry.name) ? [target] : []
   }))
   return files.flat()
 }
+
+const isTestFile = (file) => testFiles.suffixes.some((suffix) => file.endsWith(`.${suffix}`))
 
 const property = (object, name) => object.properties.find((item) =>
   ts.isPropertyAssignment(item)
@@ -45,11 +47,13 @@ const property = (object, name) => object.properties.find((item) =>
     || (ts.isStringLiteral(item.name) && item.name.text === name)),
 )
 
-const files = (await Promise.all(
-  testFiles.roots.map((directory) => collectTestFiles(path.join(root, directory))),
+const sourceFiles = (await Promise.all(
+  testFiles.roots.map((directory) => collectSourceFiles(path.join(root, directory))),
 )).flat()
+const canonicalWrapper = path.join(root, 'src/test/contractTest.ts')
+const rawTestNames = ['test', 'it']
 
-for (const file of files) {
+for (const file of sourceFiles) {
   const relativeFile = path.relative(root, file)
   const source = ts.createSourceFile(
     file,
@@ -58,24 +62,54 @@ for (const file of files) {
     true,
     file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   )
+  const testFile = isTestFile(file)
   let testCount = 0
+  let importsCanonicalWrapper = false
 
   const visit = (node) => {
-    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
-      && node.moduleSpecifier.text === 'vitest' && node.importClause?.namedBindings) {
-      const bindings = node.importClause.namedBindings
-      if (ts.isNamespaceImport(bindings)) {
-        errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(bindings.getStart()).line + 1}: Vitestのnamespace importは生のtest/itを迂回できるため使用できません`)
-      } else {
+    if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+      const moduleName = node.moduleSpecifier.text
+      const bindings = node.importClause?.namedBindings
+      if (file !== canonicalWrapper && moduleName === 'vitest' && bindings) {
+        if (ts.isNamespaceImport(bindings)) {
+          errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(bindings.getStart()).line + 1}: Vitestのnamespace importは生のtest/itを迂回できるため使用できません`)
+        } else {
+          for (const item of bindings.elements) {
+            if (rawTestNames.includes(item.propertyName?.text ?? item.name.text)) {
+              errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: Vitestのtest/itをimportせず正規のcontractTestを使用してください`)
+            }
+          }
+        }
+      }
+      if (testFile && bindings && ts.isNamedImports(bindings)) {
         for (const item of bindings.elements) {
-          if (['test', 'it'].includes(item.propertyName?.text ?? item.name.text)) {
-            errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: Vitestのtest/itを直接importせずcontractTestを使用してください`)
+          if ((item.propertyName?.text ?? item.name.text) !== 'contractTest') continue
+          const importedPath = path.resolve(path.dirname(file), moduleName).replace(/\.ts$/, '')
+          if (item.name.text === 'contractTest'
+            && importedPath === canonicalWrapper.replace(/\.ts$/, '')) {
+            importsCanonicalWrapper = true
+          } else {
+            errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: contractTestはsrc/test/contractTest.tsから名前を変えずにimportしてください`)
           }
         }
       }
     }
 
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
+    if (file !== canonicalWrapper && ts.isExportDeclaration(node)
+      && ts.isStringLiteral(node.moduleSpecifier) && node.moduleSpecifier.text === 'vitest') {
+      const exports = node.exportClause
+      if (!exports || ts.isNamespaceExport(exports)) {
+        errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}: Vitestのtest/itを公開し得るre-exportは使用できません`)
+      } else {
+        for (const item of exports.elements) {
+          if (rawTestNames.includes(item.propertyName?.text ?? item.name.text)) {
+            errors.push(`${relativeFile}:${source.getLineAndCharacterOfPosition(item.getStart()).line + 1}: Vitestのtest/itをre-exportせず正規のcontractTestを使用してください`)
+          }
+        }
+      }
+    }
+
+    if (testFile && ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
       const name = node.expression.text
       const line = source.getLineAndCharacterOfPosition(node.getStart()).line + 1
       if (name === 'test' || name === 'it') {
@@ -105,7 +139,11 @@ for (const file of files) {
     ts.forEachChild(node, visit)
   }
   visit(source)
-  if (testCount === 0) errors.push(`${relativeFile}: contractTestで宣言されたtest caseがありません`)
+  if (testFile && testCount === 0) {
+    errors.push(`${relativeFile}: contractTestで宣言されたtest caseがありません`)
+  } else if (testFile && !importsCanonicalWrapper) {
+    errors.push(`${relativeFile}: contractTestをsrc/test/contractTest.tsからimportしてください`)
+  }
 }
 
 if (errors.length > 0) {

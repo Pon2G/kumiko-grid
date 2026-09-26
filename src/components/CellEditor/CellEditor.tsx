@@ -17,6 +17,10 @@ const SCALE = 440
 const PAD = 42
 const px = (value: number) => PAD + value * SCALE
 const py = (value: number) => PAD + value * SCALE
+const anchorLabel = (anchor: AnchorPoint): string =>
+  anchor.kind === 'vertex'
+    ? `頂点${anchor.vertex}`
+    : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
 
 export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, onDeleteSegment }: CellEditorProps) {
   const anchors = createAnchors(divisions)
@@ -53,7 +57,7 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
                 className={`anchor ${selected ? 'selected' : ''}`}
                 key={anchorKey(anchor)}
                 role="button"
-                aria-label={anchorKey(anchor)}
+                aria-label={anchorLabel(anchor)}
                 tabIndex={0}
                 onClick={() => onAnchorClick(anchor)}
                 onKeyDown={(event) => {

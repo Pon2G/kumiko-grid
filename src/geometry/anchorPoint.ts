@@ -16,18 +16,27 @@ export const interpolate = (start: Point, end: Point, ratio: number): Point => (
   y: start.y + (end.y - start.y) * ratio,
 })
 
+/**
+ * 相対表現のAnchorPointを正三角形のローカル座標へ解決する。
+ * Edge Division Pointのindexは、辺名の先頭側を0、末尾側をdivisionsとしたときの位置で、
+ * AnchorPointとして許容するのは端点を除く `1 <= index < divisions` の範囲とする。
+ */
 export function resolveAnchor(anchor: AnchorPoint, triangle: Triangle = canonicalTriangle): Point {
   if (anchor.kind === 'vertex') return triangle[anchor.vertex]
   if (anchor.divisions < 2 || anchor.index <= 0 || anchor.index >= anchor.divisions) {
-    throw new RangeError('Edge division index must be inside an edge with at least two divisions')
+    throw new RangeError('辺の分割数は2以上とし、indexには端点を除く内分点を指定してください')
   }
   const [start, end] = edgeVertices[anchor.edge]
   return interpolate(triangle[start], triangle[end], anchor.index / anchor.divisions)
 }
 
+/**
+ * Cell Editorで選択できる3頂点と全辺の内分点を生成する。
+ * 頂点との重複を避けるため、各辺のindexは1から`divisions - 1`までとする。
+ */
 export function createAnchors(divisions: number): AnchorPoint[] {
   if (!Number.isInteger(divisions) || divisions < 2) {
-    throw new RangeError('Divisions must be an integer of at least two')
+    throw new RangeError('分割数には2以上の整数を指定してください')
   }
   const vertices: AnchorPoint[] = (['A', 'B', 'C'] as const).map((vertex) => ({ kind: 'vertex', vertex }))
   const divisionsOnEdges: AnchorPoint[] = (['AB', 'BC', 'CA'] as const).flatMap((edge) =>

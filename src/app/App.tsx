@@ -39,7 +39,7 @@ export default function App() {
     <>
       <header className="site-header">
         <div className="brand-mark" aria-hidden="true">組</div>
-        <div><h1>Kumiko Grid</h1><p>Geometric pattern studio</p></div>
+        <div><h1>Kumiko Grid</h1><p>幾何学文様スタジオ</p></div>
         <div className="header-rule" />
         <span className="version">MVP · 01</span>
       </header>
@@ -56,7 +56,7 @@ export default function App() {
           <PatternPreview pattern={pattern} />
         </div>
       </main>
-      <footer><span>Normalized geometric construction</span><span>△ ▽ △ ▽ △</span></footer>
+      <footer><span>正規化座標による幾何学設計</span><span>△ ▽ △ ▽ △</span></footer>
     </>
   )
 }

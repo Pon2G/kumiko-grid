@@ -23,6 +23,11 @@ const mirrorAxisPoints = (axis: MirrorAxis) => {
   return [canonicalTriangle[axis], interpolate(canonicalTriangle[left], canonicalTriangle[right], 0.5)] as const
 }
 
+/**
+ * READMEのCell Pattern仕様に従い、種Segmentを描画用座標へ展開する。
+ * mirror軸は選択頂点と対辺中点を結ぶ中線、rotationalは重心を中心とする120°刻みとする。
+ * 生成結果は表示専用であり、編集対象を追跡できるよう全コピーにsourceIdを残す。
+ */
 export function expandPattern(pattern: CellPattern): RenderedSegment[] {
   return pattern.segments.flatMap((segment) => {
     const source = resolveSegment(segment)

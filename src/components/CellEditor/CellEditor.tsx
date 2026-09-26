@@ -30,7 +30,7 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
           <span className="eyebrow">02 / CELL</span>
           <h2 id="editor-title">Cell Editor</h2>
         </div>
-        <span className="status-pill">{pendingAnchor ? 'Choose endpoint' : 'Ready to draw'}</span>
+        <span className="status-pill">{pendingAnchor ? '終点を選択' : '描画できます'}</span>
       </div>
       <div className="editor-stage">
         <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター">
@@ -68,9 +68,9 @@ export function CellEditor({ divisions, pattern, pendingAnchor, onAnchorClick, o
         </svg>
       </div>
       <div className="legend">
-        <span><i className="source-key" /> Seed segment</span>
-        <span><i className="generated-key" /> Generated</span>
-        <span className="segment-count">{pattern.segments.length} seed{pattern.segments.length === 1 ? '' : 's'}</span>
+        <span><i className="source-key" /> 種Segment</span>
+        <span><i className="generated-key" /> 自動生成</span>
+        <span className="segment-count">種Segment：{pattern.segments.length}本</span>
       </div>
       {pattern.segments.length > 0 && <SegmentList segments={pattern.segments} onDelete={onDeleteSegment} />}
     </section>
@@ -82,7 +82,7 @@ function SegmentList({ segments, onDelete }: { segments: Segment[]; onDelete: (i
     <div className="segment-list" aria-label="作成済み線分">
       {segments.map((segment, index) => (
         <button key={segment.id} type="button" onClick={() => onDelete(segment.id)}>
-          <span>Line {String(index + 1).padStart(2, '0')}</span><span>Remove ×</span>
+          <span>線分 {String(index + 1).padStart(2, '0')}</span><span>削除 ×</span>
         </button>
       ))}
     </div>

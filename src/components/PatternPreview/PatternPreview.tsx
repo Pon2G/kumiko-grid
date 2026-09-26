@@ -18,7 +18,7 @@ export function PatternPreview({ pattern }: PatternPreviewProps) {
   return (
     <section className="panel preview-panel" aria-labelledby="preview-title">
       <div className="panel-heading preview-heading">
-        <div><span className="eyebrow">03 / TILING</span><h2 id="preview-title">Pattern Preview</h2></div>
+        <div><span className="eyebrow">03 / 敷き詰め</span><h2 id="preview-title">Pattern Preview</h2></div>
         <span className="preview-meta">TRIANGULAR GRID · {ROWS} × {COLUMNS}</span>
       </div>
       <div className="preview-stage">
@@ -37,7 +37,7 @@ export function PatternPreview({ pattern }: PatternPreviewProps) {
             )
           })}
         </svg>
-        {pattern.segments.length === 0 && <p className="empty-preview">Draw a seed line to begin the pattern</p>}
+        {pattern.segments.length === 0 && <p className="empty-preview">種Segmentを描くとPatternが表示されます</p>}
       </div>
     </section>
   )

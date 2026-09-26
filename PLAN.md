@@ -1,80 +1,80 @@
-# Kumiko Grid MVP Architecture and Implementation Plan
+# Kumiko Grid MVP アーキテクチャ・実装計画
 
-## 1. Requirements and scope
+## 1. 要件とスコープ
 
-The MVP is a responsive React application for defining line segments inside a normalized equilateral-triangle cell and previewing that cell pattern on a regular triangular tiling. The cell pattern and layout strategy remain independent. Geometry is represented by relative anchors rather than stored screen coordinates, and all coordinate calculations are pure, UI-independent functions.
+MVPは、正規化された正三角形Cell内に線分を定義し、通常の三角形平面充填としてPreviewするResponsiveなReactアプリケーションとする。CellPatternとLayoutStrategyは独立させる。geometryは画面座標ではなく相対的なAnchorPointで表現し、すべての座標計算をUIに依存しないpure functionとする。
 
-The first implementation milestone covers the geometry model, edge division anchors, segment creation, `none` / `mirror` / `rotational` symmetry, the Cell Editor, the `triangular-grid` Pattern Preview, responsive presentation, and unit tests. Intersection anchors and every feature listed under “MVPで実装しないもの” remain out of scope. The remaining MVP items (SVG download, configurable preview bounds and line width, and GitHub Pages deployment) are explicitly deferred to later milestones.
+最初の実装マイルストーンでは、geometryモデル、辺のn等分AnchorPoint、Segment作成、`none` / `mirror` / `rotational`対称、Cell Editor、`triangular-grid` Pattern Preview、Responsive UI、Unit Testを対象とする。Intersection PointおよびREADMEの「MVPで実装しないもの」は対象外とする。SVG保存、Preview範囲・線幅の変更、GitHub Pagesへのデプロイは後続マイルストーンで実装する。
 
-## 2. Data model
+## 2. データモデル
 
-- `Point`: normalized Cartesian `{ x, y }` coordinate used only as a calculated rendering value.
-- `Triangle`: three ordered vertices `A`, `B`, and `C`; the canonical cell is an upward equilateral triangle with unit side length.
-- `AnchorPoint`: discriminated union of a triangle `vertex` and an `edge-division` identified by `edge`, `divisions`, and `index`. Coordinates are never persisted in an anchor.
-- `Segment`: stable `id` plus `start` and `end` anchors.
-- `Symmetry`: `none`, `mirror` with one of the three vertex-to-opposite-midpoint axes, or `rotational` around the centroid.
-- `RenderedSegment`: calculated start/end points plus source/generated metadata, derived from a segment and symmetry without mutating the saved pattern.
-- `CellPattern`: seed segments and the selected symmetry configuration.
-- `CellPlacement`: translation and rotation that map canonical cell-local geometry into preview space.
+- `Point`: 計算結果の描画座標にだけ用いる正規化Cartesian座標 `{ x, y }`。
+- `Triangle`: `A`、`B`、`C`の3頂点。基準Cellは一辺の長さが1の上向き正三角形。
+- `AnchorPoint`: 頂点を表す`vertex`と、`edge`、`divisions`、`index`で識別する`edge-division`のdiscriminated union。座標値は保存しない。
+- `Segment`: 安定した`id`と、始点・終点のAnchorPoint。
+- `Symmetry`: `none`、3本の「頂点から対辺中点」軸のいずれかを使う`mirror`、重心を中心とする`rotational`。
+- `RenderedSegment`: SegmentとSymmetryから元のPatternを変更せず導出する、始点・終点座標とsource/generated情報。
+- `CellPattern`: 種となるSegment群と選択中のSymmetry。
+- `CellPlacement`: 基準CellのローカルgeometryをPreview座標へ写す平行移動と回転。
 
-## 3. Module architecture
+## 3. モジュール構成
 
 ```text
 src/
-  geometry/     canonical triangle, anchors, segments, point transforms
-  pattern/      CellPattern model and symmetry expansion
-  layout/       LayoutStrategy types and triangular-grid generation
-  components/   Settings, CellEditor, PatternPreview
-  app/          application state and composition
+  geometry/     基準正三角形、AnchorPoint、Segment、Point変換
+  pattern/      CellPatternモデルとSymmetry展開
+  layout/       LayoutStrategy型とtriangular-grid生成
+  components/   Settings、CellEditor、PatternPreview
+  app/          アプリケーション状態と画面構成
 ```
 
-React owns interaction state (division count, pending anchor, seed segments, and symmetry selection). Components receive calculated models and callbacks. They do not implement geometric formulae. SVG is the common renderer, while geometry modules return coordinates that are independently testable and can later be reused by SVG export.
+Reactはdivision数、選択中AnchorPoint、種Segment群、Symmetryを操作状態として所有する。コンポーネントは計算済みモデルとcallbackを受け取り、幾何学の数式を実装しない。描画にはSVGを使い、geometryモジュールはUnit Testおよび将来のSVG保存でも再利用できる座標を返す。
 
-## 4. Coordinate and transformation strategy
+## 4. 座標と変換
 
-The canonical triangle uses `A = (0.5, 0)`, `B = (0, sqrt(3)/2)`, and `C = (1, sqrt(3)/2)`. Edge division points use linear interpolation from the first named endpoint to the second. Mirror symmetry reflects both endpoints across the chosen median. Rotational symmetry rotates both endpoints by 120° and 240° around the centroid.
+基準正三角形は`A = (0.5, 0)`、`B = (0, sqrt(3)/2)`、`C = (1, sqrt(3)/2)`とする。Edge Division Pointは、辺名の最初の端点から次の端点への線形補間で求める。mirrorは選択した中線に対して両端点を鏡映し、rotationalは重心を中心として両端点を120°、240°回転する。
 
-The triangular grid is generated as rows of adjacent half-cell-width steps. Placement orientation alternates by row and column parity. An upward placement preserves canonical local coordinates; a downward placement rotates the canonical cell 180° around its centroid before scaling and translation. This makes orientation an explicit local-to-world transform rather than a screen-coordinate copy.
+triangular-gridは、一辺の半分ずつ水平方向へずらしたCellを行ごとに生成し、行と列の偶奇で向きを交互にする。上向きCellは基準ローカル座標を維持する。下向きCellは、基準正三角形の外接矩形中央を中心とする180°回転に相当する`(x, y) → (1 - x, height - y)`を適用してから、拡大・平行移動する。AnchorPointの意味を変えずに向きだけを配置変換で表現する。
 
-## 5. Milestones
+## 5. マイルストーン
 
-### Milestone 1 — foundation and geometry (current)
+### マイルストーン1 — 基盤とgeometry（今回）
 
-1. Initialize Vite with React, TypeScript, Vitest, and Testing Library.
-2. Implement the canonical triangle, edge interpolation, anchor resolution, segment helpers, reflection, and rotation as pure functions.
-3. Implement pattern symmetry expansion with source/generated identity.
-4. Implement `LayoutStrategy` and regular triangular-grid placements/local transforms.
-5. Add unit tests for division coordinates, mirror, rotation, up/down mapping, grid placement, and render-ready SVG coordinates.
+1. Vite、React、TypeScript、Vitestでプロジェクトを初期化する。
+2. 基準正三角形、辺の補間、AnchorPoint解決、Segment補助関数、鏡映、回転をpure functionとして実装する。
+3. source/generatedを区別できるSymmetry展開を実装する。
+4. `LayoutStrategy`と通常のtriangular-grid配置・ローカル座標変換を実装する。
+5. n等分座標、mirror、回転、上向き・下向き変換、grid配置、SVG描画用座標をUnit Testする。
 
-### Milestone 2 — interactive editor and preview (current)
+### マイルストーン2 — EditorとPreview（今回）
 
-1. Build responsive Settings controls for division count and symmetry/axis selection.
-2. Build an SVG Cell Editor with large anchor hit targets, two-click segment creation, pending selection feedback, seed/generated visual distinction, and seed-segment deletion.
-3. Build a separate Pattern Preview driven immediately by the same CellPattern through the triangular-grid strategy.
-4. Verify desktop and mobile layouts and update README implementation status.
+1. division数、Symmetry、mirror軸を変更するSettingsを実装する。
+2. 広いAnchorPointタップ領域、2点選択、選択中表示、種・生成Segmentの視覚的区別、種Segment削除を備えたSVG Cell Editorを実装する。
+3. 同じCellPatternをtriangular-grid LayoutStrategyで即時描画する独立したPattern Previewを実装する。
+4. PC・スマートフォンの配置を確認し、READMEの実装状況を更新する。
 
-### Milestone 3 — remaining MVP controls and export (future)
+### マイルストーン3 — 残りのMVP操作とSVG保存（今後）
 
-1. Add preview-range and line-width controls.
-2. Generate and download a valid SVG from the shared geometry, with configurable physical-size-ready metadata and duplicate-segment handling.
-3. Add export-focused tests.
+1. Preview範囲と線幅の設定を追加する。
+2. 共通geometryから、実寸指定への拡張と重複Segment処理を考慮した正しいSVGを生成・保存する。
+3. SVG保存に関するUnit Testを追加する。
 
-### Milestone 4 — delivery (future)
+### マイルストーン4 — 配信（今後）
 
-1. Add the GitHub Pages deployment workflow and production base-path configuration.
-2. Run complete tests/build, perform final responsive UI verification, and update the Definition of Done status.
+1. GitHub Pages workflowとproduction用base path設定を追加する。
+2. Test・Build・Responsive UIの最終確認を行い、Definition of Doneを更新する。
 
-## 6. Validation
+## 6. 検証
 
-- Unit tests use numeric tolerance for floating-point geometry and cover every minimum test category from the specification.
-- `npm test` must pass non-interactively.
-- `npm run build` must complete with TypeScript checking and Vite bundling.
-- UI verification checks segment creation/deletion, each symmetry mode, immediate preview updates, and responsive stacking.
+- 浮動小数点geometryは許容誤差を使って検証し、READMEで要求された最低限のTest項目を網羅する。
+- `npm test`が非対話的に成功すること。
+- `npm run build`によるTypeScript検査とVite buildが成功すること。
+- Segmentの作成・削除、各Symmetry、Previewの即時反映、Responsiveな縦並びをUIで確認する。
 
-## 7. Assumptions and constraints
+## 7. 仮定と制約
 
-- Division count is constrained to 2–12 for usable tap spacing; vertices remain separately selectable and division indices include only interior points.
-- Degenerate segments (the same anchor selected twice) are rejected.
-- Generated symmetry copies are display-only and cannot be selected or deleted independently; users edit the source segment.
-- Coincident segments are retained during this milestone because deduplication belongs with the later SVG-export work.
-- No intersection behavior, persistence, import/export, undo/redo, alternate layouts, or fabrication-specific settings are introduced.
+- division数はタップ可能な間隔を保つため2〜12とし、頂点は別のAnchorPointとして選択できる。Edge Division Pointの`index`は端点を除く1以上`divisions`未満とする。
+- 同じAnchorPointを2回選ぶ退化Segmentは追加しない。
+- Symmetryによる生成Segmentは表示専用とし、個別の選択・削除はできない。ユーザーは種Segmentを編集する。
+- 完全に重なるSegmentの除去はSVG保存と同時に扱うため、今回のマイルストーンでは保持する。
+- Intersection Point、永続化、import/export、undo/redo、別Layout、加工固有設定は追加しない。

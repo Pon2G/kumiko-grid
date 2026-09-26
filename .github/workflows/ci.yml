@@ -14,19 +14,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repository
+      - name: リポジトリをチェックアウト
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Node.jsをセットアップ
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: 依存関係をインストール
         run: npm install --no-audit --no-fund
 
-      - name: Run unit tests
+      - name: Unit Testを実行
         run: npm test
 
-      - name: Build application
+      - name: アプリケーションをBuild
         run: npm run build

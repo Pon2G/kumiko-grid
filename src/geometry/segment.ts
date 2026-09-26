@@ -14,6 +14,7 @@ export interface PointSegment {
   end: Point
 }
 
+/** Segmentが保持する相対的なAnchorPointを、指定した正三角形のローカル座標へ解決する。 */
 export const resolveSegment = (
   segment: Segment,
   triangle: Triangle = canonicalTriangle,

@@ -23,7 +23,7 @@ const collectTypeScriptFiles = async (directory) => {
     if (entry.isDirectory() && excludedDirectories.has(entry.name)) return []
     const target = path.join(directory, entry.name)
     if (entry.isDirectory()) return collectTypeScriptFiles(target)
-    return /\.tsx?$/.test(entry.name) ? [target] : []
+    return /\.(?:ts|tsx|mts|cts)$/.test(entry.name) ? [target] : []
   }))
   return nestedFiles.flat()
 }

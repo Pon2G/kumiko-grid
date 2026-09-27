@@ -74,6 +74,44 @@ describe('Segmentの交差判定', () => {
     )
     expect(result.kind).toBe('touch')
   })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い非退化Segmentでも内部交差の分類とparameterはスケールに依存しない', () => {
+    const cases = [1, 1e-5].map((scale) => intersectSegments(
+      { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+      { start: { x: scale / 2, y: -scale / 2 }, end: { x: scale / 2, y: scale / 2 } },
+    ))
+
+    for (const result of cases) {
+      expect(result.kind).toBe('cross')
+      if (result.kind !== 'cross') continue
+      expect(Number.isFinite(result.firstT)).toBe(true)
+      expect(Number.isFinite(result.secondT)).toBe(true)
+      expect(result.firstT).toBeCloseTo(0.5)
+      expect(result.secondT).toBeCloseTo(0.5)
+    }
+  })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い平行かつ非共線のSegmentを交差なしと判定する', () => {
+    expect(intersectSegments(
+      { start: { x: 0, y: 0 }, end: { x: 1e-5, y: 0 } },
+      { start: { x: 0, y: 1e-5 }, end: { x: 1e-5, y: 1e-5 } },
+    )).toEqual({ kind: 'none' })
+  })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い共線Segmentの1点共有と有限長共有を区別する', () => {
+    const source = { start: { x: 0, y: 0 }, end: { x: 1e-5, y: 0 } }
+    const touch = intersectSegments(source, {
+      start: { x: 1e-5, y: 0 }, end: { x: 2e-5, y: 0 },
+    })
+    expect(touch.kind).toBe('touch')
+    if (touch.kind === 'touch') {
+      expect(Number.isFinite(touch.firstT)).toBe(true)
+      expect(Number.isFinite(touch.secondT)).toBe(true)
+    }
+    expect(intersectSegments(source, {
+      start: { x: 0.5e-5, y: 0 }, end: { x: 1.5e-5, y: 0 },
+    })).toEqual({ kind: 'overlap' })
+  })
 })
 
 describe('SegmentのFragment生成', () => {

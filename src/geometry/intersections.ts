@@ -16,6 +16,7 @@ export type SegmentIntersection =
   | { kind: 'overlap' }
 
 const cross = (first: Point, second: Point) => first.x * second.y - first.y * second.x
+const dot = (first: Point, second: Point) => first.x * second.x + first.y * second.y
 const subtract = (first: Point, second: Point): Point => ({ x: first.x - second.x, y: first.y - second.y })
 const clampParameter = (value: number) => Math.min(1, Math.max(0, value))
 const isEndpoint = (value: number) => value <= GEOMETRY_EPSILON || value >= 1 - GEOMETRY_EPSILON
@@ -48,8 +49,10 @@ export function intersectSegments(first: PointSegment, second: PointSegment): Se
   const secondVector = subtract(second.end, second.start)
   const betweenStarts = subtract(second.start, first.start)
   const denominator = cross(firstVector, secondVector)
+  const firstLength = Math.hypot(firstVector.x, firstVector.y)
+  const secondLength = Math.hypot(secondVector.x, secondVector.y)
 
-  if (Math.abs(denominator) > GEOMETRY_EPSILON) {
+  if (Math.abs(denominator) > GEOMETRY_EPSILON * firstLength * secondLength) {
     const firstT = cross(betweenStarts, secondVector) / denominator
     const secondT = cross(betweenStarts, firstVector) / denominator
     if (
@@ -67,12 +70,11 @@ export function intersectSegments(first: PointSegment, second: PointSegment): Se
     }
   }
 
-  if (Math.abs(cross(betweenStarts, firstVector)) > GEOMETRY_EPSILON) return { kind: 'none' }
+  if (Math.abs(cross(betweenStarts, firstVector)) > GEOMETRY_EPSILON * firstLength) return { kind: 'none' }
 
-  const useX = Math.abs(firstVector.x) >= Math.abs(firstVector.y)
-  const axisDelta = useX ? firstVector.x : firstVector.y
-  const secondStartT = ((useX ? second.start.x : second.start.y) - (useX ? first.start.x : first.start.y)) / axisDelta
-  const secondEndT = ((useX ? second.end.x : second.end.y) - (useX ? first.start.x : first.start.y)) / axisDelta
+  const firstLengthSquared = dot(firstVector, firstVector)
+  const secondStartT = dot(betweenStarts, firstVector) / firstLengthSquared
+  const secondEndT = dot(subtract(second.end, first.start), firstVector) / firstLengthSquared
   const overlapStart = Math.max(0, Math.min(secondStartT, secondEndT))
   const overlapEnd = Math.min(1, Math.max(secondStartT, secondEndT))
 
@@ -81,7 +83,8 @@ export function intersectSegments(first: PointSegment, second: PointSegment): Se
 
   const firstT = clampParameter((overlapStart + overlapEnd) / 2)
   const point = pointAt(first, firstT)
-  const secondAxisDelta = useX ? secondVector.x : secondVector.y
-  const secondT = clampParameter(((useX ? point.x : point.y) - (useX ? second.start.x : second.start.y)) / secondAxisDelta)
+  const secondT = clampParameter(
+    dot(subtract(point, second.start), secondVector) / dot(secondVector, secondVector),
+  )
   return { kind: 'touch', point, firstT, secondT }
 }

@@ -3,7 +3,7 @@ import { contractTest } from '../test/contractTest'
 import { canonicalTriangle } from '../geometry/triangle'
 import type { Point } from '../geometry/types'
 import type { CellPattern } from './cellPattern'
-import { expandPattern, isDerivedSegment, type RenderedSegment } from './symmetry'
+import { expandPattern, isSymmetryGeneratedSegment, type RenderedSegment } from './symmetry'
 
 const seed = { id: 'seed', start: { kind: 'vertex' as const, vertex: 'A' as const }, end: { kind: 'vertex' as const, vertex: 'B' as const } }
 
@@ -34,18 +34,18 @@ describe('CellPatternの対称展開', () => {
     const pattern: CellPattern = { segments: [seed], symmetry: { type: 'rotational' }, splitRelations: [] }
     const expanded = expandPattern(pattern)
     expect(pattern.segments).toEqual([seed])
-    expect(expanded.filter(isDerivedSegment)).toHaveLength(2)
-    expect(expanded.filter((segment) => !isDerivedSegment(segment))).toHaveLength(1)
+    expect(expanded.filter(isSymmetryGeneratedSegment)).toHaveLength(2)
+    expect(expanded.filter((segment) => !isSymmetryGeneratedSegment(segment))).toHaveLength(1)
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-MIRROR' }, 'mirror Aは基本SegmentをAからCへのSegmentへ鏡映する', () => {
     const expanded = expandPattern({ segments: [seed], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] })
-    expectSegment(expanded.filter(isDerivedSegment), canonicalTriangle.A, canonicalTriangle.C)
+    expectSegment(expanded.filter(isSymmetryGeneratedSegment), canonicalTriangle.A, canonicalTriangle.C)
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-ROTATIONAL' }, 'rotationalは基本Segmentを120°と240°回転した位置へ配置する', () => {
     const expanded = expandPattern({ segments: [seed], symmetry: { type: 'rotational' }, splitRelations: [] })
-    const derived = expanded.filter(isDerivedSegment)
+    const derived = expanded.filter(isSymmetryGeneratedSegment)
     expectSegment(derived, canonicalTriangle.C, canonicalTriangle.A)
     expectSegment(derived, canonicalTriangle.B, canonicalTriangle.C)
   })

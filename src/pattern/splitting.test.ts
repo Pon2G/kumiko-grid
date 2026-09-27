@@ -43,7 +43,7 @@ describe('CellPatternのsplit派生', () => {
     expect(bothWays.filter(({ sourceId }) => sourceId === 'B')).toHaveLength(2)
   })
 
-  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '基本Segmentを変更せずSymmetry展開後の同一source instance間にもrelationを適用する', () => {
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'AからAへのrelationで異なるSymmetry instance同士を分割する', () => {
     const original = [target]
     const rotational: CellPattern = {
       segments: original,
@@ -53,6 +53,39 @@ describe('CellPatternのsplit派生', () => {
     expect(derivePatternGeometry(rotational)).toHaveLength(6)
     expect(rotational.segments).toBe(original)
     expect(rotational.segments).toEqual([target])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '同じRendered Segment instance自身は交差候補にしない', () => {
+    const current: CellPattern = {
+      segments: [target],
+      symmetry: { type: 'none' },
+      splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A' }],
+    }
+    expect(getSplitCandidates(current, 'A')).toEqual([])
+    expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === 'A')).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'source family間の全組合せを評価して異なる回転同士の交点でも分割する', () => {
+    const crossTransformTarget: Segment = {
+      id: 'all-pairs-target',
+      start: { kind: 'vertex', vertex: 'A' },
+      end: { kind: 'vertex', vertex: 'B' },
+    }
+    const crossTransformCutter: Segment = {
+      id: 'all-pairs-cutter',
+      start: { kind: 'vertex', vertex: 'A' },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 },
+    }
+    const current: CellPattern = {
+      segments: [crossTransformTarget, crossTransformCutter],
+      symmetry: { type: 'rotational' },
+      splitRelations: [{
+        targetSegmentId: crossTransformTarget.id,
+        cutterSegmentId: crossTransformCutter.id,
+      }],
+    }
+
+    expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === crossTransformTarget.id)).toHaveLength(6)
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '同一点に複数のcutterが交差してもゼロ長Fragmentを生成しない', () => {
@@ -65,6 +98,18 @@ describe('CellPatternのsplit派生', () => {
       ],
     }
     expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === 'A')).toHaveLength(2)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同一点の複数cutterをsource pairごとの候補として導出する', () => {
+    const current: CellPattern = {
+      segments: [target, cutter, anotherCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [],
+    }
+    const candidates = getSplitCandidates(current, 'A')
+    expect(candidates.map(({ cutterSegmentId }) => cutterSegmentId)).toEqual(['B', 'C'])
+    expect(candidates.every(({ points }) => points.length === 1)).toBe(true)
+    expect(candidates[0].points[0]).toEqual(candidates[1].points[0])
   })
 
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じordered pairを重複追加しない', () => {

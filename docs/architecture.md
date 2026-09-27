@@ -109,7 +109,23 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、その具体的なデータ表現は契約としない。
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-DERIVATION -->
-split relationはtargetとcutterのsource Segment IDだけを参照し、交点座標やSymmetry展開後の一時的なinstance IDを参照しない。Pattern層は `Symmetry展開 → splitによるFragment化` の順で最終Pattern Geometryをpureに導出し、その後にLayout層が配置する。relationに必要なsourceの組み合わせだけを交差判定し、全交点集合を常時計算・キャッシュ・状態保持しない。候補表示が必要な場合も、選択されたtargetについてその時点のPatternからオンデマンドで導出する。
+split relationはtargetとcutterのsource Segment IDだけを参照し、交点座標やSymmetry展開後の一時的なinstance IDを参照しない。`A → B` は、Aをsourceとする展開済みinstance群とBをsourceとする展開済みinstance群の全組合せへ適用するsource-family-level ruleであり、同じSymmetry変換同士だけへ限定しない。`A → A` を許可するが、同じRendered Segment instance自身との比較は除外する。
+
+Pattern層は次の順で最終Geometryをpureに導出する。
+
+```text
+source model
+  ↓
+Symmetry expansion
+  ↓
+source-family split rule application
+  ↓
+Fragment geometry
+  ↓
+Layout
+```
+
+`SplitRelation` はユーザーが指定しCellPatternへ保持するsource pairのドメインルール、`SplitCandidate` は選択targetと1つのcutter source pairについて現在得られる交点集合とrelation状態をまとめた一時的な派生情報である。Intersection PointとFragmentはいずれも現在のモデルから再計算する派生Geometryであり、CellPatternへ保存しない。relationに必要なsource familyの組み合わせだけを交差判定し、全交点集合を常時計算・キャッシュ・状態保持しない。候補表示が必要な場合も、選択されたtargetについてその時点のPatternからオンデマンドで導出する。
 
 ### CellPlacement
 

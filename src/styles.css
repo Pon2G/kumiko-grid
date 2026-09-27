@@ -47,15 +47,17 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .pattern-line { stroke-linecap: round; stroke-width: 4; cursor: pointer; }
 .pattern-line.source { stroke: #b84c34; }
 .pattern-line.generated { stroke: #718179; stroke-width: 2.5; stroke-dasharray: 8 7; cursor: default; }
-.split-candidate { cursor: pointer; }
-.split-candidate-hit { fill: transparent; }
-.split-candidate-dot { fill: #f8f6ef; stroke: #bd4b31; stroke-width: 3; }
-.split-candidate.active .split-candidate-dot { fill: #bd4b31; stroke: #f8f6ef; }
+.split-candidate-marker { fill: #f8f6ef; stroke: #bd4b31; stroke-width: 3; pointer-events: none; }
 .anchor-hit { fill: transparent; }
 .anchor-dot { fill: #f8f6ef; stroke: #32443b; stroke-width: 2; transition: .15s; }
 .anchor:hover .anchor-dot, .anchor.selected .anchor-dot { fill: #bd4b31; stroke: #bd4b31; transform-box: fill-box; transform-origin: center; transform: scale(1.4); }
 .anchor.disabled { pointer-events: none; }
 .anchor.disabled .anchor-dot { fill: #e3e1d9; stroke: #969d99; }
+.split-candidate-list { display: grid; gap: 7px; padding: 14px 26px; border-top: 1px solid #d8d7cf; background: #eeece4; }
+.split-candidate-list > strong { font-size: 10px; letter-spacing: .05em; }
+.split-candidate-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; }
+.split-candidate-item button { padding: 6px 10px; border: 1px solid #b8b9b1; background: #f8f6ef; font-size: 9px; white-space: nowrap; }
+.empty-candidates { color: #6b6961; font-size: 10px; }
 .legend { display: flex; gap: 22px; padding: 15px 26px; border-top: 1px solid #d8d7cf; color: #657069; font-size: 10px; }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .legend i { display: inline-block; width: 25px; border-top: 3px solid #b84c34; }

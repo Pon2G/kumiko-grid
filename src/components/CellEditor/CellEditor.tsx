@@ -3,8 +3,8 @@ import type { AnchorPoint } from '../../geometry/anchorPoint'
 import type { Segment } from '../../geometry/segment'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
-import { derivePatternGeometry, getSplitCandidates } from '../../pattern/splitting'
-import { isDerivedSegment } from '../../pattern/symmetry'
+import { derivePatternGeometry, getSplitCandidates, type SplitCandidate } from '../../pattern/splitting'
+import { isSymmetryGeneratedSegment } from '../../pattern/symmetry'
 
 interface CellEditorProps {
   divisions: number
@@ -25,6 +25,10 @@ const anchorLabel = (anchor: AnchorPoint): string =>
   anchor.kind === 'vertex'
     ? `頂点${anchor.vertex}`
     : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
+const relationFromCandidate = ({ targetSegmentId, cutterSegmentId }: SplitCandidate): SplitRelation => ({
+  targetSegmentId,
+  cutterSegmentId,
+})
 
 export function CellEditor({
   divisions,
@@ -48,7 +52,7 @@ export function CellEditor({
           <span className="eyebrow">02 / セル</span>
           <h2 id="editor-title">セルエディター</h2>
         </div>
-        <span className="status-pill">{splitTargetId ? '交点を選択' : pendingAnchor ? '終点を選択' : '描画できます'}</span>
+        <span className="status-pill">{splitTargetId ? '分割ルールを選択' : pendingAnchor ? '終点を選択' : '描画できます'}</span>
       </div>
       <div className="editor-stage">
         <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター">
@@ -57,34 +61,19 @@ export function CellEditor({
           {rendered.map((segment) => (
             <line
               key={segment.id}
-              className={isDerivedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'}
+              className={isSymmetryGeneratedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'}
               x1={px(segment.start.x)} y1={py(segment.start.y)}
               x2={px(segment.end.x)} y2={py(segment.end.y)}
             />
           ))}
           {splitCandidates.flatMap((candidate) => candidate.points.map((point, index) => (
-            <g
-              className={`split-candidate ${candidate.active ? 'active' : ''}`}
+            <circle
+              className="split-candidate-marker"
               key={`${candidate.cutterSegmentId}-${index}`}
-              role="button"
-              tabIndex={0}
-              aria-label={`線分との分割を${candidate.active ? '解除' : '追加'}`}
-              onClick={() => onToggleSplitRelation({
-                targetSegmentId: candidate.targetSegmentId,
-                cutterSegmentId: candidate.cutterSegmentId,
-              })}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  onToggleSplitRelation({
-                    targetSegmentId: candidate.targetSegmentId,
-                    cutterSegmentId: candidate.cutterSegmentId,
-                  })
-                }
-              }}
-            >
-              <circle className="split-candidate-hit" cx={px(point.x)} cy={py(point.y)} r="19" />
-              <circle className="split-candidate-dot" cx={px(point.x)} cy={py(point.y)} r="8" />
-            </g>
+              cx={px(point.x)}
+              cy={py(point.y)}
+              r="8"
+            />
           )))}
           {anchors.map((anchor) => {
             const point = resolveAnchor(anchor)
@@ -110,6 +99,12 @@ export function CellEditor({
           })}
         </svg>
       </div>
+      {splitTargetId && <SplitCandidateList
+        candidates={splitCandidates}
+        segments={pattern.segments}
+        targetSegmentId={splitTargetId}
+        onToggle={onToggleSplitRelation}
+      />}
       <div className="legend">
         <span><i className="source-key" /> 種となる線分</span>
         <span><i className="generated-key" /> 自動生成</span>
@@ -123,6 +118,37 @@ export function CellEditor({
         onRemoveSplitRelation={onToggleSplitRelation}
       />}
     </section>
+  )
+}
+
+function SplitCandidateList({
+  candidates,
+  segments,
+  targetSegmentId,
+  onToggle,
+}: {
+  candidates: SplitCandidate[]
+  segments: Segment[]
+  targetSegmentId: string
+  onToggle: (relation: SplitRelation) => void
+}) {
+  const segmentNumber = new Map(segments.map((segment, index) => [segment.id, index + 1]))
+  return (
+    <div className="split-candidate-list" aria-label="分割ルール候補">
+      <strong>線分 {String(segmentNumber.get(targetSegmentId) ?? '?').padStart(2, '0')} の分割ルール</strong>
+      {candidates.length === 0 && <span className="empty-candidates">現在の交点候補はありません</span>}
+      {candidates.map((candidate) => (
+        <div className="split-candidate-item" key={candidate.cutterSegmentId}>
+          <span>
+            線分 {String(segmentNumber.get(candidate.cutterSegmentId) ?? '?').padStart(2, '0')} との交点：
+            {candidate.points.length}箇所
+          </span>
+          <button type="button" onClick={() => onToggle(relationFromCandidate(candidate))}>
+            {candidate.active ? '分割を解除' : '分割を追加'}
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -146,7 +172,7 @@ function SegmentList({
         <div className={`segment-item ${splitTargetId === segment.id ? 'selected' : ''}`} key={segment.id}>
           <span className="segment-name">
             線分 {String(index + 1).padStart(2, '0')}
-            {pattern.splitRelations.some(({ targetSegmentId }) => targetSegmentId === segment.id) && <em>分割済み</em>}
+            {pattern.splitRelations.some(({ targetSegmentId }) => targetSegmentId === segment.id) && <em>分割設定あり</em>}
           </span>
           <button
             className="split-button"

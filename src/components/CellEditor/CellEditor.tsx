@@ -69,9 +69,17 @@ export function CellEditor({
               role="button"
               tabIndex={0}
               aria-label={`線分との分割を${candidate.active ? '解除' : '追加'}`}
-              onClick={() => onToggleSplitRelation(candidate)}
+              onClick={() => onToggleSplitRelation({
+                targetSegmentId: candidate.targetSegmentId,
+                cutterSegmentId: candidate.cutterSegmentId,
+              })}
               onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') onToggleSplitRelation(candidate)
+                if (event.key === 'Enter' || event.key === ' ') {
+                  onToggleSplitRelation({
+                    targetSegmentId: candidate.targetSegmentId,
+                    cutterSegmentId: candidate.cutterSegmentId,
+                  })
+                }
               }}
             >
               <circle className="split-candidate-hit" cx={px(point.x)} cy={py(point.y)} r="19" />

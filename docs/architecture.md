@@ -108,6 +108,9 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 <!-- test-contract: ARCH-PATTERN-DERIVED-SEGMENTS -->
 対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、その具体的なデータ表現は契約としない。
 
+<!-- test-contract: ARCH-PATTERN-SPLIT-DERIVATION -->
+split relationはtargetとcutterのsource Segment IDだけを参照し、交点座標やSymmetry展開後の一時的なinstance IDを参照しない。Pattern層は `Symmetry展開 → splitによるFragment化` の順で最終Pattern Geometryをpureに導出し、その後にLayout層が配置する。relationに必要なsourceの組み合わせだけを交差判定し、全交点集合を常時計算・キャッシュ・状態保持しない。候補表示が必要な場合も、選択されたtargetについてその時点のPatternからオンデマンドで導出する。
+
 ### CellPlacement
 
 基準CellのLocal CoordinateをPreview座標へ写す配置情報を表す。
@@ -115,6 +118,16 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 少なくとも位置、回転、必要に応じてmirrorを表現できること。
 
 ## 5. 座標と変換
+
+### Segment intersection
+
+<!-- test-contract: ARCH-GEOMETRY-SEGMENT-INTERSECTION -->
+Geometry層は、正規化Cell Local Coordinate上の2つの非退化Segmentについて、UIに依存しないpure functionで交差関係を判定する。結果は、交差しない `none`、双方の内部で1点交差する `cross`、少なくとも一方の端点で1点を共有する `touch`、同一直線上で有限長の共通区間を持つ `overlap` を区別する。同一直線上で共有するのが1点だけの場合は `touch` とする。`cross` と `touch` は交点と双方のSegment parameter（始点を0、終点を1）を返す。
+
+浮動小数点の判定は完全一致に依存せず、正規化座標に適した共通epsilonを用いる。epsilonの具体値や交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
+
+<!-- test-contract: ARCH-GEOMETRY-SEGMENT-FRAGMENTATION -->
+Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではFragmentを増やさず、ゼロ長Fragmentを生成しない。入力Segmentは変更しない。
 
 Edge Division Pointは辺の始点から終点への線形補間で求める。
 
@@ -161,7 +174,10 @@ Reactはdivision数、選択中AnchorPoint、基本Segment群、Symmetry等の�
 現在は主に次を含む。
 
 - Symmetryによる生成Segment
+- split relationによるFragment
 - Layout展開後のSegment
+
+交点は保存対象ではない派生Geometryとし、基本Segment、Symmetry、source-levelのsplit relationから再計算する。Layout層はsplitの意味論や交差計算を扱わない。
 
 派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。必要になった段階で、描画や出力など適切な境界で正規化する。
 

@@ -60,7 +60,7 @@ Cell Patternは複数の `Segment` から構成される。
 
 ## 5. Cell Pattern
 
-Cell Patternは、ユーザーが定義した基本Segmentと、それに適用するSymmetryから構成する。
+Cell Patternは、ユーザーが定義した基本Segment、それに適用するSymmetry、基本Segment間のsplit relationから構成する。
 
 対称形の場合でも、生成後のすべてのSegmentをユーザー入力として保持しない。ユーザーは基本Segmentを定義し、残りは対称操作から派生生成する。
 
@@ -89,6 +89,15 @@ Cell Patternは、ユーザーが定義した基本Segmentと、それに適用�
 <!-- test-contract: SPEC-SYMMETRY-EXPANSION -->
 1本の基本Segmentに対し、`none` は元の1本、`mirror` は元と鏡映の2本、`rotational` は0°、120°、240°の3本を描画用Segmentとして生成する。元のSegmentはユーザー入力として扱う。
 
+### 5.2 交点でのsplit
+
+<!-- test-contract: SPEC-PATTERN-SEGMENT-SPLIT -->
+交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換せず、`targetSegmentId → cutterSegmentId` という基本Segment ID間の有向relationとして保持する。relationのtarget側だけを分割し、双方を分割するには逆向きのrelationも必要とする。同じordered pairは重複保持しない。
+
+source-levelのrelationはSymmetry展開後の対応するすべてのinstanceへ適用する。交点座標や展開後instance IDはCell Patternへ保存しない。同一sourceの異なるinstance同士を対象にできるが、同じinstance自身とは比較しない。1点で交差または接触し、target instanceの内部に位置する交点だけでFragment化し、有限長の重複区間はsplitしない。`stop` behaviorは扱わない。
+
+基本Segmentを削除したときは、そのIDをtargetまたはcutterとして参照するrelationも削除する。
+
 ## 6. Cell Editor
 
 1つの正三角形を編集する画面を持つ。
@@ -112,6 +121,9 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 5. Segmentを選択して削除する
 6. symmetryを変更する
 7. mirrorの場合は対称軸を変更する
+8. 基本Segmentを分割対象として選び、表示された交点候補から有向split relationを追加または解除する
+
+交点候補は分割対象を選択している間だけ、その時点のPatternから導出して表示する。同じtarget / cutterのsource SegmentペアからSymmetryによって複数の交点が生じても、1つのsource-level relationとして操作する。分割対象の選択や候補点は操作中だけのUI状態であり、Cell Patternへ保存しない。
 
 スマートフォンではAnchorPointを十分大きなタップ領域として扱う。
 

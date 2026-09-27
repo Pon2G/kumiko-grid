@@ -47,6 +47,10 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .pattern-line { stroke-linecap: round; stroke-width: 4; cursor: pointer; }
 .pattern-line.source { stroke: #b84c34; }
 .pattern-line.generated { stroke: #718179; stroke-width: 2.5; stroke-dasharray: 8 7; cursor: default; }
+.split-candidate { cursor: pointer; }
+.split-candidate-hit { fill: transparent; }
+.split-candidate-dot { fill: #f8f6ef; stroke: #bd4b31; stroke-width: 3; }
+.split-candidate.active .split-candidate-dot { fill: #bd4b31; stroke: #f8f6ef; }
 .anchor-hit { fill: transparent; }
 .anchor-dot { fill: #f8f6ef; stroke: #32443b; stroke-width: 2; transition: .15s; }
 .anchor:hover .anchor-dot, .anchor.selected .anchor-dot { fill: #bd4b31; stroke: #bd4b31; transform-box: fill-box; transform-origin: center; transform: scale(1.4); }
@@ -55,9 +59,15 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .legend i { display: inline-block; width: 25px; border-top: 3px solid #b84c34; }
 .legend .generated-key { border-color: #718179; border-top-style: dashed; }
 .legend .segment-count { margin-left: auto; font-family: 'DM Mono', monospace; }
-.segment-list { display: flex; gap: 7px; padding: 0 26px 18px; overflow-x: auto; }
-.segment-list button { display: flex; gap: 16px; padding: 7px 10px; border: 1px solid #d0cfc6; background: #f4f2eb; font-size: 9px; white-space: nowrap; }
-.segment-list button span:last-child { color: #b84c34; }
+.segment-list { display: grid; gap: 7px; padding: 0 26px 18px; }
+.segment-item { display: grid; grid-template-columns: minmax(100px, 1fr) auto auto; align-items: center; border: 1px solid #d0cfc6; background: #f4f2eb; }
+.segment-item.selected { border-color: #bd4b31; box-shadow: inset 3px 0 #bd4b31; }
+.segment-name { padding: 7px 10px; font-size: 9px; white-space: nowrap; }
+.segment-name em { margin-left: 8px; padding: 2px 5px; color: white; background: #718179; font-style: normal; }
+.segment-item button { align-self: stretch; padding: 7px 10px; border: 0; border-left: 1px solid #d0cfc6; background: transparent; font-size: 9px; white-space: nowrap; }
+.segment-item .split-button { color: #405249; }
+.segment-item .delete-button { color: #b84c34; }
+.segment-item button:hover { background: #e7e5dc; }
 .preview-meta { color: #777e79; font-size: 9px; }
 .preview-stage { position: relative; height: 290px; overflow: hidden; background: #24362e; }
 .preview-stage svg { width: 100%; height: 100%; }

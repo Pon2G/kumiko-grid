@@ -2,16 +2,21 @@ import { useEffect, useState } from 'react'
 import { anchorKey } from '../geometry/anchorPoint'
 import type { AnchorPoint } from '../geometry/anchorPoint'
 import type { Segment } from '../geometry/segment'
-import type { Symmetry } from '../pattern/cellPattern'
+import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
+import { addSplitRelation, removeSegment, removeSplitRelation } from '../pattern/splitting'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
 
 export default function App() {
   const [divisions, setDivisions] = useState(4)
-  const [segments, setSegments] = useState<Segment[]>([])
-  const [symmetry, setSymmetry] = useState<Symmetry>({ type: 'rotational' })
+  const [pattern, setPattern] = useState<CellPattern>({
+    segments: [],
+    symmetry: { type: 'rotational' },
+    splitRelations: [],
+  })
   const [pendingAnchor, setPendingAnchor] = useState<AnchorPoint | null>(null)
+  const [splitTargetId, setSplitTargetId] = useState<string | null>(null)
 
   useEffect(() => {
     setPendingAnchor(null)
@@ -23,16 +28,23 @@ export default function App() {
       return
     }
     if (anchorKey(anchor) !== anchorKey(pendingAnchor)) {
-      setSegments((current) => [...current, {
-        id: globalThis.crypto.randomUUID(),
-        start: pendingAnchor,
-        end: anchor,
-      }])
+      const segment: Segment = { id: globalThis.crypto.randomUUID(), start: pendingAnchor, end: anchor }
+      setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }
     setPendingAnchor(null)
   }
 
-  const pattern = { segments, symmetry }
+  const deleteSegment = (id: string) => {
+    setPattern((current) => removeSegment(current, id))
+    setSplitTargetId((current) => current === id ? null : current)
+  }
+
+  const toggleSplitRelation = (relation: SplitRelation) => {
+    setPattern((current) => current.splitRelations.some(
+      ({ targetSegmentId, cutterSegmentId }) =>
+        targetSegmentId === relation.targetSegmentId && cutterSegmentId === relation.cutterSegmentId,
+    ) ? removeSplitRelation(current, relation) : addSplitRelation(current, relation))
+  }
 
   return (
     <>
@@ -45,18 +57,21 @@ export default function App() {
       <main>
         <Settings
           divisions={divisions}
-          divisionsDisabled={segments.length > 0}
-          symmetry={symmetry}
+          divisionsDisabled={pattern.segments.length > 0}
+          symmetry={pattern.symmetry}
           onDivisionsChange={setDivisions}
-          onSymmetryChange={setSymmetry}
+          onSymmetryChange={(symmetry) => setPattern((current) => ({ ...current, symmetry }))}
         />
         <div className="workspace">
           <CellEditor
             divisions={divisions}
             pattern={pattern}
             pendingAnchor={pendingAnchor}
+            splitTargetId={splitTargetId}
             onAnchorClick={addAnchor}
-            onDeleteSegment={(id) => setSegments((current) => current.filter((segment) => segment.id !== id))}
+            onDeleteSegment={deleteSegment}
+            onSelectSplitTarget={setSplitTargetId}
+            onToggleSplitRelation={toggleSplitRelation}
           />
           <PatternPreview pattern={pattern} />
         </div>

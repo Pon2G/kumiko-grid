@@ -1,4 +1,9 @@
-import { fragmentSegment, GEOMETRY_EPSILON, intersectSegments } from '../geometry/intersections'
+import {
+  fragmentSegment,
+  intersectSegments,
+  isInteriorParameter,
+  pointsAreClose,
+} from '../geometry/intersections'
 import type { Point } from '../geometry/types'
 import type { CellPattern, SplitRelation } from './cellPattern'
 import { expandPattern, type RenderedSegment } from './symmetry'
@@ -16,9 +21,6 @@ export interface SplitCandidate {
 
 const sameRelation = (first: SplitRelation, second: SplitRelation) =>
   first.targetSegmentId === second.targetSegmentId && first.cutterSegmentId === second.cutterSegmentId
-
-const pointsAreClose = (first: Point, second: Point) =>
-  Math.abs(first.x - second.x) <= GEOMETRY_EPSILON && Math.abs(first.y - second.y) <= GEOMETRY_EPSILON
 
 /** ordered pairを重複させずに有向split relationを追加する。 */
 export function addSplitRelation(pattern: CellPattern, relation: SplitRelation): CellPattern {
@@ -57,8 +59,7 @@ export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
           const intersection = intersectSegments(target, cutter)
           if (
             (intersection.kind === 'cross' || intersection.kind === 'touch')
-            && intersection.firstT > GEOMETRY_EPSILON
-            && intersection.firstT < 1 - GEOMETRY_EPSILON
+            && isInteriorParameter(target, intersection.firstT)
           ) return [intersection.firstT]
           return []
         }),
@@ -85,8 +86,7 @@ export function getSplitCandidates(pattern: CellPattern, targetSegmentId: string
         const intersection = intersectSegments(target, cutter)
         if (
           (intersection.kind === 'cross' || intersection.kind === 'touch')
-          && intersection.firstT > GEOMETRY_EPSILON
-          && intersection.firstT < 1 - GEOMETRY_EPSILON
+          && isInteriorParameter(target, intersection.firstT)
           && !points.some((point) => pointsAreClose(point, intersection.point))
         ) points.push(intersection.point)
       }

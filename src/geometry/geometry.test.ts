@@ -1,7 +1,7 @@
 import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import { resolveAnchor } from './anchorPoint'
-import { fragmentSegment, intersectSegments } from './intersections'
+import { fragmentSegment, GEOMETRY_EPSILON, intersectSegments } from './intersections'
 import { canonicalTriangle, triangleCentroid, TRIANGLE_HEIGHT } from './triangle'
 import { reflectPoint, rotatePoint } from './transform'
 
@@ -75,42 +75,63 @@ describe('Segmentの交差判定', () => {
     expect(result.kind).toBe('touch')
   })
 
-  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い非退化Segmentでも内部交差の分類とparameterはスケールに依存しない', () => {
-    const cases = [1, 1e-5].map((scale) => intersectSegments(
-      { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
-      { start: { x: scale / 2, y: -scale / 2 }, end: { x: scale / 2, y: scale / 2 } },
-    ))
-
-    for (const result of cases) {
-      expect(result.kind).toBe('cross')
-      if (result.kind !== 'cross') continue
-      expect(Number.isFinite(result.firstT)).toBe(true)
-      expect(Number.isFinite(result.secondT)).toBe(true)
-      expect(result.firstT).toBeCloseTo(0.5)
-      expect(result.secondT).toBeCloseTo(0.5)
-    }
-  })
-
-  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い平行かつ非共線のSegmentを交差なしと判定する', () => {
-    expect(intersectSegments(
-      { start: { x: 0, y: 0 }, end: { x: 1e-5, y: 0 } },
-      { start: { x: 0, y: 1e-5 }, end: { x: 1e-5, y: 1e-5 } },
-    )).toEqual({ kind: 'none' })
-  })
-
-  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '短い共線Segmentの1点共有と有限長共有を区別する', () => {
-    const source = { start: { x: 0, y: 0 }, end: { x: 1e-5, y: 0 } }
-    const touch = intersectSegments(source, {
-      start: { x: 1e-5, y: 0 }, end: { x: 2e-5, y: 0 },
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '同じ交差関係は非退化Segmentのスケールによらず同じ分類になる', () => {
+    const classify = (scale: number) => ({
+      cross: intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+        { start: { x: scale / 2, y: -scale / 2 }, end: { x: scale / 2, y: scale / 2 } },
+      ),
+      none: intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+        { start: { x: 0, y: scale }, end: { x: scale, y: scale } },
+      ),
+      endpointTouch: intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+        { start: { x: scale, y: 0 }, end: { x: scale, y: scale } },
+      ),
+      collinearTouch: intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+        { start: { x: scale, y: 0 }, end: { x: scale * 2, y: 0 } },
+      ),
+      overlap: intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
+        { start: { x: scale / 2, y: 0 }, end: { x: scale * 1.5, y: 0 } },
+      ),
     })
-    expect(touch.kind).toBe('touch')
-    if (touch.kind === 'touch') {
-      expect(Number.isFinite(touch.firstT)).toBe(true)
-      expect(Number.isFinite(touch.secondT)).toBe(true)
+
+    for (const results of [classify(1), classify(1e-5)]) {
+      expect(Object.fromEntries(Object.entries(results).map(([name, result]) => [name, result.kind]))).toEqual({
+        cross: 'cross',
+        none: 'none',
+        endpointTouch: 'touch',
+        collinearTouch: 'touch',
+        overlap: 'overlap',
+      })
+      expect(results.cross.kind).toBe('cross')
+      if (results.cross.kind === 'cross') {
+        expect(Number.isFinite(results.cross.firstT)).toBe(true)
+        expect(Number.isFinite(results.cross.secondT)).toBe(true)
+        expect(results.cross.firstT).toBeCloseTo(0.5)
+        expect(results.cross.secondT).toBeCloseTo(0.5)
+      }
     }
-    expect(intersectSegments(source, {
-      start: { x: 0.5e-5, y: 0 }, end: { x: 1.5e-5, y: 0 },
-    })).toEqual({ kind: 'overlap' })
+  })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '座標距離epsilon以内の共線端点間のずれをSegment長によらず接触として扱う', () => {
+    for (const length of [1, 1e-5]) {
+      const result = intersectSegments(
+        { start: { x: 0, y: 0 }, end: { x: length, y: 0 } },
+        {
+          start: { x: length + GEOMETRY_EPSILON / 2, y: 0 },
+          end: { x: length * 2 + GEOMETRY_EPSILON / 2, y: 0 },
+        },
+      )
+      expect(result.kind).toBe('touch')
+      if (result.kind === 'touch') {
+        expect(Number.isFinite(result.firstT)).toBe(true)
+        expect(Number.isFinite(result.secondT)).toBe(true)
+      }
+    }
   })
 })
 
@@ -132,5 +153,17 @@ describe('SegmentのFragment生成', () => {
     )
     expect(fragments).toHaveLength(2)
     expect(fragments[0].end).toEqual(fragments[1].start)
+  })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-FRAGMENTATION', regression: 3 }, '座標距離epsilon以内の端点位置と重複位置をSegment長によらずFragment境界にしない', () => {
+    for (const length of [1, 1e-5]) {
+      const parameterOffset = GEOMETRY_EPSILON / (length * 2)
+      const fragments = fragmentSegment(
+        { start: { x: 0, y: 0 }, end: { x: length, y: 0 } },
+        [parameterOffset, 0.5, 0.5 + parameterOffset, 1 - parameterOffset],
+      )
+      expect(fragments).toHaveLength(2)
+      expect(fragments[0].end).toEqual(fragments[1].start)
+    }
   })
 })

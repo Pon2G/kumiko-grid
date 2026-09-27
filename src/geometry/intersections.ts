@@ -47,6 +47,7 @@ export function fragmentSegment(segment: PointSegment, splitParameters: readonly
     .filter((value) => Number.isFinite(value) && value > tolerance && value < 1 - tolerance)
     .sort((first, second) => first - second)
     .filter((value, index, values) => index === 0 || value - values[index - 1] > tolerance)
+  if (parameters.length === 0) return [segment]
   const boundaries = [0, ...parameters, 1]
 
   return boundaries.slice(0, -1).flatMap((startT, index) => {

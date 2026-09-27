@@ -75,7 +75,7 @@ describe('Segmentの交差判定', () => {
     expect(result.kind).toBe('touch')
   })
 
-  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, '同じ交差関係は非退化Segmentのスケールによらず同じ分類になる', () => {
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-INTERSECTION', regression: 3 }, 'Geometry解像度に対して十分な長さを持つ異なるスケールで交差分類を維持する', () => {
     const classify = (scale: number) => ({
       cross: intersectSegments(
         { start: { x: 0, y: 0 }, end: { x: scale, y: 0 } },
@@ -136,6 +136,21 @@ describe('Segmentの交差判定', () => {
 })
 
 describe('SegmentのFragment生成', () => {
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-FRAGMENTATION', regression: 3 }, '有効なsplit境界がなければsource Segmentと同じGeometryを保持する', () => {
+    const source = { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } }
+    expect(fragmentSegment(source, [])).toEqual([source])
+    expect(fragmentSegment(source, [Number.NaN, Number.POSITIVE_INFINITY, 0, 1])).toEqual([source])
+  })
+
+  contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-FRAGMENTATION', regression: 3 }, 'epsilon以下の非退化source Segmentをsplit不能でも削除しない', () => {
+    const source = {
+      start: { x: 0, y: 0 },
+      end: { x: GEOMETRY_EPSILON / 2, y: 0 },
+    }
+    expect(fragmentSegment(source, [])).toEqual([source])
+    expect(fragmentSegment(source, [0.25, 0.5, 0.75])).toEqual([source])
+  })
+
   contractTest({ contract: 'ARCH-GEOMETRY-SEGMENT-FRAGMENTATION' }, '複数の位置をSegment上の順序でFragment化する', () => {
     const source = { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } }
     expect(fragmentSegment(source, [0.75, 0.25])).toEqual([

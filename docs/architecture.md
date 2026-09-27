@@ -140,10 +140,10 @@ Layout
 <!-- test-contract: ARCH-GEOMETRY-SEGMENT-INTERSECTION -->
 Geometry層は、正規化Cell Local Coordinate上の2つの非退化Segmentについて、UIに依存しないpure functionで交差関係を判定する。結果は、交差しない `none`、双方の内部で1点交差する `cross`、少なくとも一方の端点で1点を共有する `touch`、同一直線上で有限長の共通区間を持つ `overlap` を区別する。同一直線上で共有するのが1点だけの場合は `touch` とする。`cross` と `touch` は交点と双方のSegment parameter（始点を0、終点を1）を返す。
 
-浮動小数点の判定は完全一致に依存せず、共通epsilonを正規化Cell Local Coordinate上の距離許容誤差として用いる。外積やSegment parameterなど座標距離と異なるスケールの量を比較するときは、その量に対応する許容値へ変換する。epsilonの具体値、変換式、交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
+浮動小数点の判定は完全一致に依存せず、共通epsilonを正規化Cell Local Coordinate上の距離許容誤差として用いる。外積やSegment parameterなど座標距離と異なるスケールの量を比較するときは、その量に対応する許容値へ変換する。epsilonはGeometry上の数値解像度であり、その範囲内の差異を独立した位置や境界として区別しない場合があるが、source Segmentの有効性を決める閾値にはしない。epsilonの具体値、変換式、交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
 
 <!-- test-contract: ARCH-GEOMETRY-SEGMENT-FRAGMENTATION -->
-Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではFragmentを増やさず、ゼロ長Fragmentを生成しない。入力Segmentは変更しない。
+Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではFragmentを増やさず、ゼロ長Fragmentを生成しない。有効なsplit境界が存在しない場合は、source Segmentと同じGeometryを1つのFragmentとして保持する。入力Segmentは変更しない。
 
 Edge Division Pointは辺の始点から終点への線形補間で求める。
 

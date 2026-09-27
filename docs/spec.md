@@ -60,7 +60,7 @@ Cell Patternは複数の `Segment` から構成される。
 
 ## 5. Cell Pattern
 
-Cell Patternは、ユーザーが定義した基本Segmentと、それに適用するSymmetryから構成する。
+Cell Patternは、ユーザーが定義した基本Segment、それに適用するSymmetry、基本Segment間のsplit relationから構成する。
 
 対称形の場合でも、生成後のすべてのSegmentをユーザー入力として保持しない。ユーザーは基本Segmentを定義し、残りは対称操作から派生生成する。
 
@@ -89,6 +89,15 @@ Cell Patternは、ユーザーが定義した基本Segmentと、それに適用�
 <!-- test-contract: SPEC-SYMMETRY-EXPANSION -->
 1本の基本Segmentに対し、`none` は元の1本、`mirror` は元と鏡映の2本、`rotational` は0°、120°、240°の3本を描画用Segmentとして生成する。元のSegmentはユーザー入力として扱う。
 
+### 5.2 交点でのsplit
+
+<!-- test-contract: SPEC-PATTERN-SEGMENT-SPLIT -->
+交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換せず、`targetSegmentId → cutterSegmentId` という基本Segment ID間の有向relationとして保持する。relationは特定の交点を指定せず、交点座標、Segment parameter、候補情報を保持しない。relationのtarget側だけを分割し、双方を分割するには逆向きのrelationも必要とする。同じordered pairは重複保持しない。
+
+`A → B` は、AをsourceとするSymmetry展開後の全instance（A-family）を、Bをsourceとする全instance（B-family）との全組合せにある有効な交点で分割するsource-family-level ruleである。同じ変換同士だけへ限定しない。展開後instance IDは保存しない。`A → A` も許可し、同一sourceから展開された異なるinstance間の交差を扱う一方、同じRendered Segment instance自身との比較は除外する。1点で交差または接触し、target instanceの内部に位置する交点だけでFragment化し、有限長の重複区間はsplitしない。`stop` behaviorは扱わない。
+
+relationは現在交点が存在しなくてもユーザー指定のルールとして維持する。基本Segmentを削除したときだけ、そのIDをtargetまたはcutterとして参照するrelationも削除する。
+
 ## 6. Cell Editor
 
 1つの正三角形を編集する画面を持つ。
@@ -112,6 +121,9 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 5. Segmentを選択して削除する
 6. symmetryを変更する
 7. mirrorの場合は対称軸を変更する
+8. 基本Segmentを分割対象として選び、source Segment単位のcutter候補から有向split relationを追加または解除する
+
+交点候補は分割対象を選択している間だけ、その時点のPatternからsource pairごとに導出して表示する。relationの追加・解除は `target source → cutter source` の1 pairを1操作単位とし、同じ座標へ複数のcutterが交差しても個別に操作できる。SVG上の交点マーカーはsplit位置を示す表示専用の派生情報であり、操作対象や永続データではない。分割対象の選択や候補点は操作中だけのUI状態であり、Cell Patternへ保存しない。Symmetry変更などによって現在の交点候補がなくなってもrelationはユーザー指定として維持し、Segment一覧から解除できる。
 
 スマートフォンではAnchorPointを十分大きなタップ領域として扱う。
 

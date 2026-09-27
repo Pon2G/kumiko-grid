@@ -6,7 +6,13 @@ export type Symmetry =
   | { type: 'mirror'; axis: MirrorAxis }
   | { type: 'rotational' }
 
+export interface SplitRelation {
+  targetSegmentId: string
+  cutterSegmentId: string
+}
+
 export interface CellPattern {
   segments: Segment[]
   symmetry: Symmetry
+  splitRelations: SplitRelation[]
 }

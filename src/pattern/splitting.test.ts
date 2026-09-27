@@ -1,0 +1,160 @@
+import { describe, expect } from 'vitest'
+import { contractTest } from '../test/contractTest'
+import type { Segment } from '../geometry/segment'
+import type { CellPattern } from './cellPattern'
+import {
+  addSplitRelation,
+  derivePatternGeometry,
+  getSplitCandidates,
+  removeSegment,
+  removeSplitRelation,
+} from './splitting'
+
+const target: Segment = {
+  id: 'A',
+  start: { kind: 'vertex', vertex: 'A' },
+  end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 },
+}
+const cutter: Segment = {
+  id: 'B',
+  start: { kind: 'vertex', vertex: 'B' },
+  end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 },
+}
+const anotherCutter: Segment = {
+  id: 'C',
+  start: { kind: 'vertex', vertex: 'C' },
+  end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 },
+}
+const pattern = (splitRelations: CellPattern['splitRelations'], symmetry: CellPattern['symmetry'] = { type: 'none' }): CellPattern => ({
+  segments: [target, cutter], symmetry, splitRelations,
+})
+
+describe('CellPatternのsplit派生', () => {
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, 'AからBへのrelationではAだけを分割し、逆向きrelationでBも分割する', () => {
+    const oneWay = derivePatternGeometry(pattern([{ targetSegmentId: 'A', cutterSegmentId: 'B' }]))
+    expect(oneWay.filter(({ sourceId }) => sourceId === 'A')).toHaveLength(2)
+    expect(oneWay.filter(({ sourceId }) => sourceId === 'B')).toHaveLength(1)
+
+    const bothWays = derivePatternGeometry(pattern([
+      { targetSegmentId: 'A', cutterSegmentId: 'B' },
+      { targetSegmentId: 'B', cutterSegmentId: 'A' },
+    ]))
+    expect(bothWays.filter(({ sourceId }) => sourceId === 'A')).toHaveLength(2)
+    expect(bothWays.filter(({ sourceId }) => sourceId === 'B')).toHaveLength(2)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'AからAへのrelationで異なるSymmetry instance同士を分割する', () => {
+    const original = [target]
+    const rotational: CellPattern = {
+      segments: original,
+      symmetry: { type: 'rotational' },
+      splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A' }],
+    }
+    expect(derivePatternGeometry(rotational)).toHaveLength(6)
+    expect(rotational.segments).toBe(original)
+    expect(rotational.segments).toEqual([target])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '同じRendered Segment instance自身は交差候補にしない', () => {
+    const current: CellPattern = {
+      segments: [target],
+      symmetry: { type: 'none' },
+      splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A' }],
+    }
+    expect(getSplitCandidates(current, 'A')).toEqual([])
+    expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === 'A')).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'source family間の全組合せを評価して異なる回転同士の交点でも分割する', () => {
+    const crossTransformTarget: Segment = {
+      id: 'all-pairs-target',
+      start: { kind: 'vertex', vertex: 'A' },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
+    }
+    const crossTransformCutter: Segment = {
+      id: 'all-pairs-cutter',
+      start: { kind: 'edge-division', edge: 'AB', divisions: 5, index: 1 },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
+    }
+    const current: CellPattern = {
+      segments: [crossTransformTarget, crossTransformCutter],
+      symmetry: { type: 'rotational' },
+      splitRelations: [{
+        targetSegmentId: crossTransformTarget.id,
+        cutterSegmentId: crossTransformCutter.id,
+      }],
+    }
+
+    expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === crossTransformTarget.id)).toHaveLength(6)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '同一点に複数のcutterが交差してもゼロ長Fragmentを生成しない', () => {
+    const current: CellPattern = {
+      segments: [target, cutter, anotherCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [
+        { targetSegmentId: 'A', cutterSegmentId: 'B' },
+        { targetSegmentId: 'A', cutterSegmentId: 'C' },
+      ],
+    }
+    expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === 'A')).toHaveLength(2)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同一点の複数cutterをsource pairごとの候補として導出する', () => {
+    const current: CellPattern = {
+      segments: [target, cutter, anotherCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [],
+    }
+    const candidates = getSplitCandidates(current, 'A')
+    const byCutterId = new Map(candidates.map((candidate) => [candidate.cutterSegmentId, candidate]))
+    const candidateB = byCutterId.get('B')
+    const candidateC = byCutterId.get('C')
+
+    expect(byCutterId.size).toBe(2)
+    expect(candidateB).toBeDefined()
+    expect(candidateC).toBeDefined()
+    expect(candidateB?.points).toHaveLength(1)
+    expect(candidateC?.points).toHaveLength(1)
+    expect(candidateB?.points[0]).toEqual(candidateC?.points[0])
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じordered pairを重複追加しない', () => {
+    const initial = pattern([{ targetSegmentId: 'A', cutterSegmentId: 'B' }])
+    expect(addSplitRelation(initial, { targetSegmentId: 'A', cutterSegmentId: 'B' }).splitRelations).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '候補由来の付加情報をrelationへ保存しない', () => {
+    const candidate = {
+      targetSegmentId: 'A',
+      cutterSegmentId: 'B',
+      points: [{ x: 0.5, y: 0.5 }],
+      active: false,
+    }
+    expect(addSplitRelation(pattern([]), candidate).splitRelations).toEqual([
+      { targetSegmentId: 'A', cutterSegmentId: 'B' },
+    ])
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, 'Symmetry変更で候補がなくなってもrelationを維持し明示的に解除できる', () => {
+    const relation = { targetSegmentId: 'A', cutterSegmentId: 'A' }
+    const current: CellPattern = {
+      segments: [target],
+      symmetry: { type: 'none' },
+      splitRelations: [relation],
+    }
+    expect(getSplitCandidates(current, 'A')).toEqual([])
+    expect(current.splitRelations).toEqual([relation])
+    expect(removeSplitRelation(current, relation).splitRelations).toEqual([])
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, 'Segment削除時にtargetまたはcutterとして参照するrelationも削除する', () => {
+    const current = pattern([
+      { targetSegmentId: 'A', cutterSegmentId: 'B' },
+      { targetSegmentId: 'B', cutterSegmentId: 'A' },
+    ])
+    expect(removeSegment(current, 'B')).toEqual({
+      segments: [target], symmetry: { type: 'none' }, splitRelations: [],
+    })
+  })
+})

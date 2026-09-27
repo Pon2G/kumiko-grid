@@ -123,7 +123,7 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 7. mirrorの場合は対称軸を変更する
 8. 基本Segmentを分割対象として選び、表示された交点候補から有向split relationを追加または解除する
 
-交点候補は分割対象を選択している間だけ、その時点のPatternから導出して表示する。同じtarget / cutterのsource SegmentペアからSymmetryによって複数の交点が生じても、1つのsource-level relationとして操作する。分割対象の選択や候補点は操作中だけのUI状態であり、Cell Patternへ保存しない。
+交点候補は分割対象を選択している間だけ、その時点のPatternから導出して表示する。同じtarget / cutterのsource SegmentペアからSymmetryによって複数の交点が生じても、1つのsource-level relationとして操作する。分割対象の選択や候補点は操作中だけのUI状態であり、Cell Patternへ保存しない。Symmetry変更などによって現在の交点候補がなくなってもrelationはユーザー指定として維持し、Segment一覧から解除できる。
 
 スマートフォンではAnchorPointを十分大きなタップ領域として扱う。
 

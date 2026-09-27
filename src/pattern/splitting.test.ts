@@ -2,7 +2,13 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { Segment } from '../geometry/segment'
 import type { CellPattern } from './cellPattern'
-import { addSplitRelation, derivePatternGeometry, removeSegment } from './splitting'
+import {
+  addSplitRelation,
+  derivePatternGeometry,
+  getSplitCandidates,
+  removeSegment,
+  removeSplitRelation,
+} from './splitting'
 
 const target: Segment = {
   id: 'A',
@@ -64,6 +70,30 @@ describe('CellPatternのsplit派生', () => {
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じordered pairを重複追加しない', () => {
     const initial = pattern([{ targetSegmentId: 'A', cutterSegmentId: 'B' }])
     expect(addSplitRelation(initial, { targetSegmentId: 'A', cutterSegmentId: 'B' }).splitRelations).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '候補由来の付加情報をrelationへ保存しない', () => {
+    const candidate = {
+      targetSegmentId: 'A',
+      cutterSegmentId: 'B',
+      points: [{ x: 0.5, y: 0.5 }],
+      active: false,
+    }
+    expect(addSplitRelation(pattern([]), candidate).splitRelations).toEqual([
+      { targetSegmentId: 'A', cutterSegmentId: 'B' },
+    ])
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, 'Symmetry変更で候補がなくなってもrelationを維持し明示的に解除できる', () => {
+    const relation = { targetSegmentId: 'A', cutterSegmentId: 'A' }
+    const current: CellPattern = {
+      segments: [target],
+      symmetry: { type: 'none' },
+      splitRelations: [relation],
+    }
+    expect(getSplitCandidates(current, 'A')).toEqual([])
+    expect(current.splitRelations).toEqual([relation])
+    expect(removeSplitRelation(current, relation).splitRelations).toEqual([])
   })
 
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, 'Segment削除時にtargetまたはcutterとして参照するrelationも削除する', () => {

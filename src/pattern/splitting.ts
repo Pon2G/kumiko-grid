@@ -23,7 +23,11 @@ const pointsAreClose = (first: Point, second: Point) =>
 /** ordered pairを重複させずに有向split relationを追加する。 */
 export function addSplitRelation(pattern: CellPattern, relation: SplitRelation): CellPattern {
   if (pattern.splitRelations.some((current) => sameRelation(current, relation))) return pattern
-  return { ...pattern, splitRelations: [...pattern.splitRelations, relation] }
+  const normalizedRelation: SplitRelation = {
+    targetSegmentId: relation.targetSegmentId,
+    cutterSegmentId: relation.cutterSegmentId,
+  }
+  return { ...pattern, splitRelations: [...pattern.splitRelations, normalizedRelation] }
 }
 
 export function removeSplitRelation(pattern: CellPattern, relation: SplitRelation): CellPattern {

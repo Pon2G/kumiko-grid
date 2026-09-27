@@ -81,16 +81,18 @@ export function CellEditor({
           {anchors.map((anchor) => {
             const point = resolveAnchor(anchor)
             const selected = pendingAnchor && anchorKey(anchor) === anchorKey(pendingAnchor)
+            const disabled = splitTargetId !== null
             return (
               <g
-                className={`anchor ${selected ? 'selected' : ''}`}
+                className={`anchor ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
                 key={anchorKey(anchor)}
                 role="button"
                 aria-label={anchorLabel(anchor)}
-                tabIndex={0}
-                onClick={() => onAnchorClick(anchor)}
+                aria-disabled={disabled}
+                tabIndex={disabled ? -1 : 0}
+                onClick={() => !disabled && onAnchorClick(anchor)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') onAnchorClick(anchor)
+                  if (!disabled && (event.key === 'Enter' || event.key === ' ')) onAnchorClick(anchor)
                 }}
               >
                 <circle className="anchor-hit" cx={px(point.x)} cy={py(point.y)} r="18" />
@@ -110,6 +112,7 @@ export function CellEditor({
         splitTargetId={splitTargetId}
         onDelete={onDeleteSegment}
         onSelectSplitTarget={onSelectSplitTarget}
+        onRemoveSplitRelation={onToggleSplitRelation}
       />}
     </section>
   )
@@ -120,12 +123,15 @@ function SegmentList({
   splitTargetId,
   onDelete,
   onSelectSplitTarget,
+  onRemoveSplitRelation,
 }: {
   pattern: CellPattern
   splitTargetId: string | null
   onDelete: (id: string) => void
   onSelectSplitTarget: (id: string | null) => void
+  onRemoveSplitRelation: (relation: SplitRelation) => void
 }) {
+  const segmentNumber = new Map(pattern.segments.map((segment, index) => [segment.id, index + 1]))
   return (
     <div className="segment-list" aria-label="作成済み線分">
       {pattern.segments.map((segment: Segment, index) => (
@@ -141,6 +147,18 @@ function SegmentList({
             onClick={() => onSelectSplitTarget(splitTargetId === segment.id ? null : segment.id)}
           >{splitTargetId === segment.id ? '選択解除' : '交点で分割'}</button>
           <button className="delete-button" type="button" onClick={() => onDelete(segment.id)}>削除 ×</button>
+          {pattern.splitRelations
+            .filter(({ targetSegmentId }) => targetSegmentId === segment.id)
+            .map((relation) => (
+              <button
+                className="relation-remove-button"
+                type="button"
+                key={`${relation.targetSegmentId}-${relation.cutterSegmentId}`}
+                onClick={() => onRemoveSplitRelation(relation)}
+              >
+                線分 {String(segmentNumber.get(relation.cutterSegmentId) ?? '?').padStart(2, '0')} との分割を解除
+              </button>
+            ))}
         </div>
       ))}
     </div>

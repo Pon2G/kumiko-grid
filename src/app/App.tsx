@@ -46,6 +46,11 @@ export default function App() {
     ) ? removeSplitRelation(current, relation) : addSplitRelation(current, relation))
   }
 
+  const selectSplitTarget = (id: string | null) => {
+    setPendingAnchor(null)
+    setSplitTargetId(id)
+  }
+
   return (
     <>
       <header className="site-header">
@@ -70,7 +75,7 @@ export default function App() {
             splitTargetId={splitTargetId}
             onAnchorClick={addAnchor}
             onDeleteSegment={deleteSegment}
-            onSelectSplitTarget={setSplitTargetId}
+            onSelectSplitTarget={selectSplitTarget}
             onToggleSplitRelation={toggleSplitRelation}
           />
           <PatternPreview pattern={pattern} />

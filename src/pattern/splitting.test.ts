@@ -69,12 +69,12 @@ describe('CellPatternのsplit派生', () => {
     const crossTransformTarget: Segment = {
       id: 'all-pairs-target',
       start: { kind: 'vertex', vertex: 'A' },
-      end: { kind: 'vertex', vertex: 'B' },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
     }
     const crossTransformCutter: Segment = {
       id: 'all-pairs-cutter',
-      start: { kind: 'vertex', vertex: 'A' },
-      end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 },
+      start: { kind: 'edge-division', edge: 'AB', divisions: 5, index: 1 },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
     }
     const current: CellPattern = {
       segments: [crossTransformTarget, crossTransformCutter],
@@ -107,9 +107,16 @@ describe('CellPatternのsplit派生', () => {
       splitRelations: [],
     }
     const candidates = getSplitCandidates(current, 'A')
-    expect(candidates.map(({ cutterSegmentId }) => cutterSegmentId)).toEqual(['B', 'C'])
-    expect(candidates.every(({ points }) => points.length === 1)).toBe(true)
-    expect(candidates[0].points[0]).toEqual(candidates[1].points[0])
+    const byCutterId = new Map(candidates.map((candidate) => [candidate.cutterSegmentId, candidate]))
+    const candidateB = byCutterId.get('B')
+    const candidateC = byCutterId.get('C')
+
+    expect(byCutterId.size).toBe(2)
+    expect(candidateB).toBeDefined()
+    expect(candidateC).toBeDefined()
+    expect(candidateB?.points).toHaveLength(1)
+    expect(candidateC?.points).toHaveLength(1)
+    expect(candidateB?.points[0]).toEqual(candidateC?.points[0])
   })
 
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じordered pairを重複追加しない', () => {

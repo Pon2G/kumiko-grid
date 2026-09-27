@@ -129,8 +129,11 @@ commit authorを統一することより、誰がどの変更を作成し、ど�
 
 ## 8. Pull Request
 
-Pull Requestは日本語で記述し、最低限次を含める。
+### PR本文
 
+Pull Requestは日本語で記述し、原則として次の順序でレビューに必要な情報を揃える。
+
+- 関連Issue
 - 変更内容
 - 変更理由
 - 主な実装
@@ -138,21 +141,35 @@ Pull Requestは日本語で記述し、最低限次を含める。
 - 既知の拡張への影響
 - 未確認事項・制約
 
+Issueに対応するPRでは、「関連Issue」で `Closes #<issue-number>` などのGitHubが解釈できる形式を使って参照する。
+
 「既知の拡張への影響」では、確認した `design-context` Issueがあれば番号と判断を書く。設計上の影響がなければ「なし」と明記する。
 
-Issueに対応するPRでは、本文からIssueを参照する。
+標準形式は `.github/pull_request_template.md` とする。変更内容に固有の補足が必要な場合はセクションを追加してよいが、標準項目を省略しない。
 
-既存PRを更新する場合は、そのhead branchへcommitを追加し、新しいPRを作成しない。
+Codex Cloudなどから非対話でPRを作成する場合も、GitHubの画面上でテンプレートが自動挿入されることには依存せず、同じ構成の本文を生成して作成する。GitHub CLIでは、完成した本文を一時ファイルへ書き出して `--body-file` で渡す方法を基本とし、必要に応じて `--template .github/pull_request_template.md` を利用してよい。
 
-GitHub CLIを利用できる場合の例:
+Codex Taskへのリンクなど、プロジェクトのレビューに不要な自動生成情報は、PR本文の主要構成へ含めない。
+
+### PR作成経路
+
+PRを作成する前に、現在のhead branchに対応する既存PRがないか確認する。既存PRがある場合は、そのhead branchへcommitを追加し、新しいPRを重複して作成しない。
+
+GitHub CLIが利用可能で、対象repositoryへの認証とPR作成権限がある場合は、`gh pr create` による直接作成を標準とする。
+
+例:
 
 ```bash
-gh pr view
-git fetch origin
-git push
-gh pr edit
+gh auth status
+git push -u origin HEAD
+gh pr create --title "<PR title>" --body-file <pr-body-file>
+gh pr view --json number,title,state,url,headRefName,baseRefName
 gh pr checks
 ```
+
+`gh pr create` の成功表示だけで完了とせず、`gh pr view` でGitHub上にPRが存在し、意図したhead / base branchになっていることを確認する。CIが開始されるPRでは `gh pr checks` も確認する。
+
+Codex CloudのPR作成handoffは、GitHub CLIが利用できない、認証されていない、または必要な権限がなく直接作成できない場合のfallbackとする。handoffを利用した場合も、利用可能なGitHub連携、API、または画面でPRの存在とhead / base branchを確認し、作成を確認できない状態を成功として報告しない。
 
 PRの作成・更新後は、GitHub上へ実際に反映されたことを確認してから完了として報告する。
 

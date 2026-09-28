@@ -92,7 +92,7 @@ Cell Patternは、ユーザーが定義した基本Segment、それに適用す�
 ### 5.2 交点でのsplit
 
 <!-- test-contract: SPEC-PATTERN-SEGMENT-SPLIT -->
-交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換しない。ユーザーはSymmetry展開後の具体的なSegment instance同士の交点を分割対象として選べるが、Cell Patternへ保持する `SplitRelation` はその1 pairそのものではなく、target source Segment、cutter source Segment、およびtarget instanceからcutter instanceへの相対transformで表した**対称軌道**とする。
+交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換しない。Symmetry展開後の具体的なSegment instance pairによる交差関係は区別して扱うが、Cell Patternへ保持する `SplitRelation` はその1 pairそのものではなく、target source Segment、cutter source Segment、およびtarget instanceからcutter instanceへの相対transformで表した**対称軌道**とする。
 
 現在のSymmetryに対する相対transformは、`none` では `identity`、`mirror` では `identity / mirror`、`rotational` では `identity / rotation +1 / rotation +2` を扱う。同じ対称軌道に属するどの具体pairから操作しても同じ `SplitRelation` へ正規化し、同じrelationを重複保持しない。relationは交点座標、Segment parameter、候補表示用情報、操作時に選ばれた代表instance pairを保持しない。
 

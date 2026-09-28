@@ -92,11 +92,18 @@ Cell Patternは、ユーザーが定義した基本Segment、それに適用す�
 ### 5.2 交点でのsplit
 
 <!-- test-contract: SPEC-PATTERN-SEGMENT-SPLIT -->
-交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換せず、`targetSegmentId → cutterSegmentId` という基本Segment ID間の有向relationとして保持する。relationは特定の交点を指定せず、交点座標、Segment parameter、候補情報を保持しない。relationのtarget側だけを分割し、双方を分割するには逆向きのrelationも必要とする。同じordered pairは重複保持しない。
+交点はAnchorPointではなく、現在のSegment・Symmetry・split relationから再計算する派生Geometryである。splitは基本Segmentを破壊的に置換しない。ユーザーはSymmetry展開後の具体的なSegment instance同士の交点を分割対象として選べるが、Cell Patternへ保持する `SplitRelation` はその1 pairそのものではなく、target source Segment、cutter source Segment、およびtarget instanceからcutter instanceへの相対transformで表した**対称軌道**とする。
 
-`A → B` は、AをsourceとするSymmetry展開後の全instance（A-family）を、Bをsourceとする全instance（B-family）との全組合せにある有効な交点で分割するsource-family-level ruleである。同じ変換同士だけへ限定しない。展開後instance IDは保存しない。`A → A` も許可し、同一sourceから展開された異なるinstance間の交差を扱う一方、同じRendered Segment instance自身との比較は除外する。1点で交差または接触し、target instanceの内部に位置する交点だけでFragment化し、有限長の重複区間はsplitしない。`stop` behaviorは扱わない。
+現在のSymmetryに対する相対transformは、`none` では `identity`、`mirror` では `identity / mirror`、`rotational` では `identity / rotation +1 / rotation +2` を扱う。同じ対称軌道に属するどの具体pairから操作しても同じ `SplitRelation` へ正規化し、同じrelationを重複保持しない。relationは交点座標、Segment parameter、候補表示用情報、操作時に選ばれた代表instance pairを保持しない。
 
-relationは現在交点が存在しなくてもユーザー指定のルールとして維持する。基本Segmentを削除したときだけ、そのIDをtargetまたはcutterとして参照するrelationも削除する。
+relationは有向であり、対称軌道内のtarget側instanceだけを分割する。双方を分割するには逆向きのrelationも必要とする。逆向きrelationでは相対transformも逆向きとなり、rotationalの `+1` と `+2` は互いに逆、mirrorは自身が逆、identityは自身が逆となる。
+
+relationから導出される対称軌道の**すべての具体pair**がsplit可能な場合だけ、そのrelationをCell Patternへ保持できる。split可能とは、交差が `cross` または `touch` であり、その交点がtarget instanceの内部に位置することをいう。有限長の `overlap` はsplitしない。同一のSegment instance自身との比較もsplit対象外とする。同一source Segment間でもnon-identityの相対transformによって異なるinstance同士を参照するrelationは許可するが、同一sourceの `identity` relationは許可しない。対称軌道の一部だけをrelationとして保持することはしない。
+
+<!-- test-contract: SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE -->
+Cell Patternは現在の設計Geometry上で有効なSplitRelationだけを保持する。Symmetryを変更するときは、まず新しいSymmetryでも同じ意味を持つ相対transformだけを引き継ぎ候補とし、その後、新しいSymmetryから対称軌道を再展開してsplit可能性を再検証する。新しいSymmetryで表現できないrelation、または再検証後に有効なsplitを形成しないrelationは削除する。現在効いていないrelationを将来の復活用データとして保持しない。
+
+`identity` relationは `none / mirror / rotational` の間で引き継ぎ候補となる。mirrorの `mirror` relationはmirror軸を変更しても意味上は引き継ぎ候補とし、新しい軸で具体pairを再展開・再検証する。mirrorとrotationalの間では、non-identity relationを別種類の相対transformへ自動変換しない。
 
 ## 6. Cell Editor
 
@@ -121,9 +128,12 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 5. Segmentを選択して削除する
 6. symmetryを変更する
 7. mirrorの場合は対称軸を変更する
-8. 基本Segmentを分割対象として選び、source Segment単位のcutter候補から有向split relationを追加または解除する
+8. 基本Segmentを分割対象として選び、現在のSymmetryで成立する対称軌道単位の有向split relationを追加または解除する
 
-交点候補は分割対象を選択している間だけ、その時点のPatternからsource pairごとに導出して表示する。relationの追加・解除は `target source → cutter source` の1 pairを1操作単位とし、同じ座標へ複数のcutterが交差しても個別に操作できる。SVG上の交点マーカーはsplit位置を示す表示専用の派生情報であり、操作対象や永続データではない。分割対象の選択や候補点は操作中だけのUI状態であり、Cell Patternへ保存しない。Symmetry変更などによって現在の交点候補がなくなってもrelationはユーザー指定として維持し、Segment一覧から解除できる。
+<!-- test-contract: SPEC-EDITOR-SPLIT-CANDIDATES -->
+交点候補は分割対象を選択している間だけ、その時点のPatternから正規化されたSplitRelation候補として導出して表示する。1つのcandidateは1つの対称軌道を表し、candidate一覧ではrelationを1件として扱う。relationから展開された具体pairの交点は表示用の派生情報であり、同じrelation内でGeometry上同一点となる座標は重複表示を避けてよい。一方、異なるSplitRelationが同じ座標に交点を持っていてもrelation自体を統合しない。座標はrelation identityではない。
+
+SVG上の交点マーカーはsplit位置を示す表示専用の派生情報とし、Cell Patternへ保存しない。分割対象の選択、候補、候補座標も操作中だけのUI状態とする。relationの追加・解除はcandidateが表す対称軌道全体を1操作単位とし、同じ軌道に属する別の具体pairを基準にしても同じrelationとして扱う。
 
 スマートフォンではAnchorPointを十分大きなタップ領域として扱う。
 

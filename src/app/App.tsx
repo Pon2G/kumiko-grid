@@ -3,7 +3,7 @@ import { anchorKey } from '../geometry/anchorPoint'
 import type { AnchorPoint } from '../geometry/anchorPoint'
 import type { Segment } from '../geometry/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
-import { addSplitRelation, removeSegment, removeSplitRelation } from '../pattern/splitting'
+import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
@@ -40,10 +40,8 @@ export default function App() {
   }
 
   const toggleSplitRelation = (relation: SplitRelation) => {
-    setPattern((current) => current.splitRelations.some(
-      ({ targetSegmentId, cutterSegmentId }) =>
-        targetSegmentId === relation.targetSegmentId && cutterSegmentId === relation.cutterSegmentId,
-    ) ? removeSplitRelation(current, relation) : addSplitRelation(current, relation))
+    setPattern((current) => current.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))
+      ? removeSplitRelation(current, relation) : addSplitRelation(current, relation))
   }
 
   const selectSplitTarget = (id: string | null) => {
@@ -65,7 +63,7 @@ export default function App() {
           divisionsDisabled={pattern.segments.length > 0}
           symmetry={pattern.symmetry}
           onDivisionsChange={setDivisions}
-          onSymmetryChange={(symmetry) => setPattern((current) => ({ ...current, symmetry }))}
+          onSymmetryChange={(symmetry) => setPattern((current) => changeSymmetry(current, symmetry))}
         />
         <div className="workspace">
           <CellEditor

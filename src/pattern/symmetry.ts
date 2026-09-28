@@ -4,16 +4,30 @@ import { resolveSegment } from '../geometry/segment'
 import { canonicalTriangle, triangleCentroid } from '../geometry/triangle'
 import { reflectPoint, rotatePoint } from '../geometry/transform'
 import type { MirrorAxis } from '../geometry/transform'
-import type { CellPattern } from './cellPattern'
+import type { CellPattern, SegmentInstanceRef, SegmentInstanceTransform, Symmetry } from './cellPattern'
 
 export interface RenderedSegment extends PointSegment {
   id: string
   sourceId: string
   generated: boolean
+  instanceRef: SegmentInstanceRef
 }
 
 /** 描画モデルの内部表現を利用側へ漏らさず、Symmetryで生成されたSegmentかを判定する。 */
 export const isSymmetryGeneratedSegment = (segment: RenderedSegment) => segment.generated
+
+export const instanceTransformKey = (transform: SegmentInstanceTransform): string =>
+  transform.type === 'rotation' ? `rotation:${transform.steps}`
+    : transform.type === 'mirror' ? `mirror:${transform.axis}` : 'identity'
+
+export const instanceRefKey = (ref: SegmentInstanceRef): string =>
+  `${ref.sourceSegmentId}:${instanceTransformKey(ref.transform)}`
+
+export const instanceTransforms = (symmetry: Symmetry): SegmentInstanceTransform[] => {
+  if (symmetry.type === 'none') return [{ type: 'identity' }]
+  if (symmetry.type === 'mirror') return [{ type: 'identity' }, { type: 'mirror', axis: symmetry.axis }]
+  return [{ type: 'identity' }, { type: 'rotation', steps: 1 }, { type: 'rotation', steps: 2 }]
+}
 
 const oppositeEdge = {
   A: ['B', 'C'],
@@ -34,7 +48,8 @@ const mirrorAxisPoints = (axis: MirrorAxis) => {
 export function expandPattern(pattern: CellPattern): RenderedSegment[] {
   return pattern.segments.flatMap((segment) => {
     const source = resolveSegment(segment)
-    const base: RenderedSegment = { ...source, id: segment.id, sourceId: segment.id, generated: false }
+    const base: RenderedSegment = { ...source, id: segment.id, sourceId: segment.id, generated: false,
+      instanceRef: { sourceSegmentId: segment.id, transform: { type: 'identity' } } }
     if (pattern.symmetry.type === 'none') return [base]
     if (pattern.symmetry.type === 'mirror') {
       const [axisStart, axisEnd] = mirrorAxisPoints(pattern.symmetry.axis)
@@ -42,6 +57,7 @@ export function expandPattern(pattern: CellPattern): RenderedSegment[] {
         id: `${segment.id}-mirror-${pattern.symmetry.axis}`,
         sourceId: segment.id,
         generated: true,
+        instanceRef: { sourceSegmentId: segment.id, transform: { type: 'mirror', axis: pattern.symmetry.axis } },
         start: reflectPoint(source.start, axisStart, axisEnd),
         end: reflectPoint(source.end, axisStart, axisEnd),
       }]
@@ -51,6 +67,7 @@ export function expandPattern(pattern: CellPattern): RenderedSegment[] {
       id: `${segment.id}-rotate-${degrees}`,
       sourceId: segment.id,
       generated: true,
+      instanceRef: { sourceSegmentId: segment.id, transform: { type: 'rotation', steps: degrees === 120 ? 1 : 2 } },
       start: rotatePoint(source.start, center, degrees),
       end: rotatePoint(source.end, center, degrees),
     }))]

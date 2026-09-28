@@ -13,3 +13,10 @@ export const splitRelativeTransformLabel = (relativeTransform: SplitRelativeTran
   if (relativeTransform.type === 'mirror') return '鏡映配置'
   return `回転 +${relativeTransform.steps}`
 }
+
+/** ボタン単体でも操作対象のcutter・相対配置・操作を識別できる名前を返す。 */
+export const splitCandidateActionLabel = (
+  cutterLabel: string,
+  relativeTransform: SplitRelativeTransform,
+  active: boolean,
+): string => `${cutterLabel} / ${splitRelativeTransformLabel(relativeTransform)} の分割を${active ? '解除' : '追加'}`

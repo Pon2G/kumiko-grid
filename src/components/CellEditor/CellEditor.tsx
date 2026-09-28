@@ -5,7 +5,11 @@ import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
 import { derivePatternGeometry, getSplitCandidates, splitRelationKey, type SplitCandidate } from '../../pattern/splitting'
 import { isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import { splitRelationFromCandidate, splitRelativeTransformLabel } from './splitRelationPresentation'
+import {
+  splitCandidateActionLabel,
+  splitRelationFromCandidate,
+  splitRelativeTransformLabel,
+} from './splitRelationPresentation'
 
 interface CellEditorProps {
   divisions: number
@@ -133,17 +137,22 @@ function SplitCandidateList({
     <div className="split-candidate-list" aria-label="分割ルール候補">
       <strong>線分 {String(segmentNumber.get(targetSegmentId) ?? '?').padStart(2, '0')} の分割ルール</strong>
       {candidates.length === 0 && <span className="empty-candidates">現在の交点候補はありません</span>}
-      {candidates.map((candidate) => (
-        <div className="split-candidate-item" key={splitRelationKey(candidate)}>
+      {candidates.map((candidate) => {
+        const cutterLabel = `線分 ${String(segmentNumber.get(candidate.cutterSegmentId) ?? '?').padStart(2, '0')}`
+        return <div className="split-candidate-item" key={splitRelationKey(candidate)}>
           <span>
-            線分 {String(segmentNumber.get(candidate.cutterSegmentId) ?? '?').padStart(2, '0')} との交点：
+            {cutterLabel} との交点：
             {splitRelativeTransformLabel(candidate.relativeTransform)}・{candidate.points.length}箇所
           </span>
-          <button type="button" onClick={() => onToggle(splitRelationFromCandidate(candidate))}>
+          <button
+            type="button"
+            aria-label={splitCandidateActionLabel(cutterLabel, candidate.relativeTransform, candidate.active)}
+            onClick={() => onToggle(splitRelationFromCandidate(candidate))}
+          >
             {candidate.active ? '分割を解除' : '分割を追加'}
           </button>
         </div>
-      ))}
+      })}
     </div>
   )
 }

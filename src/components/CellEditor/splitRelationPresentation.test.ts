@@ -1,6 +1,10 @@
 import { describe, expect } from 'vitest'
 import { contractTest } from '../../test/contractTest'
-import { splitRelationFromCandidate, splitRelativeTransformLabel } from './splitRelationPresentation'
+import {
+  splitCandidateActionLabel,
+  splitRelationFromCandidate,
+  splitRelativeTransformLabel,
+} from './splitRelationPresentation'
 
 describe('split relationの表示', () => {
   contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '同じsource pairの各相対配置を表示名で区別できる', () => {
@@ -14,6 +18,15 @@ describe('split relationの表示', () => {
     expect(labels.every((label) => label.length > 0)).toBe(true)
     expect(new Set(labels).size).toBe(labels.length)
     expect(labels[1]).not.toBe(labels[2])
+  })
+
+  contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '候補ボタンの名前で相対配置と追加・解除を区別できる', () => {
+    const rotation1Add = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 1 }, false)
+    const rotation2Add = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 2 }, false)
+    const rotation1Remove = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 1 }, true)
+
+    expect([rotation1Add, rotation2Add, rotation1Remove].every((label) => label.length > 0)).toBe(true)
+    expect(new Set([rotation1Add, rotation2Add, rotation1Remove]).size).toBe(3)
   })
 
   contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '候補操作では表示されたrelativeTransformを含むrelationを渡す', () => {

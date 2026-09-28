@@ -95,6 +95,31 @@ describe('相対変換によるsplit軌道', () => {
     expect(changeSymmetry(withRotation, { type: 'mirror', axis: 'A' }).splitRelations).toEqual([])
   })
 
+  contractTest({ contract: 'SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE' }, 'identity relationをSymmetry間で同じ位置同士のorbitとして引き継ぐ', () => {
+    const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } } as const
+    const none = addSplitRelation({ segments: [a, b], symmetry: { type: 'none' }, splitRelations: [] }, relation)
+    const mirror = changeSymmetry(none, { type: 'mirror', axis: 'A' })
+    const rotational = changeSymmetry(mirror, { type: 'rotational' })
+    const backToNone = changeSymmetry(rotational, { type: 'none' })
+
+    expect(none.splitRelations).toEqual([relation])
+    expect(mirror.splitRelations).toEqual([relation])
+    expect(rotational.splitRelations).toEqual([relation])
+    expect(backToNone.splitRelations).toEqual([relation])
+
+    const mirrorOrbit = expandSplitRelationOrbit(mirror.symmetry, relation)
+    expect(new Set(mirrorOrbit?.map(({ target, cutter }) => JSON.stringify([target.transform, cutter.transform])))).toEqual(new Set([
+      JSON.stringify([{ type: 'identity' }, { type: 'identity' }]),
+      JSON.stringify([{ type: 'mirror', axis: 'A' }, { type: 'mirror', axis: 'A' }]),
+    ]))
+    const rotationalOrbit = expandSplitRelationOrbit(rotational.symmetry, relation)
+    expect(new Set(rotationalOrbit?.map(({ target, cutter }) => JSON.stringify([target.transform, cutter.transform])))).toEqual(new Set([
+      JSON.stringify([{ type: 'identity' }, { type: 'identity' }]),
+      JSON.stringify([{ type: 'rotation', steps: 1 }, { type: 'rotation', steps: 1 }]),
+      JSON.stringify([{ type: 'rotation', steps: 2 }, { type: 'rotation', steps: 2 }]),
+    ]))
+  })
+
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-STATE-TRANSITION' }, 'mirror軸変更時に新しい軌道で再検証してsplit不能なrelationを削除する', () => {
     const initial: CellPattern = { segments: [a, b], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
     const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'mirror' } } as const
@@ -110,9 +135,9 @@ describe('相対変換によるsplit軌道', () => {
     const changed = changeSymmetry(addSplitRelation(initial, relation), { type: 'mirror', axis: 'B' })
 
     expect(changed.splitRelations).toEqual([relation])
-    const orbit = expandSplitRelationOrbit(changed, relation)
+    const orbit = expandSplitRelationOrbit(changed.symmetry, relation)
     expect(orbit).toHaveLength(2)
-    const mirrorRefs = orbit?.flatMap(([target, cutter]) => [target.instanceRef, cutter.instanceRef])
+    const mirrorRefs = orbit?.flatMap(({ target, cutter }) => [target, cutter])
       .filter(({ transform }) => transform.type === 'mirror') ?? []
     expect(mirrorRefs).toHaveLength(2)
     expect(mirrorRefs.every(({ transform }) => transform.type === 'mirror' && transform.axis === 'B')).toBe(true)

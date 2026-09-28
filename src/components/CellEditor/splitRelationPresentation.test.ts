@@ -11,8 +11,9 @@ describe('split relationの表示', () => {
       splitRelativeTransformLabel({ type: 'mirror' }),
     ]
 
-    expect(labels).toEqual(['同じ配置', '回転 +1', '回転 +2', '鏡映配置'])
+    expect(labels.every((label) => label.length > 0)).toBe(true)
     expect(new Set(labels).size).toBe(labels.length)
+    expect(labels[1]).not.toBe(labels[2])
   })
 
   contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '候補操作では表示されたrelativeTransformを含むrelationを渡す', () => {

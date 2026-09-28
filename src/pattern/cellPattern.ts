@@ -16,6 +16,11 @@ export interface SegmentInstanceRef {
   transform: SegmentInstanceTransform
 }
 
+export interface SegmentInstancePair {
+  target: SegmentInstanceRef
+  cutter: SegmentInstanceRef
+}
+
 export type SplitRelativeTransform =
   | { type: 'identity' }
   | { type: 'mirror' }

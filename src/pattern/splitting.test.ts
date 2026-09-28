@@ -78,9 +78,9 @@ describe('CellPatternのsplit派生', () => {
     }
 
     const relation = current.splitRelations[0]
-    const orbit = expandSplitRelationOrbit(current, relation)
-    const pairTransforms = new Set(orbit?.map(([orbitTarget, orbitCutter]) =>
-      JSON.stringify([orbitTarget.instanceRef.transform, orbitCutter.instanceRef.transform])))
+    const orbit = expandSplitRelationOrbit(current.symmetry, relation)
+    const pairTransforms = new Set(orbit?.map(({ target: orbitTarget, cutter: orbitCutter }) =>
+      JSON.stringify([orbitTarget.transform, orbitCutter.transform])))
 
     expect(pairTransforms).toEqual(new Set([
       JSON.stringify([{ type: 'identity' }, { type: 'rotation', steps: 1 }]),

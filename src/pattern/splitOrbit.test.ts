@@ -6,6 +6,7 @@ import {
   addSplitRelation,
   changeSymmetry,
   derivePatternGeometry,
+  expandSplitRelationOrbit,
   getSplitCandidates,
   inverseRelativeTransform,
   normalizeRelativeTransform,
@@ -25,6 +26,7 @@ describe('相対変換によるsplit軌道', () => {
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('A', 0), ref('B', 1))).toEqual({ type: 'rotation', steps: 1 })
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('A', 1), ref('B', 2))).toEqual({ type: 'rotation', steps: 1 })
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('A', 2), ref('B', 0))).toEqual({ type: 'rotation', steps: 1 })
+    expect(normalizeRelativeTransform({ type: 'rotational' }, ref('B', 1), ref('A', 0))).toEqual({ type: 'rotation', steps: 2 })
     expect(inverseRelativeTransform({ type: 'rotation', steps: 1 })).toEqual({ type: 'rotation', steps: 2 })
   })
 
@@ -100,5 +102,19 @@ describe('相対変換によるsplit軌道', () => {
     const changed = changeSymmetry(withRelation, { type: 'mirror', axis: 'C' })
     expect(changed.symmetry).toEqual({ type: 'mirror', axis: 'C' })
     expect(changed.splitRelations).toEqual([])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-STATE-TRANSITION' }, 'mirror軸変更後も新orbitが有効ならmirror relationを維持する', () => {
+    const initial: CellPattern = { segments: [a, b], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
+    const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'mirror' } } as const
+    const changed = changeSymmetry(addSplitRelation(initial, relation), { type: 'mirror', axis: 'B' })
+
+    expect(changed.splitRelations).toEqual([relation])
+    const orbit = expandSplitRelationOrbit(changed, relation)
+    expect(orbit).toHaveLength(2)
+    const mirrorRefs = orbit?.flatMap(([target, cutter]) => [target.instanceRef, cutter.instanceRef])
+      .filter(({ transform }) => transform.type === 'mirror') ?? []
+    expect(mirrorRefs).toHaveLength(2)
+    expect(mirrorRefs.every(({ transform }) => transform.type === 'mirror' && transform.axis === 'B')).toBe(true)
   })
 })

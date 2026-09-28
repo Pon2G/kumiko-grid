@@ -3,8 +3,9 @@ import type { AnchorPoint } from '../../geometry/anchorPoint'
 import type { Segment } from '../../geometry/segment'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
-import { derivePatternGeometry, getSplitCandidates, type SplitCandidate } from '../../pattern/splitting'
+import { derivePatternGeometry, getSplitCandidates, splitRelationKey, type SplitCandidate } from '../../pattern/splitting'
 import { isSymmetryGeneratedSegment } from '../../pattern/symmetry'
+import { splitRelationFromCandidate, splitRelativeTransformLabel } from './splitRelationPresentation'
 
 interface CellEditorProps {
   divisions: number
@@ -25,14 +26,6 @@ const anchorLabel = (anchor: AnchorPoint): string =>
   anchor.kind === 'vertex'
     ? `頂点${anchor.vertex}`
     : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
-const relationFromCandidate = ({ targetSegmentId, cutterSegmentId, relativeTransform }: SplitCandidate): SplitRelation => ({
-  targetSegmentId,
-  cutterSegmentId,
-  relativeTransform,
-})
-const relativeLabel = ({ relativeTransform }: SplitCandidate) => relativeTransform.type === 'identity'
-  ? '同じ配置' : relativeTransform.type === 'mirror' ? '鏡映配置' : `回転 +${relativeTransform.steps}`
-
 export function CellEditor({
   divisions,
   pattern,
@@ -141,12 +134,12 @@ function SplitCandidateList({
       <strong>線分 {String(segmentNumber.get(targetSegmentId) ?? '?').padStart(2, '0')} の分割ルール</strong>
       {candidates.length === 0 && <span className="empty-candidates">現在の交点候補はありません</span>}
       {candidates.map((candidate) => (
-        <div className="split-candidate-item" key={`${candidate.cutterSegmentId}-${relativeLabel(candidate)}`}>
+        <div className="split-candidate-item" key={splitRelationKey(candidate)}>
           <span>
             線分 {String(segmentNumber.get(candidate.cutterSegmentId) ?? '?').padStart(2, '0')} との交点：
-            {relativeLabel(candidate)}・{candidate.points.length}箇所
+            {splitRelativeTransformLabel(candidate.relativeTransform)}・{candidate.points.length}箇所
           </span>
-          <button type="button" onClick={() => onToggle(relationFromCandidate(candidate))}>
+          <button type="button" onClick={() => onToggle(splitRelationFromCandidate(candidate))}>
             {candidate.active ? '分割を解除' : '分割を追加'}
           </button>
         </div>
@@ -190,10 +183,10 @@ function SegmentList({
               <button
                 className="relation-remove-button"
                 type="button"
-                key={`${relation.targetSegmentId}-${relation.cutterSegmentId}-${relation.relativeTransform.type}-${relation.relativeTransform.type === 'rotation' ? relation.relativeTransform.steps : 0}`}
+                key={splitRelationKey(relation)}
                 onClick={() => onRemoveSplitRelation(relation)}
               >
-                線分 {String(segmentNumber.get(relation.cutterSegmentId) ?? '?').padStart(2, '0')} との分割を解除
+                線分 {String(segmentNumber.get(relation.cutterSegmentId) ?? '?').padStart(2, '0')} / {splitRelativeTransformLabel(relation.relativeTransform)} の分割を解除
               </button>
             ))}
         </div>

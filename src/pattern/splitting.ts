@@ -38,7 +38,8 @@ const supportedRelatives = (symmetry: Symmetry): SplitRelativeTransform[] => sym
     ? [{ type: 'identity' }, { type: 'mirror' }]
     : [{ type: 'identity' }, { type: 'rotation', steps: 1 }, { type: 'rotation', steps: 2 }]
 
-const orbitPairs = (pattern: CellPattern, relation: SplitRelation): Array<[RenderedSegment, RenderedSegment]> | null => {
+/** canonical relationを現在のSymmetryに対応するconcrete instance pair群へ展開する。 */
+export const expandSplitRelationOrbit = (pattern: CellPattern, relation: SplitRelation): Array<[RenderedSegment, RenderedSegment]> | null => {
   const expanded = expandPattern(pattern)
   const targets = expanded.filter((item) => item.sourceId === relation.targetSegmentId)
   const cutters = expanded.filter((item) => item.sourceId === relation.cutterSegmentId)
@@ -55,7 +56,7 @@ const orbitPairs = (pattern: CellPattern, relation: SplitRelation): Array<[Rende
 
 const validatedOrbit = (pattern: CellPattern, relation: SplitRelation) => {
   if (!supportedRelatives(pattern.symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
-  const pairs = orbitPairs(pattern, relation)
+  const pairs = expandSplitRelationOrbit(pattern, relation)
   if (!pairs) return null
   const intersections = pairs.map(([target, cutter]) => {
     if (instanceRefKey(target.instanceRef) === instanceRefKey(cutter.instanceRef)) return null
@@ -90,7 +91,7 @@ export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPa
 export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
   const parameters = new Map<string, number[]>()
   for (const relation of pattern.splitRelations) {
-    const orbit = orbitPairs(pattern, relation)
+    const orbit = expandSplitRelationOrbit(pattern, relation)
     if (!orbit) continue
     for (const [target, cutter] of orbit) {
       const result = intersectSegments(target, cutter)

@@ -5,6 +5,7 @@ import type { CellPattern } from './cellPattern'
 import {
   addSplitRelation,
   derivePatternGeometry,
+  expandSplitRelationOrbit,
   getSplitCandidates,
   removeSegment,
   removeSplitRelation,
@@ -55,14 +56,14 @@ describe('CellPatternのsplit派生', () => {
     expect(rotational.segments).toEqual([target])
   })
 
-  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'source family間の全組合せを評価して異なる回転同士の交点でも分割する', () => {
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, 'rotation +1 relationを3つのconcrete pairへ展開してtargetを対称に分割する', () => {
     const crossTransformTarget: Segment = {
-      id: 'all-pairs-target',
+      id: 'orbit-target',
       start: { kind: 'vertex', vertex: 'A' },
       end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
     }
     const crossTransformCutter: Segment = {
-      id: 'all-pairs-cutter',
+      id: 'orbit-cutter',
       start: { kind: 'edge-division', edge: 'AB', divisions: 5, index: 1 },
       end: { kind: 'edge-division', edge: 'BC', divisions: 5, index: 1 },
     }
@@ -76,6 +77,16 @@ describe('CellPatternのsplit派生', () => {
       }],
     }
 
+    const relation = current.splitRelations[0]
+    const orbit = expandSplitRelationOrbit(current, relation)
+    const pairTransforms = new Set(orbit?.map(([orbitTarget, orbitCutter]) =>
+      JSON.stringify([orbitTarget.instanceRef.transform, orbitCutter.instanceRef.transform])))
+
+    expect(pairTransforms).toEqual(new Set([
+      JSON.stringify([{ type: 'identity' }, { type: 'rotation', steps: 1 }]),
+      JSON.stringify([{ type: 'rotation', steps: 1 }, { type: 'rotation', steps: 2 }]),
+      JSON.stringify([{ type: 'rotation', steps: 2 }, { type: 'identity' }]),
+    ]))
     expect(derivePatternGeometry(current).filter(({ sourceId }) => sourceId === crossTransformTarget.id)).toHaveLength(6)
   })
 

@@ -121,7 +121,7 @@ describe('CellPatternのsplit派生', () => {
     expect(candidateB?.points[0]).toEqual(candidateC?.points[0])
   })
 
-  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じordered pairを重複追加しない', () => {
+  contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じcanonical SplitRelationを重複追加しない', () => {
     const initial = pattern([{ targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } }])
     expect(addSplitRelation(initial, { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } }).splitRelations).toHaveLength(1)
   })

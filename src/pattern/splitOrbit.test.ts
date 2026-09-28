@@ -10,6 +10,7 @@ import {
   getSplitCandidates,
   inverseRelativeTransform,
   normalizeRelativeTransform,
+  removeSplitRelation,
 } from './splitting'
 import { expandPattern, instanceRefKey } from './symmetry'
 
@@ -88,6 +89,25 @@ describe('相対変換によるsplit軌道', () => {
     const reverse = { targetSegmentId: 'B', cutterSegmentId: 'A', relativeTransform: { type: 'rotation', steps: 1 } } as const
     const current = addSplitRelation(addSplitRelation(rotational(), forward), reverse)
     expect(current.splitRelations).toEqual([forward, reverse])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-RELATION-INVARIANT' }, '同じsource pairでも異なるrelativeTransformは共存して個別解除できる', () => {
+    const sameGeometryB: Segment = { ...a, id: 'B' }
+    const initial: CellPattern = {
+      segments: [a, sameGeometryB],
+      symmetry: { type: 'rotational' },
+      splitRelations: [],
+    }
+    const rotation1 = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'rotation', steps: 1 } } as const
+    const rotation2 = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'rotation', steps: 2 } } as const
+
+    const both = addSplitRelation(addSplitRelation(initial, rotation1), rotation2)
+    expect(both.splitRelations).toHaveLength(2)
+    expect(both.splitRelations).toEqual(expect.arrayContaining([rotation1, rotation2]))
+
+    const remaining = removeSplitRelation(both, rotation1)
+    expect(remaining.splitRelations).toHaveLength(1)
+    expect(remaining.splitRelations).toContainEqual(rotation2)
   })
 
   contractTest({ contract: 'SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE' }, '互換でない相対変換をSymmetry変更時に削除する', () => {

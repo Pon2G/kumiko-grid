@@ -103,29 +103,143 @@ Edge Division Pointは座標を保存せず、edge、divisions、indexから解�
 
 ### CellPattern
 
-ユーザーが定義した基本Segment群とSymmetry等の設定を持つ。
+ユーザーが定義した基本Segment群、Symmetry、および有効なSplitRelationを持つ。
 
 <!-- test-contract: ARCH-PATTERN-DERIVED-SEGMENTS -->
-対称展開されたSegmentは基本Segment配列へ複製せず、表示時の派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、その具体的なデータ表現は契約としない。
+対称展開されたSegmentは基本Segment配列へ複製せず、派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、描画用IDの具体的な生成規則は契約としない。
+
+#### Segment instance identity
+
+<!-- test-contract: ARCH-PATTERN-SEGMENT-INSTANCE-IDENTITY -->
+Symmetry展開後の各Segment instanceは、source Segment IDと論理transformからなる安定した `SegmentInstanceRef` で識別する。描画用文字列IDを論理identityや永続参照として利用しない。
+
+概念的には次のように表す。
+
+```ts
+interface SegmentInstanceRef {
+  sourceSegmentId: string
+  transform: SegmentInstanceTransform
+}
+
+type SegmentInstanceTransform =
+  | { type: 'identity' }
+  | { type: 'mirror'; axis: MirrorAxis }
+  | { type: 'rotation'; steps: 1 | 2 }
+```
+
+rotationalの `steps: 1 / 2` はそれぞれ基準instanceから120度 / 240度回転した論理位置を表す。角度によるPoint変換はGeometry解決時に行い、instance identity自体はSymmetry内の離散位置として表現する。mirrorでは軸も具体instance identityの一部とする。
+
+論理identityとGeometryの一致は別概念とする。例えばmirror軸上のSegmentでは `identity` instanceと `mirror` instanceが同じPointSegmentへ解決され得るが、`SegmentInstanceRef` としては別instanceのままとする。Geometry上の一致を理由にinstance identityを統合しない。
+
+#### SplitRelationとrelative transform
+
+<!-- test-contract: ARCH-PATTERN-SPLIT-RELATIVE-TRANSFORM -->
+`SplitRelation` は具体的なinstance pairそのものではなく、target source Segment、cutter source Segment、およびtarget instanceからcutter instanceへの相対transformで表した対称軌道を保持する。
+
+概念的には次のように表す。
+
+```ts
+interface SplitRelation {
+  targetSegmentId: string
+  cutterSegmentId: string
+  relativeTransform: SplitRelativeTransform
+}
+
+type SplitRelativeTransform =
+  | { type: 'identity' }
+  | { type: 'mirror' }
+  | { type: 'rotation'; steps: 1 | 2 }
+```
+
+`SegmentInstanceTransform` は具体instanceの絶対identity、`SplitRelativeTransform` は同じSymmetry内でのinstance間の相対位置であり、別概念として扱う。mirror軸は具体instance identityには含めるが、`relativeTransform: mirror` 自体には含めない。
+
+相対transformは概念的に、target transformを `t`、cutter transformを `c` としたとき `inverse(t) ∘ c` に相当する。現在対応するSymmetryでは、汎用Group abstractionを導入せず次の離散規則で決定的に正規化・展開する。
+
+- `none`: `identity` のみ。
+- `rotational`: transformを `0 = identity / 1 = rotate120 / 2 = rotate240` とし、`relativeSteps = (cutterSteps - targetSteps + 3) % 3` とする。orbit展開時は各 `g ∈ {0,1,2}` に対して `target = g`、`cutter = (g + relativeSteps) % 3` とする。
+- `mirror`: `0 = identity / 1 = mirror` とし、relativeはtargetとcutterのXOR、orbit展開時のcutterはtargetとrelativeのXORとする。具体的なmirror instanceには現在のmirror軸を付与する。
+
+この正規化により、同じorbit内のどのconcrete pairから操作しても同じSplitRelationになる。relation identityは `targetSegmentId / cutterSegmentId / relativeTransform` の組とし、操作時に選ばれた代表pairを保存しない。同じrelationは重複保持しない。
+
+relationは有向である。逆向きrelationではrelativeTransformも逆元となり、rotationalの `+1` と `+2` は互いに逆、mirrorとidentityはそれぞれ自身が逆元となる。逆向きrelationは元relationとは別のrelationとして共存できる。
+
+#### SplitRelationの有効性とCellPattern invariant
+
+<!-- test-contract: ARCH-PATTERN-SPLIT-ORBIT-VALIDITY -->
+relationから展開される対称軌道の全concrete pairがsplit可能な場合だけ、そのrelationを有効とする。各pairについて次をすべて満たすことをsplit可能条件とする。
+
+- targetとcutterが同一の `SegmentInstanceRef` 自身ではない。
+- intersection kindが `cross` または `touch` である。
+- 交点のtarget側parameterがtarget Segment内部にある。
+- `overlap` ではない。
+
+cutter側parameterが内部であることは要求しない。これはtarget側だけをFragment化する有向splitの意味を維持するためである。
+
+1つのrelationはSymmetry orbit全体を表すため、orbitの一部だけがsplit可能な部分relationは保持しない。現在のmirror / rotationalは等長変換であり、同じorbit内でsplit可否が不一致になる場合は部分relationとして救済せず、Geometryまたはtoleranceの不整合として扱う。
+
+同一source Segment間のrelationも許可するが、`targetSegmentId === cutterSegmentId` かつ `relativeTransform === identity` は同一instance自身を参照するため常に無効とする。mirrorまたはrotationalのnon-identity relationは、展開された全pairがsplit可能なら有効とする。
+
+<!-- test-contract: ARCH-PATTERN-SPLIT-RELATION-INVARIANT -->
+CellPatternへ保持されるSplitRelationは常に、参照するsource Segmentが存在し、現在のSymmetryでrelativeTransformを表現でき、canonicalに正規化され、重複せず、orbit全体がsplit可能という不変条件を満たす。無効なrelationや「現在は効かないが将来復活するかもしれないrelation」をCellPatternへ保持しない。
+
+relation追加APIはこの不変条件を満たさないrelationを追加できないものとする。Segment削除時はそのSegmentをtargetまたはcutterとして参照するrelationを除去する。
+
+#### Symmetry変更と状態遷移
+
+<!-- test-contract: ARCH-PATTERN-SPLIT-STATE-TRANSITION -->
+Symmetry変更はPattern層の状態遷移として扱い、ReactやGeometry導出処理で `symmetry` だけを直接差し替えたり、描画中にrelationを暗黙削除したりしない。
+
+Symmetry変更時は次の順で新しいCellPatternを決定する。
+
+```text
+current CellPattern + next Symmetry
+  ↓
+新SymmetryでもrelativeTransformの意味を表現できるrelationを引き継ぎ候補にする
+  ↓
+新Symmetryから各relationのorbitを再展開する
+  ↓
+新しい設計Geometry上でorbit全体のsplit可能性を再検証する
+  ↓
+無効relationを除去する
+  ↓
+invariantを満たす新しいCellPattern
+```
+
+`identity` は `none / mirror / rotational` のすべてで引き継ぎ候補となる。mirrorの `mirror` はmirror軸変更時も引き継ぎ候補とし、新しい軸の具体instanceへ再展開する。mirrorとrotationalのnon-identity relativeTransformを相互に自動変換しない。引き継ぎ候補になったrelationも、新しいGeometryでorbit全体がsplit可能でなければ削除する。
+
+将来、Segment端点変更など設計Geometryを変更するPattern操作を追加する場合も、その操作は返却前に同じSplitRelation invariantを回復する責務を持つ。Undo / Redo等の編集履歴はこのrelationモデルとは別責務とする。
+
+#### SplitCandidate
+
+<!-- test-contract: ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION -->
+SplitCandidateは保存データではなく、選択中のtarget source Segmentについて現在成立するcanonical SplitRelation候補と表示用交点をまとめた派生情報とする。
+
+candidate生成は、concrete instance pairの列挙順からrelation identityを決めるのではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開・検証して有効な候補だけを返す。これによりSymmetry展開配列の順序や最初に発見された交点へidentityを依存させない。
+
+同一candidateのorbit内で複数pairがGeometry上同一点に交差する場合、表示用Pointは共通Geometry toleranceに従って重複除去してよい。ただしPointの重複除去はrelationの重複除去ではない。異なるSplitRelation候補が同じ座標を持っていてもcandidateを統合せず、座標をrelation identityとして利用しない。
+
+#### Fragment Geometryの導出
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-DERIVATION -->
-split relationはtargetとcutterのsource Segment IDだけを参照し、交点座標やSymmetry展開後の一時的なinstance IDを参照しない。`A → B` は、Aをsourceとする展開済みinstance群とBをsourceとする展開済みinstance群の全組合せへ適用するsource-family-level ruleであり、同じSymmetry変換同士だけへ限定しない。`A → A` を許可するが、同じRendered Segment instance自身との比較は除外する。
-
-Pattern層は次の順で最終Geometryをpureに導出する。
+Pattern層は、有効なCellPatternから最終Geometryをpureに導出する。SplitRelationをSymmetry orbitのconcrete instance pairへ展開し、各target instanceについてrelationから得られる有効なtarget parameterをGeometry層へ渡してFragment化する。Geometry導出はCellPatternやSplitRelationを追加・削除・修復しない。
 
 ```text
 source model
   ↓
-Symmetry expansion
+Symmetry expansion + SegmentInstanceRef
   ↓
-source-family split rule application
+canonical SplitRelation
+  ↓
+symmetry orbit / concrete instance pairs
+  ↓
+split parameter derivation
   ↓
 Fragment geometry
   ↓
 Layout
 ```
 
-`SplitRelation` はユーザーが指定しCellPatternへ保持するsource pairのドメインルール、`SplitCandidate` は選択targetと1つのcutter source pairについて現在得られる交点集合とrelation状態をまとめた一時的な派生情報である。Intersection PointとFragmentはいずれも現在のモデルから再計算する派生Geometryであり、CellPatternへ保存しない。relationに必要なsource familyの組み合わせだけを交差判定し、全交点集合を常時計算・キャッシュ・状態保持しない。候補表示が必要な場合も、選択されたtargetについてその時点のPatternからオンデマンドで導出する。
+Fragmentと交点座標は再計算可能な派生Geometryであり、CellPatternへ保存しない。Fragmentの `fragmentIndex` 等の派生順序を永続identityとして扱わない。SplitRelationから安定したconcrete `SegmentInstanceRef` pairを導出できるところまでをこのモデルの責務とし、同一座標にある複数pairを1つの論理交点へ統合する規則はここでは定義しない。
 
 ### CellPlacement
 
@@ -174,12 +288,14 @@ Layout固有の配置規則をCell Patternのモデルへ持ち込まない。
 
 ## 7. UIとの境界
 
-Reactはdivision数、選択中AnchorPoint、基本Segment群、Symmetry等の操作状態を所有してよい。
+Reactはdivision数、選択中AnchorPoint、split対象などの操作状態を所有してよい。一方、CellPatternのSymmetryやSplitRelationを変更するときの整合性維持はPattern層のドメイン操作へ委譲する。Reactから `symmetry` や `splitRelations` を便宜的に直接差し替えて不変条件を迂回しない。
 
 コンポーネントは計算済みモデルとcallbackを受け取り、次の処理をドメイン層へ委譲する。
 
 - AnchorPointから座標への解決
 - mirror / rotational変換
+- SplitRelationの正規化、検証、Symmetry変更時の再検証
+- split候補とFragment Geometryの導出
 - Cell配置
 - その他の幾何計算
 
@@ -193,7 +309,7 @@ Reactはdivision数、選択中AnchorPoint、基本Segment群、Symmetry等の�
 - split relationによるFragment
 - Layout展開後のSegment
 
-交点は保存対象ではない派生Geometryとし、基本Segment、Symmetry、source-levelのsplit relationから再計算する。Layout層はsplitの意味論や交差計算を扱わない。
+交点は保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。Layout層はsplitの意味論や交差計算を扱わない。
 
 派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。必要になった段階で、描画や出力など適切な境界で正規化する。
 

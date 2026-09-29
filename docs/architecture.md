@@ -82,7 +82,7 @@ interface Point {
 }
 ```
 
-Pointは描画・計算用であり、ユーザーが定義するAnchorPointの永続表現そのものではない。
+Pointは描画・計算用であり、Patternが保持・導出する論理Anchorの永続表現そのものではない。
 
 ### Triangle
 
@@ -237,6 +237,8 @@ Fragment boundary
 
 1つのSplitRelationはSymmetryに応じて複数のconcrete pairへ展開されるため、SplitRelationとIntersectionAnchorは1対1対応ではない。逆向きSplitRelationは別relationだが、同じconcrete pairに対応するIntersectionAnchorは共有する。
 
+IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitRelationと二重保存しない。必要なIntersectionAnchor集合は現在の論理状態から導出する。一方、他の永続ドメイン情報が境界などとして特定のIntersectionAnchorを参照する場合は、その参照値を保持してよい。参照先Anchorが論理的に消滅したときは依存削除規則を適用する。
+
 #### SplitRelationの有効性とCellPattern invariant
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-ORBIT-VALIDITY -->
@@ -361,7 +363,7 @@ Geometry層は、正規化Cell Local Coordinate上の2つの非退化Segmentに�
 浮動小数点の判定は完全一致に依存せず、共通epsilonを正規化Cell Local Coordinate上の距離許容誤差として用いる。外積やSegment parameterなど座標距離と異なるスケールの量を比較するときは、その量に対応する許容値へ変換する。epsilonはGeometry上の数値解像度であり、その範囲内の差異を独立した位置や境界として区別しない場合があるが、source Segmentの有効性を決める閾値にはしない。epsilonの具体値、変換式、交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
 
 <!-- test-contract: ARCH-GEOMETRY-SEGMENT-FRAGMENTATION -->
-Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではFragmentを増やさず、ゼロ長Fragmentを生成しない。有効なsplit境界が存在しない場合は、source Segmentと同じGeometryを1つのFragmentとして保持する。入力Segmentは変更しない。
+Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではGeometry Fragmentを増やさず、ゼロ長PointSegmentを生成しない。有効なsplit境界が存在しない場合は、source Segmentと同じGeometryを1つのFragmentとして保持する。入力Segmentは変更しない。このGeometry上の重複除去は、同一点へ解決された複数の論理境界identityを統合することを意味しない。
 
 Edge Division Pointは辺の始点から終点への線形補間で求める。
 
@@ -413,7 +415,7 @@ Reactはdivision数、選択中AnchorPoint、split対象などの操作状態を
 - split relationによるFragment
 - Layout展開後のSegment
 
-交点は保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。Layout層はsplitの意味論や交差計算を扱わない。
+交点座標とSegment parameterは保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。IntersectionAnchorは座標そのものではなくconcrete SegmentInstanceRef pairを参照する論理identityであり、Geometry上の交点とは区別する。Layout層はsplitの意味論や交差計算を扱わない。
 
 派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。Geometry上の一致・重複を検出しても、それを理由に論理identityを自動統合・削除・付け替えしない。意味上異なる部材や区間が重なる場合は、必要に応じてGeometry診断として警告し、解消はユーザー操作へ委ねる。
 

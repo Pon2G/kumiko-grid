@@ -163,7 +163,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
     const currentTargetFragments = deriveLogicalFragments(updated)
       .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')
 
-    expect(resolveLogicalFragment(initial, reversedOldFragment)).not.toBeNull()
+    expect(resolveLogicalFragment(initial, reversedOldFragment)).toEqual(resolveLogicalFragment(initial, oldStartToB))
     expect(resolveLogicalFragment(updated, oldStartToB)).toBeNull()
     expect(currentTargetFragments).toHaveLength(3)
     expect(currentTargetFragments.some(({ boundaryA, boundaryB }) =>

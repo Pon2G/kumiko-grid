@@ -1,5 +1,5 @@
-import type { Segment } from '../geometry/segment'
 import type { MirrorAxis } from '../geometry/transform'
+import type { Segment, SegmentId } from './segment'
 
 export type Symmetry =
   | { type: 'none' }
@@ -12,7 +12,7 @@ export type SegmentInstanceTransform =
   | { type: 'rotation'; steps: 1 | 2 }
 
 export interface SegmentInstanceRef {
-  sourceSegmentId: string
+  sourceSegmentId: SegmentId
   transform: SegmentInstanceTransform
 }
 
@@ -27,8 +27,8 @@ export type SplitRelativeTransform =
   | { type: 'rotation'; steps: 1 | 2 }
 
 export interface SplitRelation {
-  targetSegmentId: string
-  cutterSegmentId: string
+  targetSegmentId: SegmentId
+  cutterSegmentId: SegmentId
   relativeTransform: SplitRelativeTransform
 }
 

@@ -1,6 +1,6 @@
-import { interpolate } from '../geometry/anchorPoint'
+import { interpolate } from './anchor'
 import type { PointSegment } from '../geometry/segment'
-import { resolveSegment } from '../geometry/segment'
+import { resolveSegment } from './segment'
 import { canonicalTriangle, triangleCentroid } from '../geometry/triangle'
 import { reflectPoint, rotatePoint } from '../geometry/transform'
 import type { MirrorAxis } from '../geometry/transform'
@@ -21,7 +21,7 @@ export const instanceTransformKey = (transform: SegmentInstanceTransform): strin
     : transform.type === 'mirror' ? `mirror:${transform.axis}` : 'identity'
 
 export const instanceRefKey = (ref: SegmentInstanceRef): string =>
-  `${ref.sourceSegmentId}:${instanceTransformKey(ref.transform)}`
+  JSON.stringify([ref.sourceSegmentId, instanceTransformKey(ref.transform)])
 
 export const instanceTransforms = (symmetry: Symmetry): SegmentInstanceTransform[] => {
   if (symmetry.type === 'none') return [{ type: 'identity' }]

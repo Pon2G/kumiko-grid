@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
-import { resolveAnchor } from './anchorPoint'
+import { resolveSegmentEndpoint } from '../pattern/anchor'
 import { fragmentSegment, GEOMETRY_EPSILON, intersectSegments } from './intersections'
 import { canonicalTriangle, triangleCentroid, TRIANGLE_HEIGHT } from './triangle'
 import { reflectPoint, rotatePoint } from './transform'
@@ -12,7 +12,7 @@ const expectPoint = (actual: { x: number; y: number }, expected: { x: number; y:
 
 describe('正三角形のgeometry', () => {
   contractTest({ contract: 'SPEC-ANCHOR-EDGE-DIVISION-COORDINATE' }, 'BC辺を5等分した2番目の点を正しい座標へ解決する', () => {
-    expectPoint(resolveAnchor({ kind: 'edge-division', edge: 'BC', divisions: 5, index: 2 }), {
+    expectPoint(resolveSegmentEndpoint({ kind: 'edge-division', edge: 'BC', divisions: 5, index: 2 }), {
       x: 0.4,
       y: TRIANGLE_HEIGHT,
     })

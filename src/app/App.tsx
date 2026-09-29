@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { anchorKey } from '../geometry/anchorPoint'
-import type { AnchorPoint } from '../geometry/anchorPoint'
-import type { Segment } from '../geometry/segment'
+import { segmentEndpointAnchorKey } from '../pattern/anchor'
+import type { SegmentEndpointAnchor } from '../pattern/anchor'
+import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
 import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
 import { CellEditor } from '../components/CellEditor/CellEditor'
@@ -15,19 +15,19 @@ export default function App() {
     symmetry: { type: 'rotational' },
     splitRelations: [],
   })
-  const [pendingAnchor, setPendingAnchor] = useState<AnchorPoint | null>(null)
+  const [pendingAnchor, setPendingAnchor] = useState<SegmentEndpointAnchor | null>(null)
   const [splitTargetId, setSplitTargetId] = useState<string | null>(null)
 
   useEffect(() => {
     setPendingAnchor(null)
   }, [divisions])
 
-  const addAnchor = (anchor: AnchorPoint) => {
+  const addAnchor = (anchor: SegmentEndpointAnchor) => {
     if (!pendingAnchor) {
       setPendingAnchor(anchor)
       return
     }
-    if (anchorKey(anchor) !== anchorKey(pendingAnchor)) {
+    if (segmentEndpointAnchorKey(anchor) !== segmentEndpointAnchorKey(pendingAnchor)) {
       const segment: Segment = { id: globalThis.crypto.randomUUID(), start: pendingAnchor, end: anchor }
       setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }

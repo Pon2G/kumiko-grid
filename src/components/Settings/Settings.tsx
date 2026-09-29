@@ -79,7 +79,7 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
 
       <div className="help-card">
         <strong>線分の描き方</strong>
-        <p>三角形上のAnchorPointを2つ選択します。破線は対称変換によって自動生成されます。</p>
+        <p>三角形上の端点Anchorを2つ選択します。破線は対称変換によって自動生成されます。</p>
       </div>
     </aside>
   )

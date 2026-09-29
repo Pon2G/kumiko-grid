@@ -35,6 +35,11 @@ const cutterC: Segment = {
   start: { kind: 'vertex', vertex: 'C' },
   end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 },
 }
+const earlierCutter: Segment = {
+  id: 'C',
+  start: { kind: 'edge-division', edge: 'AB', divisions: 4, index: 1 },
+  end: { kind: 'edge-division', edge: 'CA', divisions: 4, index: 3 },
+}
 
 const relation = (targetSegmentId: string, cutterSegmentId: string) => ({
   targetSegmentId,
@@ -134,6 +139,55 @@ describe('IntersectionAnchorと論理Fragment', () => {
     expect(resolveIntersectionAnchor(reverseOnly, anchor)).not.toBeNull()
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(false)
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(true)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '旧Fragmentの途中へ新しい境界が加わると隣接しない旧境界pairを解決しない', () => {
+    const initial: CellPattern = {
+      segments: [target, cutterB, earlierCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [relation('A', 'B')],
+    }
+    const oldStartToB = deriveLogicalFragments(initial).find(({ segmentInstanceRef, boundaryA }) =>
+      segmentInstanceRef.sourceSegmentId === 'A'
+      && boundaryA.kind === 'segment-endpoint'
+      && boundaryA.endpoint === 'start')!
+    const reversedOldFragment = {
+      ...oldStartToB,
+      boundaryA: oldStartToB.boundaryB,
+      boundaryB: oldStartToB.boundaryA,
+    }
+    const updated: CellPattern = {
+      ...initial,
+      splitRelations: [...initial.splitRelations, relation('A', 'C')],
+    }
+    const currentTargetFragments = deriveLogicalFragments(updated)
+      .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')
+
+    expect(resolveLogicalFragment(initial, reversedOldFragment)).not.toBeNull()
+    expect(resolveLogicalFragment(updated, oldStartToB)).toBeNull()
+    expect(currentTargetFragments).toHaveLength(3)
+    expect(currentTargetFragments.some(({ boundaryA, boundaryB }) =>
+      boundaryA.kind === 'segment-endpoint' && boundaryA.endpoint === 'start' && boundaryB.kind === 'intersection')).toBe(true)
+    expect(currentTargetFragments.some(({ boundaryA, boundaryB }) =>
+      boundaryA.kind === 'intersection' && boundaryB.kind === 'intersection')).toBe(true)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '別Segment上だけに境界が加わっても対象上で隣接する旧Fragmentを解決できる', () => {
+    const otherTarget: Segment = { ...target, id: 'D' }
+    const otherCutter: Segment = { ...cutterB, id: 'E' }
+    const initial: CellPattern = {
+      segments: [target, cutterB, otherTarget, otherCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [relation('A', 'B')],
+    }
+    const oldTargetFragment = deriveLogicalFragments(initial).find(({ segmentInstanceRef, boundaryA }) =>
+      segmentInstanceRef.sourceSegmentId === 'A' && boundaryA.kind === 'segment-endpoint')!
+    const updated: CellPattern = {
+      ...initial,
+      splitRelations: [...initial.splitRelations, relation('D', 'E')],
+    }
+
+    expect(resolveLogicalFragment(updated, oldTargetFragment)).not.toBeNull()
   })
 
   contractTest({ contract: 'ARCH-DOMAIN-LOGICAL-IDENTITY-GEOMETRY-SEPARATION' }, '同一点の異なるinstance pairを別Anchorとして維持する', () => {

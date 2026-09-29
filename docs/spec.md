@@ -125,6 +125,8 @@ SplitRelationを解除すると、そのrelationが提供していたtarget側�
 
 境界のSegment上での順序は現在のGeometryから必要時に求める。Segment parameter、境界のsort順、Fragment配列の位置、`fragmentIndex` は永続的なidentityとして扱わない。
 
+以前導出されたFragmentの2境界間へ新しい論理境界が追加され、現在の境界集合で両者が隣接しなくなった場合、その旧Logical Fragmentは現在のFragmentとして扱わずGeometryへ解決しない。Fragmentの同一性はSegment instanceと順序を持たない2つの境界identityで判断し、境界の格納順だけが逆になっても現在隣接している同じ境界pairなら同じFragmentとして扱う。
+
 異なる論理境界が同じ座標へ解決されても、その境界identityを自動統合しない。その結果として論理上ゼロ長のFragmentが生じることは許容するが、長さ0の区間を実Geometryとして生成しない。
 
 <!-- test-contract: SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE -->

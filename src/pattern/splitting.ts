@@ -221,8 +221,20 @@ export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] 
 const boundaryKey = (boundary: FragmentBoundaryRef): string => boundary.kind === 'segment-endpoint'
   ? `endpoint:${boundary.endpoint}` : `intersection:${intersectionAnchorKey(boundary)}`
 
+/** 境界の現在順序ではなく、Segment instanceと無向の境界pairだけでFragmentを識別する。 */
+const logicalFragmentKey = (fragment: LogicalFragment): string => {
+  const boundaries = [boundaryKey(fragment.boundaryA), boundaryKey(fragment.boundaryB)].sort()
+  return JSON.stringify([instanceRefKey(fragment.segmentInstanceRef), boundaries])
+}
+
 /** 論理Fragmentを現在の座標へ解決する。ゼロ長区間はGeometryとして生成しない。 */
-function resolveLogicalFragmentFromState(pattern: CellPattern, fragment: LogicalFragment, state: DerivedSplitState): PointSegment | null {
+function resolveLogicalFragmentFromState(
+  pattern: CellPattern,
+  fragment: LogicalFragment,
+  state: DerivedSplitState,
+  currentFragmentKeys: ReadonlySet<string>,
+): PointSegment | null {
+  if (!currentFragmentKeys.has(logicalFragmentKey(fragment))) return null
   const target = expandPattern(pattern).find((item) => instanceRefKey(item.instanceRef) === instanceRefKey(fragment.segmentInstanceRef))
   if (!target) return null
   const points = new Map<string, Point>([
@@ -240,16 +252,20 @@ function resolveLogicalFragmentFromState(pattern: CellPattern, fragment: Logical
 }
 
 export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
-  return resolveLogicalFragmentFromState(pattern, fragment, deriveSplitState(pattern))
+  const state = deriveSplitState(pattern)
+  const currentFragmentKeys = new Set(deriveLogicalFragmentsFromState(pattern, state).map(logicalFragmentKey))
+  return resolveLogicalFragmentFromState(pattern, fragment, state, currentFragmentKeys)
 }
 
 /** 描画用IDや配列順を論理identityにせず、解決可能なFragment Geometryだけを返す。 */
 export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
   const state = deriveSplitState(pattern)
+  const logicalFragments = deriveLogicalFragmentsFromState(pattern, state)
+  const currentFragmentKeys = new Set(logicalFragments.map(logicalFragmentKey))
   const renderedByRef = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
-  return deriveLogicalFragmentsFromState(pattern, state).flatMap((logicalFragment, renderIndex) => {
+  return logicalFragments.flatMap((logicalFragment, renderIndex) => {
     const rendered = renderedByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
-    const geometry = resolveLogicalFragmentFromState(pattern, logicalFragment, state)
+    const geometry = resolveLogicalFragmentFromState(pattern, logicalFragment, state, currentFragmentKeys)
     return rendered && geometry ? [{ ...rendered, ...geometry, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }] : []
   })
 }

@@ -8,6 +8,9 @@
 - geometry、pattern、layoutのドメインロジックをReact UIから分離する。
 - 幾何学計算は可能な限りpure functionとして実装する。
 - 永続データには意味のある相対表現を保持し、描画座標は導出する。
+- 論理identityとGeometry上の解決結果を分離する。座標、Segment parameter、配列順序、描画用IDなどの派生情報を論理identityにしない。
+- 論理的に異なる要素がGeometry上で一致・重複しても、それだけを理由に論理identityを統合・削除・別identityへ付け替えない。
+- 論理identityの参照先が消滅した場合、または状態遷移後への論理的な写像を定義できない場合は、そのidentityと依存する論理情報を整合的に削除する。Geometry上の類似・一致による自動復活は行わない。
 - 派生Geometryとユーザーが入力した元データを区別する。
 - 未実装機能を先回りして実装しない。
 - 将来拡張のためだけに過剰な抽象化を導入しない。
@@ -44,11 +47,13 @@ src/
 
 ### geometry
 
-正三角形、Point、AnchorPointの座標解決、Segment、鏡映、回転など、UIに依存しない幾何計算を担当する。
+正三角形、Point、PointSegment、交差判定、鏡映、回転、Segment parameterなど、UIに依存しない幾何計算を担当する。Geometry層は論理identityの所有者にならず、Pattern層から与えられた論理情報を座標・幾何構造へ解決するpureな計算を提供する。
 
 ### pattern
 
-Cell Patternのモデルと、Symmetry等による派生Segment生成を担当する。
+Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界などの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成およびGeometryへの解決を編成する。
+
+現在 `geometry` 配下に置かれているAnchorPointやsource Segmentの型も、長期的な責務としてはPatternの論理モデルに属する。ファイル配置は実装時に依存方向を壊さない形へ整理する。
 
 ### layout
 
@@ -89,17 +94,70 @@ Pointは描画・計算用であり、ユーザーが定義するAnchorPointの�
 - B = (0, sqrt(3) / 2)
 - C = (1, sqrt(3) / 2)
 
-### AnchorPoint
+### 論理identityとGeometry解決
 
-頂点を表す `vertex` と、辺上のn等分点を表す `edge-division` のdiscriminated unionを基本とする。
+<!-- test-contract: ARCH-DOMAIN-LOGICAL-IDENTITY-GEOMETRY-SEPARATION -->
+Patternの論理モデルは「何を参照しているか」を保持し、Geometryはその論理情報を現在の座標・幾何構造へ解決する。Point、PointSegment、Segment parameter、交点座標、Fragmentの配列順序などは解決結果であり、論理identityの正本にしない。
 
-Edge Division Pointは座標を保存せず、edge、divisions、indexから解決する。
+論理的に異なる要素が同じPointやPointSegmentへ解決されてもidentityは別のままとする。逆に、論理identityの参照先が削除された場合や、Symmetry変更などの状態遷移で新状態への論理的な写像を定義できない場合は、そのidentityが消滅したものとして依存データも削除する。Geometry上で同じ位置に別要素が存在することを根拠に、自動で参照を付け替えたり復活させたりしない。
+
+### Anchor
+
+AnchorはPointそのものではなく、Cell Pattern内の論理的な点を参照する概念とする。長期的には概念上、少なくとも次を同じAnchor参照体系で扱える構成とする。
+
+```ts
+type AnchorRef =
+  | VertexAnchor
+  | EdgeDivisionAnchor
+  | IntersectionAnchor
+```
+
+現在のsource Segment作成で端点として利用できるのはVertexとEdge Division Pointであり、IntersectionAnchorをsource Segment端点として許可することは別のdomain constraintとして扱う。Anchor unionへIntersectionAnchorを含めることと、すべてのAnchor種別をすべての用途で許可することは分けて設計する。
+
+Vertexは頂点名を、Edge Division Pointはedge、divisions、indexを論理情報として持ち、座標は保存せず解決する。
 
 ### Segment
 
-安定したIDと始点・終点のAnchorPointを持つ。
+<!-- test-contract: ARCH-PATTERN-SEGMENT-IDENTITY -->
+source Segmentの論理identityは安定した `SegmentId` とする。始点・終点AnchorはSegmentの現在の定義であり、identityそのものにはしない。
 
-同一AnchorPointを始点・終点に持つ退化Segmentは基本入力として作成しない。
+概念的には次のように表す。
+
+```ts
+interface Segment {
+  id: SegmentId
+  start: SegmentEndpointRef
+  end: SegmentEndpointRef
+}
+```
+
+端点2つをSegment identityとしない理由は、端点編集だけでSegment自体のidentityが失われ、SplitRelation等の参照が不要に連鎖して変化するためである。また、将来IntersectionAnchorを端点として許可した場合、IntersectionAnchorがSegmentInstanceRefを参照するため、端点構造からSegment identityを再帰的に定義するとidentity自体へ循環参照を持ち込み得る。安定したIDと現在の定義を分離し、端点pairは同一定義・同一Geometryの判定には利用しても論理identityにはしない。
+
+同一Anchorを始点・終点に持つ退化Segmentは基本入力として作成しない。
+
+#### IntersectionAnchor
+
+<!-- test-contract: ARCH-PATTERN-INTERSECTION-ANCHOR-IDENTITY -->
+IntersectionAnchorは、Symmetry展開後の2つのconcrete Segment instanceが作る論理的な交点を表す。identityは順序を持たない2つの `SegmentInstanceRef` のcanonical pairとし、交点座標、Segment parameter、描画用IDを含めない。
+
+```ts
+interface IntersectionAnchor {
+  first: SegmentInstanceRef
+  second: SegmentInstanceRef
+}
+```
+
+`first / second` はcanonicalizationのための格納順であり、target / cutterの意味を持たない。
+
+IntersectionAnchorを `SplitRelation + logical transform` で表現しない。SplitRelationは有向であり、`A → B` と逆向きの `B → A` は別relationだが、同じconcrete instance pairの物理交点は同一IntersectionAnchorである。SplitRelationをidentityへ含めると、同じ無向交点に複数identityが生じるか、別途「無向intersection orbit」をcanonicalizeする仕組みが必要になる。現在必要なconcrete IntersectionAnchorは2つのSegmentInstanceRefから直接表す方が単純であり、orbitレベルのIntersection identityが必要になった場合にのみ別概念として導入する。
+
+#9でsplit境界として扱うIntersectionAnchorは、有効なSplitRelationをsymmetry orbitへ展開したconcrete target/cutter pairから導出する。IntersectionAnchor自体はSplitRelationの有向性を持たず、そのAnchorがどちらのSegment instanceを分割する境界になるかはSplitRelationのtargetから決まる。逆向きSplitRelationが共存する場合、同じIntersectionAnchorを双方のSegment instanceの境界として利用できる。
+
+#### IntersectionAnchorをSegment端点として利用する場合の依存制約
+
+将来IntersectionAnchorをsource Segmentの端点として許可する場合、Segment Geometryの解決依存を有向グラフとして扱い、循環を許可しない。
+
+例えばSegment Aの端点が `intersection(B, C)` を参照するなら、AはBとCのGeometry解決へ依存する。自己参照や `A → B → A` のような間接循環はGeometryを決定できないためdomain invariantとして拒否し、依存グラフをDAGに保つ。これはGeometry計算時に循環を推測して修復する責務ではなく、解決不能な論理モデルを作成しないためのPattern層の制約とする。
 
 ### CellPattern
 
@@ -163,6 +221,22 @@ type SplitRelativeTransform =
 
 relationは有向である。逆向きrelationではrelativeTransformも逆元となり、rotationalの `+1` と `+2` は互いに逆、mirrorとidentityはそれぞれ自身が逆元となる。逆向きrelationは元relationとは別のrelationとして共存できる。
 
+#### SplitRelationとIntersectionAnchor
+
+SplitRelationとIntersectionAnchorは独立した保存データではない。SplitRelationは「どの対称軌道で、どちら側のSegment instanceを切るか」という有向な操作・状態を表し、IntersectionAnchorはそのorbitをconcrete pairへ展開した結果から得られる無向の論理点を表す。
+
+```text
+SplitRelation
+  ↓ symmetry orbit展開
+(target SegmentInstanceRef, cutter SegmentInstanceRef)
+  ↓ 無向canonical pair
+IntersectionAnchor
+  ↓ SplitRelationのtarget側で利用
+Fragment boundary
+```
+
+1つのSplitRelationはSymmetryに応じて複数のconcrete pairへ展開されるため、SplitRelationとIntersectionAnchorは1対1対応ではない。逆向きSplitRelationは別relationだが、同じconcrete pairに対応するIntersectionAnchorは共有する。
+
 #### SplitRelationの有効性とCellPattern invariant
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-ORBIT-VALIDITY -->
@@ -209,6 +283,11 @@ invariantを満たす新しいCellPattern
 
 将来、Segment端点変更など設計Geometryを変更するPattern操作を追加する場合も、その操作は返却前に同じSplitRelation invariantを回復する責務を持つ。Undo / Redo等の編集履歴はこのrelationモデルとは別責務とする。
 
+<!-- test-contract: ARCH-PATTERN-LOGICAL-DEPENDENCY-CLEANUP -->
+状態遷移では、論理identityを維持できる写像が明示的に定義されている場合だけ依存参照を維持する。写像を定義できずSegment instanceが消滅する場合、そのinstanceを参照するIntersectionAnchorも消滅し、さらにそのAnchorを必要とする下位の論理情報を依存関係に従って削除する。削除された依存情報は、後からGeometry上で同じ位置・形状の要素が再び現れても自動復活させない。
+
+Symmetry変更でSplitRelationを引き継げることと、旧concrete SegmentInstanceRefや旧IntersectionAnchorを同一identityとして引き継げることは別である。relativeTransformの意味を維持してrelationを再展開した結果、concrete instance identityが変わる場合は、旧instanceに依存するAnchorやその下位データをGeometry上の近似で新instanceへ付け替えない。
+
 #### SplitCandidate
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION -->
@@ -218,10 +297,29 @@ candidate生成は、concrete instance pairの列挙順からrelation identity�
 
 同一candidateのorbit内で複数pairがGeometry上同一点に交差する場合、表示用Pointは共通Geometry toleranceに従って重複除去してよい。ただしPointの重複除去はrelationの重複除去ではない。異なるSplitRelation候補が同じ座標を持っていてもcandidateを統合せず、座標をrelation identityとして利用しない。
 
-#### Fragment Geometryの導出
+#### Fragmentと論理境界の導出
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-DERIVATION -->
-Pattern層は、有効なCellPatternから最終Geometryをpureに導出する。SplitRelationをSymmetry orbitのconcrete instance pairへ展開し、各target instanceについてrelationから得られる有効なtarget parameterをGeometry層へ渡してFragment化する。Geometry導出はCellPatternやSplitRelationを追加・削除・修復しない。
+Pattern層は、有効なCellPatternからsplit境界、論理Fragment、Geometryをpureに導出する。Geometry導出はCellPattern、SplitRelation、IntersectionAnchorの論理identityを追加・削除・修復しない。
+
+<!-- test-contract: ARCH-PATTERN-FRAGMENT-BOUNDARY-DERIVATION -->
+Fragmentは1つのSegment instance上で現在隣接している2つの論理境界に挟まれた区間として導出する。Fragment自身に永続的な `fragmentIndex` や境界順序を持たせず、少なくとも「どのSegment instance上か」と「どの2つの論理境界の間か」を追跡できる構成とする。
+
+Fragment境界は、Segment instanceの端点またはそのinstanceをtargetとするSplitRelationから得られたIntersectionAnchorで表す。
+
+```ts
+type FragmentBoundaryRef =
+  | SegmentEndpointRef
+  | IntersectionAnchor
+
+interface LogicalFragment {
+  segmentInstanceRef: SegmentInstanceRef
+  boundaryA: FragmentBoundaryRef
+  boundaryB: FragmentBoundaryRef
+}
+```
+
+`boundaryA / boundaryB` は永続的な先後を意味しない。現在のGeometryへ解決したときに各境界のSegment parameterを求め、その時点の順序で一時的にsortし、隣接する境界pairからLogical Fragmentを導出する。parameter、sort順、fragmentIndexは派生情報であり論理identityにしない。
 
 ```text
 source model
@@ -232,14 +330,20 @@ canonical SplitRelation
   ↓
 symmetry orbit / concrete instance pairs
   ↓
-split parameter derivation
+IntersectionAnchor + target側split境界
   ↓
-Fragment geometry
+境界をGeometryへresolveして一時的に順序付け
   ↓
-Layout
+隣接境界からLogical Fragment
+  ↓
+PointSegmentへresolve
+  ↓
+Effective / renderable Geometry
 ```
 
-Fragmentと交点座標は再計算可能な派生Geometryであり、CellPatternへ保存しない。Fragmentの `fragmentIndex` 等の派生順序を永続identityとして扱わない。SplitRelationから安定したconcrete `SegmentInstanceRef` pairを導出できるところまでをこのモデルの責務とし、同一座標にある複数pairを1つの論理交点へ統合する規則はここでは定義しない。
+異なるIntersectionAnchorが同一点へ解決されてもAnchor identityは統合しない。その結果、隣接する2境界が同一点となるゼロ長Logical Fragmentが生じてもよい。Geometry解釈時に長さ0のPointSegmentを実Geometryとして生成しないことは固定の解決規則とし、論理Anchorの削除・統合とは扱わない。
+
+新しいIntersectionAnchorが既存2境界の間へ加わった場合、境界の現在順序からFragmentを再導出する。旧Fragmentの配列位置や `fragmentIndex` を維持しようとはしない。一方、元のAnchor identity自体はGeometry上の並び替えだけを理由に変更しない。
 
 ### CellPlacement
 
@@ -311,7 +415,9 @@ Reactはdivision数、選択中AnchorPoint、split対象などの操作状態を
 
 交点は保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。Layout層はsplitの意味論や交差計算を扱わない。
 
-派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。必要になった段階で、描画や出力など適切な境界で正規化する。
+派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。Geometry上の一致・重複を検出しても、それを理由に論理identityを自動統合・削除・付け替えしない。意味上異なる部材や区間が重なる場合は、必要に応じてGeometry診断として警告し、解消はユーザー操作へ委ねる。
+
+一方、ゼロ長区間のように実Geometryとして意味を持たない解決結果はGeometry化しない。また、SymmetryやLayoutから派生した同一Geometryの重複を描画・加工出力で正規化する必要がある場合も、元の論理identityを破壊しない境界で行う。
 
 ## 9. テスト設計
 

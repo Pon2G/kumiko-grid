@@ -116,10 +116,12 @@ relationから導出される対称軌道の**すべての具体pair**がsplit�
 <!-- test-contract: SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION -->
 有効なSplitRelationをSymmetry orbitへ展開した各concrete target/cutter pairからIntersectionAnchorを導出する。1つのSplitRelationから複数のIntersectionAnchorが得られ得る。逆向きSplitRelationが同じconcrete pairを参照する場合、IntersectionAnchor自体は同じものを共有し、どちらのSegment instance上のsplit境界として使われるかだけがrelationのtargetによって異なる。
 
-IntersectionAnchorをSplitRelationとは独立した一覧として二重管理しない。現在必要なIntersectionAnchorは現在有効な論理状態から導出する。交点座標とSegment parameterはIntersectionAnchorをGeometryへ解決した結果であり、Anchorのidentityではない。
+IntersectionAnchorをSplitRelationとは独立した一覧として二重管理しない。IntersectionAnchorは、現在有効なSplitRelation orbitのconcrete pairから少なくとも1件導出される間だけ現在の論理状態に存在する。同じIntersectionAnchorを逆向きrelationなど複数のrelationが支えてよく、そのうち1件を解除しても別relationから導出される間はAnchor自体が残る。どのrelationからも導出されなくなれば消滅する。交点座標とSegment parameterはIntersectionAnchorをGeometryへ解決した結果であり、Anchorのidentityではない。
 
 <!-- test-contract: SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES -->
 split後のFragmentは、1つのSegment instance上で現在隣接している2つの論理境界に挟まれた区間として導出する。論理境界にはSegment instanceの端点と、そのinstanceをtargetとするSplitRelationから導出されたIntersectionAnchorを用いる。
+
+SplitRelationを解除すると、そのrelationが提供していたtarget側のsplit境界は消滅する。別relationが同じIntersectionAnchorを支えてAnchor自体が残る場合でも、それだけを理由に解除済みrelationのtarget側境界を残してはならない。Anchorの現在の存在と、特定Segment instance上でsplit境界として現在有効であることは別々に判定する。
 
 境界のSegment上での順序は現在のGeometryから必要時に求める。Segment parameter、境界のsort順、Fragment配列の位置、`fragmentIndex` は永続的なidentityとして扱わない。
 
@@ -131,9 +133,9 @@ Cell Patternは現在の設計Geometry上で有効なSplitRelationだけを保�
 `identity` relationは `none / mirror / rotational` の間で引き継ぎ候補となる。mirrorの `mirror` relationはmirror軸を変更しても意味上は引き継ぎ候補とし、新しい軸で具体pairを再展開・再検証する。mirrorとrotationalの間では、non-identity relationを別種類の相対transformへ自動変換しない。
 
 <!-- test-contract: SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP -->
-Segment削除やSymmetry変更などによって、あるSegment instanceの論理identityが現在のPatternから消滅した場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
+Segment削除やSymmetry変更などによって、あるSegment instanceの論理identityが現在のPatternから消滅した場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。SplitRelation解除によって、あるIntersectionAnchorを導出するrelationがなくなった場合も同様に消滅する。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
 
-一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。
+一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。元の2つのSegment instanceが交差し続けていても、現在有効なSplitRelationから導出されなければ旧IntersectionAnchorを解決可能な論理Anchorとして扱わない。
 
 ## 6. Cell Editor
 
@@ -152,8 +154,8 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 基本操作:
 
 1. nを指定する
-2. AnchorPointをクリックする
-3. もう1つのAnchorPointをクリックする
+2. source Segmentの端点Anchorをクリックする
+3. もう1つの端点Anchorをクリックする
 4. 2点を結ぶSegmentを追加する
 5. Segmentを選択して削除する
 6. symmetryを変更する
@@ -165,7 +167,7 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 
 SVG上の交点マーカーとその座標はsplit位置を示す表示専用の派生情報とし、Cell Patternへ保存しない。対応するIntersectionAnchorの論理identityと表示用マーカーは区別する。分割対象の選択、候補、候補座標も操作中だけのUI状態とする。relationの追加・解除はcandidateが表す対称軌道全体を1操作単位とし、同じ軌道に属する別の具体pairを基準にしても同じrelationとして扱う。
 
-スマートフォンではAnchorPointを十分大きなタップ領域として扱う。
+スマートフォンでは端点Anchorを十分大きなタップ領域として扱う。
 
 ## 7. Preview
 

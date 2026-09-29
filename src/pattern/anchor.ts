@@ -6,7 +6,6 @@ export type VertexAnchor = { kind: 'vertex'; vertex: VertexName }
 export type EdgeDivisionAnchor = { kind: 'edge-division'; edge: EdgeName; divisions: number; index: number }
 export type SegmentEndpointAnchor = VertexAnchor | EdgeDivisionAnchor
 export type AnchorRef = SegmentEndpointAnchor | IntersectionAnchor
-export type AnchorPoint = SegmentEndpointAnchor
 
 const edgeVertices: Record<EdgeName, [VertexName, VertexName]> = {
   AB: ['A', 'B'],
@@ -29,9 +28,7 @@ export function resolveSegmentEndpoint(anchor: SegmentEndpointAnchor, triangle: 
   return interpolate(triangle[start], triangle[end], anchor.index / anchor.divisions)
 }
 
-export const resolveAnchor = resolveSegmentEndpoint
-
-export function createAnchors(divisions: number): SegmentEndpointAnchor[] {
+export function createSegmentEndpointAnchors(divisions: number): SegmentEndpointAnchor[] {
   if (!Number.isInteger(divisions) || divisions < 2) throw new RangeError('分割数には2以上の整数を指定してください')
   const vertices: SegmentEndpointAnchor[] = (['A', 'B', 'C'] as const).map((vertex) => ({ kind: 'vertex', vertex }))
   const divisionsOnEdges: SegmentEndpointAnchor[] = (['AB', 'BC', 'CA'] as const).flatMap((edge) =>
@@ -39,6 +36,6 @@ export function createAnchors(divisions: number): SegmentEndpointAnchor[] {
   return [...vertices, ...divisionsOnEdges]
 }
 
-export const anchorKey = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
+export const segmentEndpointAnchorKey = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
   ? `vertex-${anchor.vertex}`
   : `edge-${anchor.edge}-${anchor.divisions}-${anchor.index}`

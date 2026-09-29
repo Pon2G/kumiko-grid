@@ -2,7 +2,7 @@ import { intersectSegments, isInteriorParameter, pointsAreClose } from '../geome
 import type { Point } from '../geometry/types'
 import type { PointSegment } from '../geometry/segment'
 import type { CellPattern, SegmentInstancePair, SegmentInstanceRef, SplitRelation, SplitRelativeTransform, Symmetry } from './cellPattern'
-import { createIntersectionAnchor, intersectionAnchorContains, intersectionAnchorKey, type IntersectionAnchor } from './intersectionAnchor'
+import { createIntersectionAnchor, intersectionAnchorKey, type IntersectionAnchor, type ResolvedIntersectionAnchor } from './intersectionAnchor'
 import { expandPattern, instanceRefKey, instanceTransforms, type RenderedSegment } from './symmetry'
 
 export type FragmentBoundaryRef =
@@ -13,6 +13,12 @@ export interface LogicalFragment {
   segmentInstanceRef: SegmentInstanceRef
   boundaryA: FragmentBoundaryRef
   boundaryB: FragmentBoundaryRef
+}
+
+/** 有向relationから導出される、特定のtarget instance上でだけ有効なsplit境界。 */
+export interface SegmentSplitBoundary {
+  segmentInstanceRef: SegmentInstanceRef
+  anchor: IntersectionAnchor
 }
 
 export interface PatternFragment extends RenderedSegment {
@@ -97,18 +103,61 @@ const validatedOrbit = (pattern: CellPattern, relation: SplitRelation) => {
   return intersections.every((item) => item !== null) ? { pairs, intersections: intersections as Exclude<typeof intersections[number], null>[] } : null
 }
 
-/** 有効なrelation orbitから、向きを持たない論理交点集合を導出する。 */
-export function deriveIntersectionAnchors(pattern: CellPattern): IntersectionAnchor[] {
-  const anchors = new Map<string, IntersectionAnchor>()
+interface ResolvedSegmentSplitBoundary extends SegmentSplitBoundary {
+  point: Point
+  parameter: number
+}
+
+interface DerivedSplitState {
+  anchors: Map<string, { anchor: IntersectionAnchor; resolved: ResolvedIntersectionAnchor }>
+  boundaries: ResolvedSegmentSplitBoundary[]
+}
+
+/** 有効な有向orbitを、無向Anchorとtarget側split境界へ一度だけ解釈する。 */
+function deriveSplitState(pattern: CellPattern): DerivedSplitState {
+  const anchors: DerivedSplitState['anchors'] = new Map()
+  const boundaries = new Map<string, ResolvedSegmentSplitBoundary>()
   for (const relation of pattern.splitRelations) {
     const orbit = validatedOrbit(pattern, relation)
     if (!orbit) continue
-    for (const [target, cutter] of orbit.pairs) {
+    orbit.pairs.forEach(([target, cutter], index) => {
+      const intersection = orbit.intersections[index]
       const anchor = createIntersectionAnchor(target.instanceRef, cutter.instanceRef)
-      anchors.set(intersectionAnchorKey(anchor), anchor)
-    }
+      const anchorKey = intersectionAnchorKey(anchor)
+      const targetIsFirst = instanceRefKey(target.instanceRef) === instanceRefKey(anchor.first)
+      anchors.set(anchorKey, {
+        anchor,
+        resolved: {
+          point: intersection.point,
+          firstParameter: targetIsFirst ? intersection.firstT : intersection.secondT,
+          secondParameter: targetIsFirst ? intersection.secondT : intersection.firstT,
+        },
+      })
+      const boundary: ResolvedSegmentSplitBoundary = {
+        segmentInstanceRef: target.instanceRef,
+        anchor,
+        point: intersection.point,
+        parameter: intersection.firstT,
+      }
+      boundaries.set(`${instanceRefKey(target.instanceRef)}\0${anchorKey}`, boundary)
+    })
   }
-  return [...anchors.values()]
+  return { anchors, boundaries: [...boundaries.values()] }
+}
+
+/** 有効なrelation orbitの少なくとも1つが支える無向IntersectionAnchorだけを返す。 */
+export function deriveIntersectionAnchors(pattern: CellPattern): IntersectionAnchor[] {
+  return [...deriveSplitState(pattern).anchors.values()].map(({ anchor }) => anchor)
+}
+
+/** relationの方向を保ち、target instanceごとのsplit境界を導出する。 */
+export function deriveSegmentSplitBoundaries(pattern: CellPattern): SegmentSplitBoundary[] {
+  return deriveSplitState(pattern).boundaries.map(({ segmentInstanceRef, anchor }) => ({ segmentInstanceRef, anchor }))
+}
+
+/** 現在の有効relationに支えられていない旧Anchorは、Geometryが交差していても解決しない。 */
+export function resolveIntersectionAnchor(pattern: CellPattern, anchor: IntersectionAnchor): ResolvedIntersectionAnchor | null {
+  return deriveSplitState(pattern).anchors.get(intersectionAnchorKey(anchor))?.resolved ?? null
 }
 
 /** 不変条件を満たす対称軌道だけを追加し、無効入力や重複では元のPatternを返す。 */
@@ -139,26 +188,19 @@ interface ResolvedBoundary {
 }
 
 /** target側instanceごとに論理境界を保ったまま、現在のGeometry順で隣接Fragmentを導出する。 */
-export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] {
+function deriveLogicalFragmentsFromState(pattern: CellPattern, state: DerivedSplitState): LogicalFragment[] {
   const expanded = expandPattern(pattern)
   const boundaries = new Map<string, ResolvedBoundary[]>()
   for (const segment of expanded) boundaries.set(instanceRefKey(segment.instanceRef), [
     { ref: { kind: 'segment-endpoint', endpoint: 'start' }, parameter: 0, tieBreaker: '0:start' },
     { ref: { kind: 'segment-endpoint', endpoint: 'end' }, parameter: 1, tieBreaker: '2:end' },
   ])
-  for (const relation of pattern.splitRelations) {
-    const orbit = validatedOrbit(pattern, relation)
-    if (!orbit) continue
-    for (const [target, cutter] of orbit.pairs) {
-      const result = intersectSegments(target, cutter)
-      if ((result.kind === 'cross' || result.kind === 'touch') && isInteriorParameter(target, result.firstT)) {
-        const key = instanceRefKey(target.instanceRef)
-        const anchor = createIntersectionAnchor(target.instanceRef, cutter.instanceRef)
-        const current = boundaries.get(key)
-        if (current && !current.some(({ ref }) => ref.kind === 'intersection' && intersectionAnchorKey(ref) === intersectionAnchorKey(anchor))) {
-          current.push({ ref: anchor, parameter: result.firstT, tieBreaker: `1:${intersectionAnchorKey(anchor)}` })
-        }
-      }
+  for (const boundary of state.boundaries) {
+    const key = instanceRefKey(boundary.segmentInstanceRef)
+    const current = boundaries.get(key)
+    if (current) {
+      const anchorKey = intersectionAnchorKey(boundary.anchor)
+      current.push({ ref: boundary.anchor, parameter: boundary.parameter, tieBreaker: `1:${anchorKey}` })
     }
   }
   return expanded.flatMap((segment) => {
@@ -172,27 +214,24 @@ export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] 
   })
 }
 
+export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] {
+  return deriveLogicalFragmentsFromState(pattern, deriveSplitState(pattern))
+}
+
 const boundaryKey = (boundary: FragmentBoundaryRef): string => boundary.kind === 'segment-endpoint'
   ? `endpoint:${boundary.endpoint}` : `intersection:${intersectionAnchorKey(boundary)}`
 
 /** 論理Fragmentを現在の座標へ解決する。ゼロ長区間はGeometryとして生成しない。 */
-export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
+function resolveLogicalFragmentFromState(pattern: CellPattern, fragment: LogicalFragment, state: DerivedSplitState): PointSegment | null {
   const target = expandPattern(pattern).find((item) => instanceRefKey(item.instanceRef) === instanceRefKey(fragment.segmentInstanceRef))
   if (!target) return null
-  if ((fragment.boundaryA.kind === 'intersection' && !intersectionAnchorContains(fragment.boundaryA, target.instanceRef))
-    || (fragment.boundaryB.kind === 'intersection' && !intersectionAnchorContains(fragment.boundaryB, target.instanceRef))) return null
   const points = new Map<string, Point>([
     ['endpoint:start', target.start],
     ['endpoint:end', target.end],
   ])
-  for (const relation of pattern.splitRelations) {
-    const orbit = validatedOrbit(pattern, relation)
-    if (!orbit) continue
-    for (const [left, right] of orbit.pairs) {
-      const result = intersectSegments(left, right)
-      if (result.kind === 'cross' || result.kind === 'touch') {
-        points.set(`intersection:${intersectionAnchorKey(createIntersectionAnchor(left.instanceRef, right.instanceRef))}`, result.point)
-      }
+  for (const boundary of state.boundaries) {
+    if (instanceRefKey(boundary.segmentInstanceRef) === instanceRefKey(target.instanceRef)) {
+      points.set(`intersection:${intersectionAnchorKey(boundary.anchor)}`, boundary.point)
     }
   }
   const start = points.get(boundaryKey(fragment.boundaryA))
@@ -200,12 +239,17 @@ export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFr
   return start && end && !pointsAreClose(start, end) ? { start, end } : null
 }
 
+export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
+  return resolveLogicalFragmentFromState(pattern, fragment, deriveSplitState(pattern))
+}
+
 /** 描画用IDや配列順を論理identityにせず、解決可能なFragment Geometryだけを返す。 */
 export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
+  const state = deriveSplitState(pattern)
   const renderedByRef = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
-  return deriveLogicalFragments(pattern).flatMap((logicalFragment, renderIndex) => {
+  return deriveLogicalFragmentsFromState(pattern, state).flatMap((logicalFragment, renderIndex) => {
     const rendered = renderedByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
-    const geometry = resolveLogicalFragment(pattern, logicalFragment)
+    const geometry = resolveLogicalFragmentFromState(pattern, logicalFragment, state)
     return rendered && geometry ? [{ ...rendered, ...geometry, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }] : []
   })
 }

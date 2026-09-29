@@ -42,10 +42,10 @@ src/
     intersections.ts       # PointSegment同士の交差・parameter・Geometry分割
     segment.ts             # PointSegment
   pattern/
-    anchor.ts              # 論理Anchorとsource端点の解決
+    anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
-    intersectionAnchor.ts  # concrete instance pairのcanonical identityと解決
-    splitting.ts           # SplitRelation、論理Fragment、描画Geometryの導出
+    intersectionAnchor.ts  # concrete instance pairのcanonical identity
+    splitting.ts           # SplitRelation、split境界、Anchor / Fragment Geometryの導出・解決
   layout/
   components/
   app/
@@ -59,7 +59,7 @@ src/
 
 Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界などの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成およびGeometryへの解決を編成する。
 
-AnchorPointやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。
+Anchorやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。全Anchorのunionである `AnchorRef`、source Segment端点に現在許可する `SegmentEndpointAnchor`、その専用resolverである `resolveSegmentEndpoint` を名前でも区別する。
 
 ### layout
 
@@ -235,15 +235,15 @@ SplitRelationとIntersectionAnchorは独立した保存データではない。S
 SplitRelation
   ↓ symmetry orbit展開
 (target SegmentInstanceRef, cutter SegmentInstanceRef)
-  ↓ 無向canonical pair
-IntersectionAnchor
-  ↓ SplitRelationのtarget側で利用
-Fragment boundary
+  ├─ 無向canonical pair → IntersectionAnchor
+  └─ target + IntersectionAnchor → SegmentSplitBoundary
 ```
 
-1つのSplitRelationはSymmetryに応じて複数のconcrete pairへ展開されるため、SplitRelationとIntersectionAnchorは1対1対応ではない。逆向きSplitRelationは別relationだが、同じconcrete pairに対応するIntersectionAnchorは共有する。
+`SegmentSplitBoundary` は、IntersectionAnchorをどのtarget Segment instance上の境界として利用するかを表す派生情報であり、CellPatternへ保存しない。SplitRelationは有向orbit、IntersectionAnchorは無向logical point、SegmentSplitBoundaryは特定target上でのAnchorの役割という3つの意味を分離する。
 
-IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitRelationと二重保存しない。必要なIntersectionAnchor集合は現在の論理状態から導出する。一方、他の永続ドメイン情報が境界などとして特定のIntersectionAnchorを参照する場合は、その参照値を保持してよい。参照先Anchorが論理的に消滅したときは依存削除規則を適用する。
+1つのSplitRelationはSymmetryに応じて複数のconcrete pairへ展開されるため、SplitRelationとIntersectionAnchorは1対1対応ではない。逆向きSplitRelationは別relationだが、同じconcrete pairに対応するIntersectionAnchorは共有する。両方向のrelationがある場合は1つのIntersectionAnchorから両target上のSegmentSplitBoundaryが得られ、片方向だけを解除するとAnchorが残っても解除方向の境界は消滅する。
+
+IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitRelationと二重保存しない。必要なIntersectionAnchor集合とSegmentSplitBoundary集合は、現在有効なrelation orbitを同じ派生段階で解釈して得る。IntersectionAnchorは少なくとも1つのrelationが同じconcrete pairを支える間だけ存在する。一方、特定Segment instance上の境界は、そのinstanceをtargetとするrelationが支える間だけ存在する。Anchorの存在だけから別方向の境界を推論しない。他の永続ドメイン情報が境界などとして特定のIntersectionAnchorを参照する場合は、その参照値を保持してよい。参照先Anchorが論理的に消滅したときは依存削除規則を適用する。
 
 #### SplitRelationの有効性とCellPattern invariant
 
@@ -380,7 +380,7 @@ mirrorは選択した頂点と対辺中点を結ぶ中線に対して両端点�
 rotationalは正三角形の重心を中心として120°、240°回転する。
 
 <!-- test-contract: ARCH-LAYOUT-LOCAL-COORDINATE -->
-下向きCellでもAnchorPoint自体の意味は変えない。基準CellのLocal Coordinateを配置変換して向きを表現する。
+下向きCellでもSegmentEndpointAnchor自体の意味は変えない。基準CellのLocal Coordinateを配置変換して向きを表現する。
 
 基準三角形の外接矩形高さを `height` とした場合、下向きCellへの基本変換は概念的に次で表現できる。
 
@@ -400,11 +400,11 @@ Layout固有の配置規則をCell Patternのモデルへ持ち込まない。
 
 ## 7. UIとの境界
 
-Reactはdivision数、選択中AnchorPoint、split対象などの操作状態を所有してよい。一方、CellPatternのSymmetryやSplitRelationを変更するときの整合性維持はPattern層のドメイン操作へ委譲する。Reactから `symmetry` や `splitRelations` を便宜的に直接差し替えて不変条件を迂回しない。
+Reactはdivision数、選択中SegmentEndpointAnchor、split対象などの操作状態を所有してよい。一方、CellPatternのSymmetryやSplitRelationを変更するときの整合性維持はPattern層のドメイン操作へ委譲する。Reactから `symmetry` や `splitRelations` を便宜的に直接差し替えて不変条件を迂回しない。
 
 コンポーネントは計算済みモデルとcallbackを受け取り、次の処理をドメイン層へ委譲する。
 
-- AnchorPointから座標への解決
+- SegmentEndpointAnchorから座標への解決
 - mirror / rotational変換
 - SplitRelationの正規化、検証、Symmetry変更時の再検証
 - split候補とFragment Geometryの導出
@@ -422,6 +422,10 @@ Reactはdivision数、選択中AnchorPoint、split対象などの操作状態を
 - Layout展開後のSegment
 
 交点座標とSegment parameterは保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。IntersectionAnchorは座標そのものではなくconcrete SegmentInstanceRef pairを参照する論理identityであり、Geometry上の交点とは区別する。Layout層はsplitの意味論や交差計算を扱わない。
+
+ここで扱うDesign Geometry / IntersectionAnchorは、source Segment、Symmetry、既存SplitRelationから解決する設計上の論理境界である。将来Material Exclusionの境界として利用されても、exclusion自身を適用した結果によってそのIntersectionAnchorを自動消滅させない。
+
+将来のEffective GeometryはMaterial Exclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。Material Exclusion、Effective Geometry、Effective intersectionの計算自体は今回の実装対象に含めない。
 
 派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。Geometry上の一致・重複を検出しても、それを理由に論理identityを自動統合・削除・付け替えしない。意味上異なる部材や区間が重なる場合は、必要に応じてGeometry診断として警告し、解消はユーザー操作へ委ねる。
 

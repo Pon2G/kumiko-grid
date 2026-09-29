@@ -1,18 +1,22 @@
 import { describe, expect } from 'vitest'
+import { intersectSegments } from '../geometry/intersections'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern, SegmentInstanceRef } from './cellPattern'
 import {
   createIntersectionAnchor,
   intersectionAnchorKey,
-  resolveIntersectionAnchor,
 } from './intersectionAnchor'
-import type { Segment } from './segment'
+import { resolveSegment, type Segment } from './segment'
 import {
   changeSymmetry,
   deriveIntersectionAnchors,
   deriveLogicalFragments,
   derivePatternGeometry,
+  deriveSegmentSplitBoundaries,
   removeSegment,
+  removeSplitRelation,
+  resolveIntersectionAnchor,
+  resolveLogicalFragment,
 } from './splitting'
 
 const ref = (sourceSegmentId: string): SegmentInstanceRef => ({ sourceSegmentId, transform: { type: 'identity' } })
@@ -76,6 +80,60 @@ describe('IntersectionAnchorと論理Fragment', () => {
     }
 
     expect(deriveIntersectionAnchors(pattern)).toHaveLength(1)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '双方向relationの片方を解除するとAnchorを残して解除方向のtarget境界だけを失う', () => {
+    const aToB = relation('A', 'B')
+    const bToA = relation('B', 'A')
+    const bidirectional: CellPattern = {
+      segments: [target, cutterB],
+      symmetry: { type: 'none' },
+      splitRelations: [aToB, bToA],
+    }
+    const anchor = deriveIntersectionAnchors(bidirectional)[0]
+    const bidirectionalBoundaries = deriveSegmentSplitBoundaries(bidirectional)
+    const staleBFragments = deriveLogicalFragments(bidirectional)
+      .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')
+    const oneWay = removeSplitRelation(bidirectional, bToA)
+    const boundaries = deriveSegmentSplitBoundaries(oneWay)
+
+    expect(deriveIntersectionAnchors(bidirectional)).toHaveLength(1)
+    expect(bidirectionalBoundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(true)
+    expect(bidirectionalBoundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(true)
+    expect(deriveIntersectionAnchors(oneWay)).toEqual([anchor])
+    expect(resolveIntersectionAnchor(oneWay, anchor)).not.toBeNull()
+    expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(true)
+    expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(false)
+    expect(staleBFragments.every((fragment) => resolveLogicalFragment(oneWay, fragment) === null)).toBe(true)
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP' }, '最後のsupport relationを解除すると交差Geometryが残っても旧Anchorを解決しない', () => {
+    const aToB = relation('A', 'B')
+    const withRelation: CellPattern = {
+      segments: [target, cutterB],
+      symmetry: { type: 'none' },
+      splitRelations: [aToB],
+    }
+    const anchor = deriveIntersectionAnchors(withRelation)[0]
+    const withoutRelation = removeSplitRelation(withRelation, aToB)
+
+    expect(intersectSegments(resolveSegment(target), resolveSegment(cutterB)).kind).toBe('cross')
+    expect(deriveIntersectionAnchors(withoutRelation)).toEqual([])
+    expect(resolveIntersectionAnchor(withoutRelation, anchor)).toBeNull()
+  })
+
+  contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '逆向きrelationだけならAnchorは存在しB側境界だけが有効になる', () => {
+    const reverseOnly: CellPattern = {
+      segments: [target, cutterB],
+      symmetry: { type: 'none' },
+      splitRelations: [relation('B', 'A')],
+    }
+    const anchor = deriveIntersectionAnchors(reverseOnly)[0]
+    const boundaries = deriveSegmentSplitBoundaries(reverseOnly)
+
+    expect(resolveIntersectionAnchor(reverseOnly, anchor)).not.toBeNull()
+    expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(false)
+    expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(true)
   })
 
   contractTest({ contract: 'ARCH-DOMAIN-LOGICAL-IDENTITY-GEOMETRY-SEPARATION' }, '同一点の異なるinstance pairを別Anchorとして維持する', () => {

@@ -24,7 +24,7 @@ export const triangularGrid: LayoutStrategy<TriangularGridOptions> = {
 
 /**
  * 基準CellのローカルPointを配置先のPreview座標へ変換する。
- * 下向きCellは外接矩形の中央を中心に180°回転させることで、AnchorPointの意味を維持する。
+ * 下向きCellは外接矩形の中央を中心に180°回転させることで、SegmentEndpointAnchorの意味を維持する。
  */
 export const transformCellPoint = (point: Point, placement: CellPlacement, side = 1): Point => {
   const oriented = placement.rotation === 0

@@ -1,5 +1,5 @@
-import { anchorKey, createAnchors, resolveAnchor } from '../../pattern/anchor'
-import type { AnchorPoint } from '../../pattern/anchor'
+import { createSegmentEndpointAnchors, resolveSegmentEndpoint, segmentEndpointAnchorKey } from '../../pattern/anchor'
+import type { SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { Segment } from '../../pattern/segment'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
@@ -14,9 +14,9 @@ import {
 interface CellEditorProps {
   divisions: number
   pattern: CellPattern
-  pendingAnchor: AnchorPoint | null
+  pendingAnchor: SegmentEndpointAnchor | null
   splitTargetId: string | null
-  onAnchorClick: (anchor: AnchorPoint) => void
+  onAnchorClick: (anchor: SegmentEndpointAnchor) => void
   onDeleteSegment: (id: string) => void
   onSelectSplitTarget: (id: string | null) => void
   onToggleSplitRelation: (relation: SplitRelation) => void
@@ -26,7 +26,7 @@ const SCALE = 440
 const PAD = 42
 const px = (value: number) => PAD + value * SCALE
 const py = (value: number) => PAD + value * SCALE
-const anchorLabel = (anchor: AnchorPoint): string =>
+const anchorLabel = (anchor: SegmentEndpointAnchor): string =>
   anchor.kind === 'vertex'
     ? `頂点${anchor.vertex}`
     : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
@@ -40,7 +40,7 @@ export function CellEditor({
   onSelectSplitTarget,
   onToggleSplitRelation,
 }: CellEditorProps) {
-  const anchors = createAnchors(divisions)
+  const anchors = createSegmentEndpointAnchors(divisions)
   const rendered = derivePatternGeometry(pattern)
   const splitCandidates = splitTargetId ? getSplitCandidates(pattern, splitTargetId) : []
   const points = trianglePoints().map((point) => `${px(point.x)},${py(point.y)}`).join(' ')
@@ -76,13 +76,13 @@ export function CellEditor({
             />
           )))}
           {anchors.map((anchor) => {
-            const point = resolveAnchor(anchor)
-            const selected = pendingAnchor && anchorKey(anchor) === anchorKey(pendingAnchor)
+            const point = resolveSegmentEndpoint(anchor)
+            const selected = pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(pendingAnchor)
             const disabled = splitTargetId !== null
             return (
               <g
                 className={`anchor ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
-                key={anchorKey(anchor)}
+                key={segmentEndpointAnchorKey(anchor)}
                 role="button"
                 aria-label={anchorLabel(anchor)}
                 aria-disabled={disabled}

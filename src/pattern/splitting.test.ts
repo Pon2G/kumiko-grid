@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
-import type { Segment } from '../geometry/segment'
+import type { Segment } from './segment'
 import type { CellPattern } from './cellPattern'
 import {
   addSplitRelation,

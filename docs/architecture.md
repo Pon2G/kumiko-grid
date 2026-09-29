@@ -39,7 +39,13 @@
 ```text
 src/
   geometry/
+    intersections.ts       # PointSegment同士の交差・parameter・Geometry分割
+    segment.ts             # PointSegment
   pattern/
+    anchor.ts              # 論理Anchorとsource端点の解決
+    segment.ts             # 安定したSegmentIdを持つsource Segment
+    intersectionAnchor.ts  # concrete instance pairのcanonical identityと解決
+    splitting.ts           # SplitRelation、論理Fragment、描画Geometryの導出
   layout/
   components/
   app/
@@ -53,7 +59,7 @@ src/
 
 Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界などの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成およびGeometryへの解決を編成する。
 
-現在 `geometry` 配下に置かれているAnchorPointやsource Segmentの型も、長期的な責務としてはPatternの論理モデルに属する。ファイル配置は実装時に依存方向を壊さない形へ整理する。
+AnchorPointやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。
 
 ### layout
 

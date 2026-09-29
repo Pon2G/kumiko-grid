@@ -1,9 +1,23 @@
-import { fragmentSegment, intersectSegments, isInteriorParameter, pointsAreClose } from '../geometry/intersections'
+import { intersectSegments, isInteriorParameter, pointsAreClose } from '../geometry/intersections'
 import type { Point } from '../geometry/types'
+import type { PointSegment } from '../geometry/segment'
 import type { CellPattern, SegmentInstancePair, SegmentInstanceRef, SplitRelation, SplitRelativeTransform, Symmetry } from './cellPattern'
+import { createIntersectionAnchor, intersectionAnchorContains, intersectionAnchorKey, type IntersectionAnchor } from './intersectionAnchor'
 import { expandPattern, instanceRefKey, instanceTransforms, type RenderedSegment } from './symmetry'
 
-export interface PatternFragment extends RenderedSegment { fragmentIndex: number }
+export type FragmentBoundaryRef =
+  | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
+  | IntersectionAnchor
+
+export interface LogicalFragment {
+  segmentInstanceRef: SegmentInstanceRef
+  boundaryA: FragmentBoundaryRef
+  boundaryB: FragmentBoundaryRef
+}
+
+export interface PatternFragment extends RenderedSegment {
+  logicalFragment: LogicalFragment
+}
 export interface SplitCandidate extends SplitRelation { points: Point[]; active: boolean }
 
 export const relativeTransformKey = (value: SplitRelativeTransform): string =>
@@ -83,6 +97,20 @@ const validatedOrbit = (pattern: CellPattern, relation: SplitRelation) => {
   return intersections.every((item) => item !== null) ? { pairs, intersections: intersections as Exclude<typeof intersections[number], null>[] } : null
 }
 
+/** 有効なrelation orbitから、向きを持たない論理交点集合を導出する。 */
+export function deriveIntersectionAnchors(pattern: CellPattern): IntersectionAnchor[] {
+  const anchors = new Map<string, IntersectionAnchor>()
+  for (const relation of pattern.splitRelations) {
+    const orbit = validatedOrbit(pattern, relation)
+    if (!orbit) continue
+    for (const [target, cutter] of orbit.pairs) {
+      const anchor = createIntersectionAnchor(target.instanceRef, cutter.instanceRef)
+      anchors.set(intersectionAnchorKey(anchor), anchor)
+    }
+  }
+  return [...anchors.values()]
+}
+
 /** 不変条件を満たす対称軌道だけを追加し、無効入力や重複では元のPatternを返す。 */
 export function addSplitRelation(pattern: CellPattern, relation: SplitRelation): CellPattern {
   const normalized: SplitRelation = { targetSegmentId: relation.targetSegmentId, cutterSegmentId: relation.cutterSegmentId,
@@ -104,22 +132,82 @@ export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPa
   { ...pattern, symmetry, splitRelations: [] })
 }
 
-/** validなPatternを変更せず、relationの軌道からtarget側の分割位置だけを導出する。 */
-export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
-  const parameters = new Map<string, number[]>()
+interface ResolvedBoundary {
+  ref: FragmentBoundaryRef
+  parameter: number
+  tieBreaker: string
+}
+
+/** target側instanceごとに論理境界を保ったまま、現在のGeometry順で隣接Fragmentを導出する。 */
+export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] {
+  const expanded = expandPattern(pattern)
+  const boundaries = new Map<string, ResolvedBoundary[]>()
+  for (const segment of expanded) boundaries.set(instanceRefKey(segment.instanceRef), [
+    { ref: { kind: 'segment-endpoint', endpoint: 'start' }, parameter: 0, tieBreaker: '0:start' },
+    { ref: { kind: 'segment-endpoint', endpoint: 'end' }, parameter: 1, tieBreaker: '2:end' },
+  ])
   for (const relation of pattern.splitRelations) {
-    const orbit = resolveSplitRelationOrbit(pattern, relation)
+    const orbit = validatedOrbit(pattern, relation)
     if (!orbit) continue
-    for (const [target, cutter] of orbit) {
+    for (const [target, cutter] of orbit.pairs) {
       const result = intersectSegments(target, cutter)
       if ((result.kind === 'cross' || result.kind === 'touch') && isInteriorParameter(target, result.firstT)) {
         const key = instanceRefKey(target.instanceRef)
-        parameters.set(key, [...(parameters.get(key) ?? []), result.firstT])
+        const anchor = createIntersectionAnchor(target.instanceRef, cutter.instanceRef)
+        const current = boundaries.get(key)
+        if (current && !current.some(({ ref }) => ref.kind === 'intersection' && intersectionAnchorKey(ref) === intersectionAnchorKey(anchor))) {
+          current.push({ ref: anchor, parameter: result.firstT, tieBreaker: `1:${intersectionAnchorKey(anchor)}` })
+        }
       }
     }
   }
-  return expandPattern(pattern).flatMap((target) => fragmentSegment(target, parameters.get(instanceRefKey(target.instanceRef)) ?? [])
-    .map((fragment, fragmentIndex) => ({ ...target, ...fragment, id: `${target.id}-fragment-${fragmentIndex}`, fragmentIndex })))
+  return expanded.flatMap((segment) => {
+    const ordered = [...(boundaries.get(instanceRefKey(segment.instanceRef)) ?? [])]
+      .sort((a, b) => a.parameter - b.parameter || (a.tieBreaker < b.tieBreaker ? -1 : 1))
+    return ordered.slice(1).map((boundaryB, index): LogicalFragment => ({
+      segmentInstanceRef: segment.instanceRef,
+      boundaryA: ordered[index].ref,
+      boundaryB: boundaryB.ref,
+    }))
+  })
+}
+
+const boundaryKey = (boundary: FragmentBoundaryRef): string => boundary.kind === 'segment-endpoint'
+  ? `endpoint:${boundary.endpoint}` : `intersection:${intersectionAnchorKey(boundary)}`
+
+/** 論理Fragmentを現在の座標へ解決する。ゼロ長区間はGeometryとして生成しない。 */
+export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
+  const target = expandPattern(pattern).find((item) => instanceRefKey(item.instanceRef) === instanceRefKey(fragment.segmentInstanceRef))
+  if (!target) return null
+  if ((fragment.boundaryA.kind === 'intersection' && !intersectionAnchorContains(fragment.boundaryA, target.instanceRef))
+    || (fragment.boundaryB.kind === 'intersection' && !intersectionAnchorContains(fragment.boundaryB, target.instanceRef))) return null
+  const points = new Map<string, Point>([
+    ['endpoint:start', target.start],
+    ['endpoint:end', target.end],
+  ])
+  for (const relation of pattern.splitRelations) {
+    const orbit = validatedOrbit(pattern, relation)
+    if (!orbit) continue
+    for (const [left, right] of orbit.pairs) {
+      const result = intersectSegments(left, right)
+      if (result.kind === 'cross' || result.kind === 'touch') {
+        points.set(`intersection:${intersectionAnchorKey(createIntersectionAnchor(left.instanceRef, right.instanceRef))}`, result.point)
+      }
+    }
+  }
+  const start = points.get(boundaryKey(fragment.boundaryA))
+  const end = points.get(boundaryKey(fragment.boundaryB))
+  return start && end && !pointsAreClose(start, end) ? { start, end } : null
+}
+
+/** 描画用IDや配列順を論理identityにせず、解決可能なFragment Geometryだけを返す。 */
+export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
+  const renderedByRef = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
+  return deriveLogicalFragments(pattern).flatMap((logicalFragment, renderIndex) => {
+    const rendered = renderedByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
+    const geometry = resolveLogicalFragment(pattern, logicalFragment)
+    return rendered && geometry ? [{ ...rendered, ...geometry, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }] : []
+  })
 }
 
 /** source pair×相対変換を列挙し、軌道全体が有効なcanonical relationだけを返す。 */

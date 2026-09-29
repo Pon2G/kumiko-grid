@@ -1,6 +1,6 @@
 import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
-import { resolveAnchor } from './anchorPoint'
+import { resolveAnchor } from '../pattern/anchor'
 import { fragmentSegment, GEOMETRY_EPSILON, intersectSegments } from './intersections'
 import { canonicalTriangle, triangleCentroid, TRIANGLE_HEIGHT } from './triangle'
 import { reflectPoint, rotatePoint } from './transform'

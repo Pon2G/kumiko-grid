@@ -346,7 +346,7 @@ IntersectionAnchor + target側split境界
   ↓
 PointSegmentへresolve
   ↓
-Effective / renderable Geometry
+Resolved / renderable Design Geometry
 ```
 
 異なるIntersectionAnchorが同一点へ解決されてもAnchor identityは統合しない。その結果、隣接する2境界が同一点となるゼロ長Logical Fragmentが生じてもよい。Geometry解釈時に長さ0のPointSegmentを実Geometryとして生成しないことは固定の解決規則とし、論理Anchorの削除・統合とは扱わない。

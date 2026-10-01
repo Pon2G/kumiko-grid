@@ -6,12 +6,12 @@ import { afterEach, describe, expect, vi } from 'vitest'
 import { contractTest } from '../../test/contractTest'
 import type { SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { CellPattern } from '../../pattern/cellPattern'
-import { deriveLogicalFragments } from '../../pattern/designGeometry'
+import { deriveLogicalFragments, splitRelationKey } from '../../pattern/designGeometry'
 import { excludeMaterial, restoreMaterial } from '../../pattern/materialExclusion'
 import { addSplitRelation, removeSegment, removeSplitRelation } from '../../pattern/patternOperations'
 import type { Segment } from '../../pattern/segment'
 import { CellEditor } from './CellEditor'
-import { reconcileEditorSelection, type EditorSelection } from './editorSelection'
+import { editorSelection, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, type EditorInteraction } from './editorInteraction'
 
 const target: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
 const cutter: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
@@ -21,17 +21,19 @@ const basePattern = (): CellPattern => ({ segments: [target, cutter], symmetry: 
 
 function Harness({ initial = basePattern() }: { initial?: CellPattern }) {
   const [pattern, setPattern] = useState(initial)
-  const [selection, setSelection] = useState<EditorSelection>(null)
-  const [pendingAnchor, setPendingAnchor] = useState<SegmentEndpointAnchor | null>(null)
+  const [interaction, setInteraction] = useState<EditorInteraction>(idleEditorInteraction)
   useEffect(() => {
-    const next = reconcileEditorSelection(pattern, selection)
-    if (next !== selection) setSelection(next)
-  }, [pattern, selection])
-  const anchor = (next: SegmentEndpointAnchor) => { setSelection(null); setPendingAnchor((current) => current ? null : next) }
-  return <CellEditor divisions={4} pattern={pattern} pendingAnchor={pendingAnchor} selection={selection}
-    onAnchorClick={anchor} onSelectionChange={setSelection}
+    const next = reconcileEditorInteraction(pattern, interaction)
+    if (next !== interaction) setInteraction(next)
+  }, [pattern, interaction])
+  const anchor = (next: SegmentEndpointAnchor) => setInteraction((current) => current.kind === 'creating-segment'
+    ? idleEditorInteraction() : { kind: 'creating-segment', startAnchor: next })
+  return <CellEditor divisions={4} pattern={pattern} pendingAnchor={pendingEditorAnchor(interaction)} selection={editorSelection(interaction)}
+    onAnchorClick={anchor}
+    onSelectionChange={(selection) => setInteraction(selection ? { kind: 'selected', selection } : idleEditorInteraction())}
+    onClearInteraction={() => setInteraction(idleEditorInteraction())}
     onDeleteSegment={(id) => setPattern((current) => removeSegment(current, id))}
-    onToggleSplitRelation={(value) => setPattern((current) => current.splitRelations.length
+    onToggleSplitRelation={(value) => setPattern((current) => current.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(value))
       ? removeSplitRelation(current, value) : addSplitRelation(current, value))}
     onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
     onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))} />
@@ -47,9 +49,35 @@ describe('Cell Editor直接操作', () => {
     await user.click(screen.getByLabelText('交点'))
 
     expect(screen.getByLabelText('線分 2').getAttribute('aria-current')).toBe('true')
+    expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('target: Segment 1 / 元の位置')
+    expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('cutter: Segment 2 / 元の位置')
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('未分割')
     await user.click(screen.getByRole('button', { name: '分割を追加' }))
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('分割済み')
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '表示Geometryと操作targetを分離し、Intersection targetを操作layerに置く', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<Harness />)
+    await user.click(screen.getByLabelText('線分 1'))
+    expect(container.querySelector('[data-canvas-layer="geometry"] .split-candidate-marker')).toBeTruthy()
+    expect(container.querySelector('[data-canvas-layer="interaction"] .intersection-hit[aria-label="交点"]')).toBeTruthy()
+    expect(container.querySelector('[data-canvas-layer="geometry"] [aria-label="交点"]')).toBeNull()
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, 'Anchorと同一点のIntersectionを別hit領域で選択でき、AnchorもSegment作成に使える', async () => {
+    const edgeTarget: Segment = { id: 'edge', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'vertex', vertex: 'B' } }
+    const touching: Segment = { id: 'touch', start: { kind: 'vertex', vertex: 'C' }, end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 } }
+    const user = userEvent.setup()
+    const { container } = render(<Harness initial={{ ...basePattern(), segments: [edgeTarget, touching] }} />)
+    await user.click(screen.getByLabelText('線分 1'))
+    const intersection = screen.getByLabelText('交点')
+    expect(intersection.classList.contains('around-anchor')).toBe(true)
+    await user.click(intersection)
+    expect(screen.getByLabelText('Intersectionインスペクター')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'AB辺を4等分した2番目の点' }))
+    expect(screen.getByText('終点を選択')).toBeTruthy()
+    expect(container.querySelector('.anchor-hit')?.parentElement?.getAttribute('data-canvas-layer')).toBe('interaction')
   })
 
   contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '同一点のIntersection candidateを統合せずクリックの繰り返しでcutterとともに巡回する', async () => {
@@ -69,12 +97,15 @@ describe('Cell Editor直接操作', () => {
     await user.click(screen.getByLabelText('線分 1'))
     await user.click(screen.getByLabelText('Fragment'))
     await user.click(screen.getByRole('button', { name: '材なしにする' }))
-    expect(screen.getByLabelText('Fragmentインスペクター').textContent).toContain('材なし')
+    const inspector = screen.getByLabelText('Fragmentインスペクター')
+    expect(inspector.textContent).toContain('境界1: 始点')
+    expect(inspector.textContent).toContain('境界2: 終点')
+    expect(inspector.textContent).toContain('材なし')
     await user.click(screen.getByRole('button', { name: '材を戻す' }))
     expect(screen.getByLabelText('Fragmentインスペクター').textContent).toContain('材あり')
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION' }, 'オブジェクト選択中もAnchorを優先し、背景とEscapeで選択解除する', async () => {
+  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION' }, 'Anchor選択後にオブジェクトを選ぶと作成途中を解除し、背景とEscapeは双方の状態を解除する', async () => {
     const user = userEvent.setup()
     render(<Harness />)
     await user.click(screen.getByLabelText('線分 1'))
@@ -83,10 +114,15 @@ describe('Cell Editor直接操作', () => {
     expect(screen.getByText('Canvasからオブジェクトを選択してください')).toBeTruthy()
 
     await user.click(screen.getByLabelText('線分 1'))
+    expect(screen.queryByText('終点を選択')).toBeNull()
+    expect(screen.getByLabelText('Segmentインスペクター')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '頂点A' }))
     fireEvent.click(screen.getByLabelText('正三角形セルエディター'))
+    expect(screen.queryByText('終点を選択')).toBeNull()
     expect(screen.getByText('Canvasからオブジェクトを選択してください')).toBeTruthy()
-    await user.click(screen.getByLabelText('線分 1'))
+    await user.click(screen.getByRole('button', { name: '頂点A' }))
     await user.keyboard('{Escape}')
+    expect(screen.queryByText('終点を選択')).toBeNull()
     expect(screen.getByText('Canvasからオブジェクトを選択してください')).toBeTruthy()
   })
 
@@ -111,6 +147,7 @@ describe('Cell Editor直接操作', () => {
     render(<Harness initial={initial} />)
     await user.click(screen.getByLabelText('線分 1'))
     await user.click(screen.getByLabelText('交点'))
+    expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('解除すると依存する材なし区間1件も解除されます')
     await user.click(screen.getByRole('button', { name: '分割を解除' }))
     expect(confirm).toHaveBeenCalledOnce()
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('分割済み')
@@ -141,8 +178,8 @@ describe('Cell Editor直接操作', () => {
 
   contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, 'Symmetry変更で消滅したgenerated instanceをGeometry一致するidentityへ付け替えない', () => {
     const rotational: CellPattern = { ...basePattern(), symmetry: { type: 'rotational' } }
-    const selection: EditorSelection = { kind: 'segment', segment: { sourceSegmentId: 'A', transform: { type: 'rotation', steps: 1 } } }
-    expect(reconcileEditorSelection(rotational, selection)).toBe(selection)
-    expect(reconcileEditorSelection({ ...rotational, symmetry: { type: 'none' } }, selection)).toBeNull()
+    const interaction: EditorInteraction = { kind: 'selected', selection: { kind: 'segment', segment: { sourceSegmentId: 'A', transform: { type: 'rotation', steps: 1 } } } }
+    expect(reconcileEditorInteraction(rotational, interaction)).toBe(interaction)
+    expect(reconcileEditorInteraction({ ...rotational, symmetry: { type: 'none' } }, interaction).kind).toBe('idle')
   })
 })

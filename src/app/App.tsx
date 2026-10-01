@@ -6,7 +6,13 @@ import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
 import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
-import { reconcileEditorSelection, type EditorSelection } from '../components/CellEditor/editorSelection'
+import {
+  editorSelection,
+  idleEditorInteraction,
+  pendingEditorAnchor,
+  reconcileEditorInteraction,
+  type EditorInteraction,
+} from '../components/CellEditor/editorInteraction'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
 
@@ -18,30 +24,27 @@ export default function App() {
     splitRelations: [],
     materialExclusions: [],
   })
-  const [pendingAnchor, setPendingAnchor] = useState<SegmentEndpointAnchor | null>(null)
-  const [selection, setSelection] = useState<EditorSelection>(null)
+  const [interaction, setInteraction] = useState<EditorInteraction>(idleEditorInteraction)
 
   useEffect(() => {
-    setPendingAnchor(null)
-    setSelection(null)
+    setInteraction(idleEditorInteraction())
   }, [divisions])
 
   const addAnchor = (anchor: SegmentEndpointAnchor) => {
-    setSelection(null)
-    if (!pendingAnchor) {
-      setPendingAnchor(anchor)
+    if (interaction.kind !== 'creating-segment') {
+      setInteraction({ kind: 'creating-segment', startAnchor: anchor })
       return
     }
-    if (segmentEndpointAnchorKey(anchor) !== segmentEndpointAnchorKey(pendingAnchor)) {
-      const segment: Segment = { id: globalThis.crypto.randomUUID(), start: pendingAnchor, end: anchor }
+    if (segmentEndpointAnchorKey(anchor) !== segmentEndpointAnchorKey(interaction.startAnchor)) {
+      const segment: Segment = { id: globalThis.crypto.randomUUID(), start: interaction.startAnchor, end: anchor }
       setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }
-    setPendingAnchor(null)
+    setInteraction(idleEditorInteraction())
   }
 
   const deleteSegment = (id: string) => {
     setPattern((current) => removeSegment(current, id))
-    setSelection(null)
+    setInteraction(idleEditorInteraction())
   }
 
   const toggleSplitRelation = (relation: SplitRelation) => {
@@ -50,9 +53,9 @@ export default function App() {
   }
 
   useEffect(() => {
-    const next = reconcileEditorSelection(pattern, selection)
-    if (next !== selection) setSelection(next)
-  }, [pattern, selection])
+    const next = reconcileEditorInteraction(pattern, interaction)
+    if (next !== interaction) setInteraction(next)
+  }, [pattern, interaction])
 
   return (
     <>
@@ -74,12 +77,13 @@ export default function App() {
           <CellEditor
             divisions={divisions}
             pattern={pattern}
-            pendingAnchor={pendingAnchor}
+            pendingAnchor={pendingEditorAnchor(interaction)}
             onAnchorClick={addAnchor}
             onDeleteSegment={deleteSegment}
             onToggleSplitRelation={toggleSplitRelation}
-            selection={selection}
-            onSelectionChange={setSelection}
+            selection={editorSelection(interaction)}
+            onSelectionChange={(selection) => setInteraction(selection ? { kind: 'selected', selection } : idleEditorInteraction())}
+            onClearInteraction={() => setInteraction(idleEditorInteraction())}
             onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
             onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}
           />

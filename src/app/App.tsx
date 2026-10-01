@@ -3,7 +3,8 @@ import { segmentEndpointAnchorKey } from '../pattern/anchor'
 import type { SegmentEndpointAnchor } from '../pattern/anchor'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
-import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
+import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey, type LogicalFragment } from '../pattern/splitting'
+import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
@@ -14,12 +15,15 @@ export default function App() {
     segments: [],
     symmetry: { type: 'rotational' },
     splitRelations: [],
+    materialExclusions: [],
   })
   const [pendingAnchor, setPendingAnchor] = useState<SegmentEndpointAnchor | null>(null)
   const [splitTargetId, setSplitTargetId] = useState<string | null>(null)
+  const [selectedFragment, setSelectedFragment] = useState<LogicalFragment | null>(null)
 
   useEffect(() => {
     setPendingAnchor(null)
+    setSelectedFragment(null)
   }, [divisions])
 
   const addAnchor = (anchor: SegmentEndpointAnchor) => {
@@ -36,6 +40,7 @@ export default function App() {
 
   const deleteSegment = (id: string) => {
     setPattern((current) => removeSegment(current, id))
+    setSelectedFragment(null)
     setSplitTargetId((current) => current === id ? null : current)
   }
 
@@ -46,6 +51,7 @@ export default function App() {
 
   const selectSplitTarget = (id: string | null) => {
     setPendingAnchor(null)
+    setSelectedFragment(null)
     setSplitTargetId(id)
   }
 
@@ -75,6 +81,10 @@ export default function App() {
             onDeleteSegment={deleteSegment}
             onSelectSplitTarget={selectSplitTarget}
             onToggleSplitRelation={toggleSplitRelation}
+            selectedFragment={selectedFragment}
+            onSelectFragment={setSelectedFragment}
+            onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
+            onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}
           />
           <PatternPreview pattern={pattern} />
         </div>

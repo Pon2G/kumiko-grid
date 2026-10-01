@@ -4,6 +4,7 @@ import type { PointSegment } from '../geometry/segment'
 import type { CellPattern, SegmentInstancePair, SegmentInstanceRef, SplitRelation, SplitRelativeTransform, Symmetry } from './cellPattern'
 import { createIntersectionAnchor, intersectionAnchorKey, type IntersectionAnchor, type ResolvedIntersectionAnchor } from './intersectionAnchor'
 import { expandPattern, instanceRefKey, instanceTransforms, type RenderedSegment } from './symmetry'
+import { cleanupMaterialExclusions, effectivePairCanSplit } from './materialExclusion'
 
 export type FragmentBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
@@ -25,6 +26,14 @@ export interface PatternFragment extends RenderedSegment {
   logicalFragment: LogicalFragment
 }
 export interface SplitCandidate extends SplitRelation { points: Point[]; active: boolean }
+export interface IntersectionInteractionCandidate {
+  target: SegmentInstanceRef
+  cutter: SegmentInstanceRef
+  anchor: IntersectionAnchor
+  point: Point
+  relation: SplitRelation
+  active: boolean
+}
 
 export const relativeTransformKey = (value: SplitRelativeTransform): string =>
   value.type === 'rotation' ? `rotation:${value.steps}` : value.type
@@ -243,17 +252,18 @@ export function addSplitRelation(pattern: CellPattern, relation: SplitRelation):
   return { ...pattern, splitRelations: [...pattern.splitRelations, normalized] }
 }
 export const removeSplitRelation = (pattern: CellPattern, relation: SplitRelation): CellPattern =>
-  ({ ...pattern, splitRelations: pattern.splitRelations.filter((item) => !sameRelation(item, relation)) })
-export const removeSegment = (pattern: CellPattern, segmentId: string): CellPattern => ({ ...pattern,
+  cleanupMaterialExclusions({ ...pattern, splitRelations: pattern.splitRelations.filter((item) => !sameRelation(item, relation)) })
+export const removeSegment = (pattern: CellPattern, segmentId: string): CellPattern => cleanupMaterialExclusions({ ...pattern,
   segments: pattern.segments.filter((item) => item.id !== segmentId),
   splitRelations: pattern.splitRelations.filter((item) => item.targetSegmentId !== segmentId && item.cutterSegmentId !== segmentId) })
 
 /** Symmetry変更とrelation再検証を単一のPattern状態遷移として行う。 */
 export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPattern {
-  return pattern.splitRelations.reduce<CellPattern>((next, relation) =>
+  const next = pattern.splitRelations.reduce<CellPattern>((next, relation) =>
     supportedRelatives(symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))
       ? addSplitRelation(next, relation) : next,
   { ...pattern, symmetry, splitRelations: [] })
+  return cleanupMaterialExclusions(next)
 }
 
 export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] {
@@ -281,10 +291,45 @@ export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
 export function getSplitCandidates(pattern: CellPattern, targetSegmentId: string): SplitCandidate[] {
   return pattern.segments.flatMap(({ id: cutterSegmentId }) => supportedRelatives(pattern.symmetry).flatMap((relativeTransform) => {
     const relation: SplitRelation = { targetSegmentId, cutterSegmentId, relativeTransform }
+    const active = pattern.splitRelations.some((item) => sameRelation(item, relation))
     const orbit = validatedOrbit(pattern, relation)
     if (!orbit) return []
+    if (!active) {
+      const refs = expandSplitRelationOrbit(pattern.symmetry, relation)
+      if (!refs?.every(({ target, cutter }) => effectivePairCanSplit(pattern, target, cutter))) return []
+    }
     const points: Point[] = []
     for (const intersection of orbit.intersections) if (!points.some((point) => pointsAreClose(point, intersection.point))) points.push(intersection.point)
-    return [{ ...relation, points, active: pattern.splitRelations.some((item) => sameRelation(item, relation)) }]
+    return [{ ...relation, points, active }]
   }))
+}
+
+/** 選択中concrete targetに対応する交点を、canonical relationと結び付けて返す。 */
+export function getIntersectionInteractionCandidates(
+  pattern: CellPattern,
+  target: SegmentInstanceRef,
+): IntersectionInteractionCandidate[] {
+  const instances = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
+  return getSplitCandidates(pattern, target.sourceSegmentId).flatMap((candidate) => {
+    const pair = expandSplitRelationOrbit(pattern.symmetry, candidate)
+      ?.find((item) => instanceRefKey(item.target) === instanceRefKey(target))
+    if (!pair) return []
+    const targetSegment = instances.get(instanceRefKey(pair.target))
+    const cutterSegment = instances.get(instanceRefKey(pair.cutter))
+    if (!targetSegment || !cutterSegment) return []
+    const intersection = intersectSegments(targetSegment, cutterSegment)
+    if (intersection.kind !== 'cross' && intersection.kind !== 'touch') return []
+    return [{
+      target: pair.target,
+      cutter: pair.cutter,
+      anchor: createIntersectionAnchor(pair.target, pair.cutter),
+      point: intersection.point,
+      relation: {
+        targetSegmentId: candidate.targetSegmentId,
+        cutterSegmentId: candidate.cutterSegmentId,
+        relativeTransform: candidate.relativeTransform,
+      },
+      active: candidate.active,
+    }]
+  })
 }

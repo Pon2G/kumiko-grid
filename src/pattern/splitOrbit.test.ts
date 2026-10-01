@@ -47,7 +47,7 @@ describe('相対変換によるsplit軌道', () => {
     expect(instanceRefKey(instances[0].instanceRef)).not.toBe(instanceRefKey(instances[1].instanceRef))
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, 'identityと回転+1/+2を別relationとして列挙する', () => {
+  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, 'identityと回転+1/+2を別relationとして列挙する', () => {
     const candidates = getSplitCandidates(rotational(), 'A')
     const relatives = candidates.map((candidate) => candidate.relativeTransform)
     expect(relatives).toContainEqual({ type: 'identity' })

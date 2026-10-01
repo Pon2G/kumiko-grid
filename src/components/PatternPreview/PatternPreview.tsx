@@ -1,7 +1,7 @@
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import { transformCellPoint, triangularGrid } from '../../layout/triangularGrid'
 import type { CellPattern } from '../../pattern/cellPattern'
-import { derivePatternGeometry } from '../../pattern/splitting'
+import { deriveEffectiveGeometry } from '../../pattern/materialExclusion'
 
 interface PatternPreviewProps { pattern: CellPattern }
 
@@ -11,7 +11,7 @@ const COLUMNS = 9
 
 export function PatternPreview({ pattern }: PatternPreviewProps) {
   const placements = triangularGrid.generate({ rows: ROWS, columns: COLUMNS, side: SIDE })
-  const segments = derivePatternGeometry(pattern)
+  const segments = deriveEffectiveGeometry(pattern)
   const width = (COLUMNS + 1) * SIDE * 0.5
   const height = ROWS * TRIANGLE_HEIGHT * SIDE
 

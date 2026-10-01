@@ -3,7 +3,8 @@ import type { SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { Segment } from '../../pattern/segment'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
-import { derivePatternGeometry, getSplitCandidates, splitRelationKey, type SplitCandidate } from '../../pattern/splitting'
+import { derivePatternGeometry, getSplitCandidates, splitRelationKey, type LogicalFragment, type SplitCandidate } from '../../pattern/splitting'
+import { isFragmentExcluded } from '../../pattern/materialExclusion'
 import { isSymmetryGeneratedSegment } from '../../pattern/symmetry'
 import {
   splitCandidateActionLabel,
@@ -20,6 +21,10 @@ interface CellEditorProps {
   onDeleteSegment: (id: string) => void
   onSelectSplitTarget: (id: string | null) => void
   onToggleSplitRelation: (relation: SplitRelation) => void
+  selectedFragment: LogicalFragment | null
+  onSelectFragment: (fragment: LogicalFragment | null) => void
+  onExcludeMaterial: (fragment: LogicalFragment) => void
+  onRestoreMaterial: (fragment: LogicalFragment) => void
 }
 
 const SCALE = 440
@@ -39,6 +44,10 @@ export function CellEditor({
   onDeleteSegment,
   onSelectSplitTarget,
   onToggleSplitRelation,
+  selectedFragment,
+  onSelectFragment,
+  onExcludeMaterial,
+  onRestoreMaterial,
 }: CellEditorProps) {
   const anchors = createSegmentEndpointAnchors(divisions)
   const rendered = derivePatternGeometry(pattern)
@@ -58,14 +67,19 @@ export function CellEditor({
         <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター">
           <polygon className="triangle-fill" points={points} />
           <polygon className="triangle-border" points={points} />
-          {rendered.map((segment) => (
+          {rendered.map((segment) => {
+            const excluded = isFragmentExcluded(pattern, segment.logicalFragment)
+            const selected = selectedFragment === segment.logicalFragment
+              || (selectedFragment && JSON.stringify(selectedFragment) === JSON.stringify(segment.logicalFragment))
+            return (
             <line
               key={segment.id}
-              className={isSymmetryGeneratedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'}
+              className={`${isSymmetryGeneratedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'} ${excluded ? 'material-ghost' : ''} ${selected ? 'selected-fragment' : ''}`}
               x1={px(segment.start.x)} y1={py(segment.start.y)}
               x2={px(segment.end.x)} y2={py(segment.end.y)}
+              onClick={(event) => { event.stopPropagation(); onSelectFragment(segment.logicalFragment) }}
             />
-          ))}
+          )})}
           {splitCandidates.flatMap((candidate) => candidate.points.map((point, index) => (
             <circle
               className="split-candidate-marker"
@@ -110,6 +124,13 @@ export function CellEditor({
         <span><i className="generated-key" /> 自動生成</span>
         <span className="segment-count">種となる線分：{pattern.segments.length}本</span>
       </div>
+      {selectedFragment && <div className="object-inspector" aria-label="選択オブジェクトのインスペクター">
+        <strong>Fragment</strong>
+        <span>{isFragmentExcluded(pattern, selectedFragment) ? '材なし' : '材あり'}</span>
+        {isFragmentExcluded(pattern, selectedFragment)
+          ? <button type="button" onClick={() => onRestoreMaterial(selectedFragment)}>材を戻す</button>
+          : <button type="button" onClick={() => onExcludeMaterial(selectedFragment)}>材なしにする</button>}
+      </div>}
       {pattern.segments.length > 0 && <SegmentList
         pattern={pattern}
         splitTargetId={splitTargetId}

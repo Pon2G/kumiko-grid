@@ -7,7 +7,7 @@ import {
 } from './splitRelationPresentation'
 
 describe('split relationの表示', () => {
-  contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '同じsource pairの各相対配置を表示名で区別できる', () => {
+  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '同じsource pairの各相対配置を表示名で区別できる', () => {
     const labels = [
       splitRelativeTransformLabel({ type: 'identity' }),
       splitRelativeTransformLabel({ type: 'rotation', steps: 1 }),
@@ -20,7 +20,7 @@ describe('split relationの表示', () => {
     expect(labels[1]).not.toBe(labels[2])
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '候補ボタンの名前で相対配置と追加・解除を区別できる', () => {
+  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '候補ボタンの名前で相対配置と追加・解除を区別できる', () => {
     const rotation1Add = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 1 }, false)
     const rotation2Add = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 2 }, false)
     const rotation1Remove = splitCandidateActionLabel('cutter', { type: 'rotation', steps: 1 }, true)
@@ -29,7 +29,7 @@ describe('split relationの表示', () => {
     expect(new Set([rotation1Add, rotation2Add, rotation1Remove]).size).toBe(3)
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-SPLIT-CANDIDATES' }, '候補操作では表示されたrelativeTransformを含むrelationを渡す', () => {
+  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '候補操作では表示されたrelativeTransformを含むrelationを渡す', () => {
     const candidate = {
       targetSegmentId: 'A',
       cutterSegmentId: 'B',

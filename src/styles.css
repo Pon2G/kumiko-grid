@@ -47,6 +47,11 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .pattern-line { stroke-linecap: round; stroke-width: 4; cursor: pointer; }
 .pattern-line.source { stroke: #b84c34; }
 .pattern-line.generated { stroke: #718179; stroke-width: 2.5; stroke-dasharray: 8 7; cursor: default; }
+.pattern-line.material-ghost { stroke: #a9aaa3; stroke-dasharray: 4 8; opacity: .55; cursor: pointer; }
+.pattern-line.selected-fragment { stroke: #f19b42; stroke-width: 7; opacity: 1; }
+.object-inspector { display: flex; align-items: center; gap: 14px; padding: 14px 26px; border-top: 1px solid #d8d7cf; background: #eeece4; font-size: 11px; }
+.object-inspector span { margin-left: auto; }
+.object-inspector button { padding: 7px 11px; border: 1px solid #b8b9b1; background: #f8f6ef; }
 .split-candidate-marker { fill: #f8f6ef; stroke: #bd4b31; stroke-width: 3; pointer-events: none; }
 .anchor-hit { fill: transparent; }
 .anchor-dot { fill: #f8f6ef; stroke: #32443b; stroke-width: 2; transition: .15s; }

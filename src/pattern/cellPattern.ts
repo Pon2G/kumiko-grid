@@ -32,8 +32,20 @@ export interface SplitRelation {
   relativeTransform: SplitRelativeTransform
 }
 
+export type MaterialBoundaryRef =
+  | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
+  | { kind: 'split-boundary'; cutterSegmentId: SegmentId; relativeTransform: SplitRelativeTransform }
+
+export interface MaterialExclusion {
+  segmentId: SegmentId
+  boundaryA: MaterialBoundaryRef
+  boundaryB: MaterialBoundaryRef
+}
+
 export interface CellPattern {
   segments: Segment[]
   symmetry: Symmetry
   splitRelations: SplitRelation[]
+  /** 旧データを読み込んだ状態も空集合として解釈する。 */
+  materialExclusions?: MaterialExclusion[]
 }

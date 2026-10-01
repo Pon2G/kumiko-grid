@@ -1,28 +1,23 @@
-import { createSegmentEndpointAnchors, resolveSegmentEndpoint, segmentEndpointAnchorKey } from '../../pattern/anchor'
-import type { SegmentEndpointAnchor } from '../../pattern/anchor'
-import type { Segment } from '../../pattern/segment'
+import { useEffect } from 'react'
+import { pointsAreClose } from '../../geometry/intersections'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
+import { createSegmentEndpointAnchors, resolveSegmentEndpoint, segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
-import { derivePatternGeometry, getSplitCandidates, splitRelationKey, type LogicalFragment, type SplitCandidate } from '../../pattern/splitting'
-import { isFragmentExcluded } from '../../pattern/materialExclusion'
-import { isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import {
-  splitCandidateActionLabel,
-  splitRelationFromCandidate,
-  splitRelativeTransformLabel,
-} from './splitRelationPresentation'
+import { derivePatternGeometry, logicalFragmentKey, type LogicalFragment } from '../../pattern/designGeometry'
+import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern/materialExclusion'
+import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
+import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
+import type { EditorSelection } from './editorSelection'
 
 interface CellEditorProps {
   divisions: number
   pattern: CellPattern
   pendingAnchor: SegmentEndpointAnchor | null
-  splitTargetId: string | null
+  selection: EditorSelection
   onAnchorClick: (anchor: SegmentEndpointAnchor) => void
+  onSelectionChange: (selection: EditorSelection) => void
   onDeleteSegment: (id: string) => void
-  onSelectSplitTarget: (id: string | null) => void
   onToggleSplitRelation: (relation: SplitRelation) => void
-  selectedFragment: LogicalFragment | null
-  onSelectFragment: (fragment: LogicalFragment | null) => void
   onExcludeMaterial: (fragment: LogicalFragment) => void
   onRestoreMaterial: (fragment: LogicalFragment) => void
 }
@@ -31,196 +26,114 @@ const SCALE = 440
 const PAD = 42
 const px = (value: number) => PAD + value * SCALE
 const py = (value: number) => PAD + value * SCALE
-const anchorLabel = (anchor: SegmentEndpointAnchor): string =>
-  anchor.kind === 'vertex'
-    ? `頂点${anchor.vertex}`
-    : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
-export function CellEditor({
-  divisions,
-  pattern,
-  pendingAnchor,
-  splitTargetId,
-  onAnchorClick,
-  onDeleteSegment,
-  onSelectSplitTarget,
-  onToggleSplitRelation,
-  selectedFragment,
-  onSelectFragment,
-  onExcludeMaterial,
-  onRestoreMaterial,
-}: CellEditorProps) {
-  const anchors = createSegmentEndpointAnchors(divisions)
-  const rendered = derivePatternGeometry(pattern)
-  const splitCandidates = splitTargetId ? getSplitCandidates(pattern, splitTargetId) : []
+const anchorLabel = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
+  ? `頂点${anchor.vertex}` : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
+const sameGeometry = (left: { start: { x: number; y: number }; end: { x: number; y: number } }, right: typeof left) =>
+  (pointsAreClose(left.start, right.start) && pointsAreClose(left.end, right.end))
+  || (pointsAreClose(left.start, right.end) && pointsAreClose(left.end, right.start))
+
+export function CellEditor(props: CellEditorProps) {
+  const { pattern, selection, onSelectionChange } = props
+  const anchors = createSegmentEndpointAnchors(props.divisions)
+  const designFragments = derivePatternGeometry(pattern)
+  const instances = expandPattern(pattern)
+  const target = selection?.kind === 'segment' ? selection.segment
+    : selection?.kind === 'intersection' ? selection.candidate.target
+      : selection?.kind === 'fragment' ? selection.fragment.segmentInstanceRef : null
+  const targetKey = target ? instanceRefKey(target) : null
+  const candidates = target ? getIntersectionInteractionCandidates(pattern, target) : []
+  const selectedCandidateKey = selection?.kind === 'intersection' ? intersectionCandidateKey(selection.candidate) : null
+  const cutterKey = selection?.kind === 'intersection' ? instanceRefKey(selection.candidate.cutter) : null
   const points = trianglePoints().map((point) => `${px(point.x)},${py(point.y)}`).join(' ')
 
-  return (
-    <section className="panel editor-panel" aria-labelledby="editor-title">
-      <div className="panel-heading editor-heading">
-        <div>
-          <span className="eyebrow">02 / セル</span>
-          <h2 id="editor-title">セルエディター</h2>
-        </div>
-        <span className="status-pill">{splitTargetId ? '分割ルールを選択' : pendingAnchor ? '終点を選択' : '描画できます'}</span>
-      </div>
-      <div className="editor-stage">
-        <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター">
-          <polygon className="triangle-fill" points={points} />
-          <polygon className="triangle-border" points={points} />
-          {rendered.map((segment) => {
-            const excluded = isFragmentExcluded(pattern, segment.logicalFragment)
-            const selected = selectedFragment === segment.logicalFragment
-              || (selectedFragment && JSON.stringify(selectedFragment) === JSON.stringify(segment.logicalFragment))
-            return (
-            <line
-              key={segment.id}
-              className={`${isSymmetryGeneratedSegment(segment) ? 'pattern-line generated' : 'pattern-line source'} ${excluded ? 'material-ghost' : ''} ${selected ? 'selected-fragment' : ''}`}
-              x1={px(segment.start.x)} y1={py(segment.start.y)}
-              x2={px(segment.end.x)} y2={py(segment.end.y)}
-              onClick={(event) => { event.stopPropagation(); onSelectFragment(segment.logicalFragment) }}
-            />
-          )})}
-          {splitCandidates.flatMap((candidate) => candidate.points.map((point, index) => (
-            <circle
-              className="split-candidate-marker"
-              key={`${candidate.cutterSegmentId}-${candidate.relativeTransform.type}-${candidate.relativeTransform.type === 'rotation' ? candidate.relativeTransform.steps : 0}-${index}`}
-              cx={px(point.x)}
-              cy={py(point.y)}
-              r="8"
-            />
-          )))}
-          {anchors.map((anchor) => {
-            const point = resolveSegmentEndpoint(anchor)
-            const selected = pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(pendingAnchor)
-            const disabled = splitTargetId !== null
-            return (
-              <g
-                className={`anchor ${selected ? 'selected' : ''} ${disabled ? 'disabled' : ''}`}
-                key={segmentEndpointAnchorKey(anchor)}
-                role="button"
-                aria-label={anchorLabel(anchor)}
-                aria-disabled={disabled}
-                tabIndex={disabled ? -1 : 0}
-                onClick={() => !disabled && onAnchorClick(anchor)}
-                onKeyDown={(event) => {
-                  if (!disabled && (event.key === 'Enter' || event.key === ' ')) onAnchorClick(anchor)
-                }}
-              >
-                <circle className="anchor-hit" cx={px(point.x)} cy={py(point.y)} r="18" />
-                <circle className="anchor-dot" cx={px(point.x)} cy={py(point.y)} r={anchor.kind === 'vertex' ? 7 : 5} />
-              </g>
-            )
-          })}
-        </svg>
-      </div>
-      {splitTargetId && <SplitCandidateList
-        candidates={splitCandidates}
-        segments={pattern.segments}
-        targetSegmentId={splitTargetId}
-        onToggle={onToggleSplitRelation}
-      />}
-      <div className="legend">
-        <span><i className="source-key" /> 種となる線分</span>
-        <span><i className="generated-key" /> 自動生成</span>
-        <span className="segment-count">種となる線分：{pattern.segments.length}本</span>
-      </div>
-      {selectedFragment && <div className="object-inspector" aria-label="選択オブジェクトのインスペクター">
-        <strong>Fragment</strong>
-        <span>{isFragmentExcluded(pattern, selectedFragment) ? '材なし' : '材あり'}</span>
-        {isFragmentExcluded(pattern, selectedFragment)
-          ? <button type="button" onClick={() => onRestoreMaterial(selectedFragment)}>材を戻す</button>
-          : <button type="button" onClick={() => onExcludeMaterial(selectedFragment)}>材なしにする</button>}
-      </div>}
-      {pattern.segments.length > 0 && <SegmentList
-        pattern={pattern}
-        splitTargetId={splitTargetId}
-        onDelete={onDeleteSegment}
-        onSelectSplitTarget={onSelectSplitTarget}
-        onRemoveSplitRelation={onToggleSplitRelation}
-      />}
-    </section>
-  )
+  useEffect(() => {
+    const clear = (event: KeyboardEvent) => { if (event.key === 'Escape') onSelectionChange(null) }
+    globalThis.addEventListener('keydown', clear)
+    return () => globalThis.removeEventListener('keydown', clear)
+  }, [onSelectionChange])
+
+  const selectSegment = (clicked: typeof instances[number]) => {
+    const overlapping = instances.filter((instance) => sameGeometry(instance, clicked))
+    const current = selection?.kind === 'segment'
+      ? overlapping.findIndex(({ instanceRef }) => instanceRefKey(instanceRef) === instanceRefKey(selection.segment)) : -1
+    onSelectionChange({ kind: 'segment', segment: overlapping[(current + 1) % overlapping.length].instanceRef })
+  }
+
+  const selectCandidateAt = (candidate: typeof candidates[number]) => {
+    const colocated = candidates.filter((item) => pointsAreClose(item.point, candidate.point))
+    const current = selection?.kind === 'intersection'
+      ? colocated.findIndex((item) => intersectionCandidateKey(item) === intersectionCandidateKey(selection.candidate)) : -1
+    onSelectionChange({ kind: 'intersection', candidate: colocated[(current + 1) % colocated.length] })
+  }
+
+  return <section className="panel editor-panel" aria-labelledby="editor-title">
+    <div className="panel-heading editor-heading"><div><span className="eyebrow">02 / セル</span><h2 id="editor-title">セルエディター</h2></div>
+      <span className="status-pill">{props.pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
+    <div className="editor-stage">
+      <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター"
+        onClick={() => onSelectionChange(null)}>
+        <polygon className="triangle-fill" points={points} />
+        <polygon className="triangle-border" points={points} />
+        {designFragments.map((fragment) => <line key={fragment.id}
+          className={`${isSymmetryGeneratedSegment(fragment) ? 'pattern-line generated' : 'pattern-line source'} ${isFragmentExcluded(pattern, fragment.logicalFragment) ? 'material-ghost' : ''}`}
+          x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}
+        {instances.map((instance) => {
+          const key = instanceRefKey(instance.instanceRef)
+          return <line key={`hit-${key}`} className={`segment-hit ${targetKey === key ? 'selected' : ''} ${cutterKey === key ? 'cutter' : ''}`}
+            aria-label={`線分 ${pattern.segments.findIndex(({ id }) => id === instance.sourceId) + 1}`}
+            aria-current={cutterKey === key ? 'true' : undefined}
+            x1={px(instance.start.x)} y1={py(instance.start.y)} x2={px(instance.end.x)} y2={py(instance.end.y)}
+            onClick={(event) => { event.stopPropagation(); selectSegment(instance) }} />
+        })}
+        {target && designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey).map((fragment) => <line
+          key={`fragment-${logicalFragmentKey(fragment.logicalFragment)}`} className={`fragment-hit ${selection?.kind === 'fragment' && logicalFragmentKey(selection.fragment) === logicalFragmentKey(fragment.logicalFragment) ? 'selected' : ''}`}
+          aria-label="Fragment" x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)}
+          onClick={(event) => { event.stopPropagation(); onSelectionChange({ kind: 'fragment', fragment: fragment.logicalFragment }) }} />)}
+        {candidates.map((candidate) => <circle key={intersectionCandidateKey(candidate)}
+          className={`split-candidate-marker ${selectedCandidateKey === intersectionCandidateKey(candidate) ? 'selected' : ''}`}
+          aria-label="交点" cx={px(candidate.point.x)} cy={py(candidate.point.y)} r="9"
+          onClick={(event) => { event.stopPropagation(); selectCandidateAt(candidate) }} />)}
+        {anchors.map((anchor) => {
+          const point = resolveSegmentEndpoint(anchor)
+          const selected = props.pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(props.pendingAnchor)
+          return <g className={`anchor ${selected ? 'selected' : ''}`} key={segmentEndpointAnchorKey(anchor)} role="button"
+            aria-label={anchorLabel(anchor)} tabIndex={0}
+            onClick={(event) => { event.stopPropagation(); props.onAnchorClick(anchor) }}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onAnchorClick(anchor) }}>
+            <circle className="anchor-hit" cx={px(point.x)} cy={py(point.y)} r="18" />
+            <circle className="anchor-dot" cx={px(point.x)} cy={py(point.y)} r={anchor.kind === 'vertex' ? 7 : 5} />
+          </g>
+        })}
+      </svg>
+    </div>
+    <div className="legend"><span><i className="source-key" /> 種となる線分</span><span><i className="generated-key" /> 自動生成</span>
+      <span className="segment-count">種となる線分：{pattern.segments.length}本</span></div>
+    <Inspector {...props} />
+  </section>
 }
 
-function SplitCandidateList({
-  candidates,
-  segments,
-  targetSegmentId,
-  onToggle,
-}: {
-  candidates: SplitCandidate[]
-  segments: Segment[]
-  targetSegmentId: string
-  onToggle: (relation: SplitRelation) => void
-}) {
-  const segmentNumber = new Map(segments.map((segment, index) => [segment.id, index + 1]))
-  return (
-    <div className="split-candidate-list" aria-label="分割ルール候補">
-      <strong>線分 {String(segmentNumber.get(targetSegmentId) ?? '?').padStart(2, '0')} の分割ルール</strong>
-      {candidates.length === 0 && <span className="empty-candidates">現在の交点候補はありません</span>}
-      {candidates.map((candidate) => {
-        const cutterLabel = `線分 ${String(segmentNumber.get(candidate.cutterSegmentId) ?? '?').padStart(2, '0')}`
-        return <div className="split-candidate-item" key={splitRelationKey(candidate)}>
-          <span>
-            {cutterLabel} との交点：
-            {splitRelativeTransformLabel(candidate.relativeTransform)}・{candidate.points.length}箇所
-          </span>
-          <button
-            type="button"
-            aria-label={splitCandidateActionLabel(cutterLabel, candidate.relativeTransform, candidate.active)}
-            onClick={() => onToggle(splitRelationFromCandidate(candidate))}
-          >
-            {candidate.active ? '分割を解除' : '分割を追加'}
-          </button>
-        </div>
-      })}
-    </div>
-  )
-}
-
-function SegmentList({
-  pattern,
-  splitTargetId,
-  onDelete,
-  onSelectSplitTarget,
-  onRemoveSplitRelation,
-}: {
-  pattern: CellPattern
-  splitTargetId: string | null
-  onDelete: (id: string) => void
-  onSelectSplitTarget: (id: string | null) => void
-  onRemoveSplitRelation: (relation: SplitRelation) => void
-}) {
-  const segmentNumber = new Map(pattern.segments.map((segment, index) => [segment.id, index + 1]))
-  return (
-    <div className="segment-list" aria-label="作成済み線分">
-      {pattern.segments.map((segment: Segment, index) => (
-        <div className={`segment-item ${splitTargetId === segment.id ? 'selected' : ''}`} key={segment.id}>
-          <span className="segment-name">
-            線分 {String(index + 1).padStart(2, '0')}
-            {pattern.splitRelations.some(({ targetSegmentId }) => targetSegmentId === segment.id) && <em>分割設定あり</em>}
-          </span>
-          <button
-            className="split-button"
-            type="button"
-            aria-pressed={splitTargetId === segment.id}
-            onClick={() => onSelectSplitTarget(splitTargetId === segment.id ? null : segment.id)}
-          >{splitTargetId === segment.id ? '選択解除' : '交点で分割'}</button>
-          <button className="delete-button" type="button" onClick={() => onDelete(segment.id)}>削除 ×</button>
-          {pattern.splitRelations
-            .filter(({ targetSegmentId }) => targetSegmentId === segment.id)
-            .map((relation) => (
-              <button
-                className="relation-remove-button"
-                type="button"
-                key={splitRelationKey(relation)}
-                onClick={() => onRemoveSplitRelation(relation)}
-              >
-                線分 {String(segmentNumber.get(relation.cutterSegmentId) ?? '?').padStart(2, '0')} / {splitRelativeTransformLabel(relation.relativeTransform)} の分割を解除
-              </button>
-            ))}
-        </div>
-      ))}
-    </div>
-  )
+function Inspector(props: CellEditorProps) {
+  const { selection, pattern } = props
+  if (!selection) return <div className="object-inspector"><span>Canvasからオブジェクトを選択してください</span></div>
+  if (selection.kind === 'segment') {
+    const number = pattern.segments.findIndex(({ id }) => id === selection.segment.sourceSegmentId) + 1
+    return <div className="object-inspector" aria-label="Segmentインスペクター"><strong>Segment {number}</strong>
+      <span>source family全体</span><button type="button" onClick={() => props.onDeleteSegment(selection.segment.sourceSegmentId)}>Segmentを削除</button></div>
+  }
+  if (selection.kind === 'intersection') {
+    const { candidate } = selection
+    const dependencies = materialExclusionsDependingOn(pattern, candidate.relation)
+    const toggle = () => {
+      if (candidate.active && dependencies.length > 0
+        && !globalThis.confirm(`この分割を解除すると材なし区間${dependencies.length}件も解除されます。続行しますか？`)) return
+      props.onToggleSplitRelation(candidate.relation)
+    }
+    return <div className="object-inspector" aria-label="Intersectionインスペクター"><strong>Intersection</strong>
+      <span>{candidate.active ? '分割済み' : '未分割'} / cutterを強調表示中</span>
+      <button type="button" onClick={toggle}>{candidate.active ? '分割を解除' : '分割を追加'}</button></div>
+  }
+  const excluded = isFragmentExcluded(pattern, selection.fragment)
+  return <div className="object-inspector" aria-label="Fragmentインスペクター"><strong>Fragment</strong><span>{excluded ? '材なし' : '材あり'}</span>
+    <button type="button" onClick={() => excluded ? props.onRestoreMaterial(selection.fragment) : props.onExcludeMaterial(selection.fragment)}>
+      {excluded ? '材を戻す' : '材なしにする'}</button></div>
 }

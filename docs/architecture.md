@@ -45,8 +45,11 @@ src/
     anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
     intersectionAnchor.ts  # concrete instance pairのcanonical identity
-    splitting.ts           # SplitRelation、split境界、Anchor / Fragment Design Geometryの導出・解決
+    designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
+    patternOperations.ts    # Pattern状態遷移とinvariant回復
+    splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
+    splitting.ts           # 上記moduleの公開互換entry point
   layout/
   components/
   app/
@@ -61,6 +64,8 @@ src/
 Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界、MaterialExclusionなどの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成、Design Geometry、Effective Geometryへの解決を編成する。
 
 Anchorやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。全Anchorのunionである `AnchorRef`、source Segment端点に現在許可する `SegmentEndpointAnchor`、その専用resolverである `resolveSegmentEndpoint` を名前でも区別する。
+
+Pattern内部の依存方向は `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` は両invariantを回復する状態遷移を、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。公開互換entry pointからのre-exportを除き、この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 

@@ -1,7 +1,7 @@
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef } from './cellPattern'
-import type { LogicalFragment, PatternFragment } from './splitting'
-import { deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, relativeTransformKey, splitRelationKey } from './splitting'
+import type { LogicalFragment, PatternFragment } from './designGeometry'
+import { deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, relativeTransformKey, splitRelationKey } from './designGeometry'
 import { instanceRefKey } from './symmetry'
 
 const boundaryKey = (boundary: MaterialBoundaryRef): string => boundary.kind === 'segment-endpoint'
@@ -79,8 +79,8 @@ export function excludeMaterial(pattern: CellPattern, fragment: LogicalFragment)
   const current = fragmentRange(pattern, fragment)
   if (!current) return pattern
   const segmentId = fragment.segmentInstanceRef.sourceSegmentId
-  const retained = (pattern.materialExclusions ?? []).filter((item) => item.segmentId !== segmentId)
-  const ranges = (pattern.materialExclusions ?? []).filter((item) => item.segmentId === segmentId)
+  const retained = pattern.materialExclusions.filter((item) => item.segmentId !== segmentId)
+  const ranges = pattern.materialExclusions.filter((item) => item.segmentId === segmentId)
     .map((item) => interval(item, current.order)).filter((item): item is [number, number] => item !== null)
   return { ...pattern, materialExclusions: [...retained, ...normalizeIntervals(pattern, segmentId, [...ranges, current.range])] }
 }
@@ -89,8 +89,8 @@ export function restoreMaterial(pattern: CellPattern, fragment: LogicalFragment)
   const current = fragmentRange(pattern, fragment)
   if (!current) return pattern
   const segmentId = fragment.segmentInstanceRef.sourceSegmentId
-  const retained = (pattern.materialExclusions ?? []).filter((item) => item.segmentId !== segmentId)
-  const ranges = (pattern.materialExclusions ?? []).filter((item) => item.segmentId === segmentId).flatMap((item) => {
+  const retained = pattern.materialExclusions.filter((item) => item.segmentId !== segmentId)
+  const ranges = pattern.materialExclusions.filter((item) => item.segmentId === segmentId).flatMap((item) => {
     const value = interval(item, current.order)
     if (!value) return []
     const [start, end] = value
@@ -104,7 +104,7 @@ export function restoreMaterial(pattern: CellPattern, fragment: LogicalFragment)
 export function isFragmentExcluded(pattern: CellPattern, fragment: LogicalFragment): boolean {
   const current = fragmentRange(pattern, fragment)
   if (!current) return false
-  return (pattern.materialExclusions ?? []).some((item) => item.segmentId === fragment.segmentInstanceRef.sourceSegmentId
+  return pattern.materialExclusions.some((item) => item.segmentId === fragment.segmentInstanceRef.sourceSegmentId
     && (() => { const value = interval(item, current.order); return value !== null && value[0] <= current.range[0] && value[1] >= current.range[1] })())
 }
 
@@ -115,8 +115,7 @@ export function deriveEffectiveGeometry(pattern: CellPattern): PatternFragment[]
 
 /** 状態遷移後に解決不能となった境界を捨て、残る区間を再正規化する。 */
 export function cleanupMaterialExclusions(pattern: CellPattern): CellPattern {
-  if (pattern.materialExclusions === undefined) return pattern
-  const valid = (pattern.materialExclusions ?? []).filter((exclusion) => {
+  const valid = pattern.materialExclusions.filter((exclusion) => {
     if (!pattern.segments.some(({ id }) => id === exclusion.segmentId)) return false
     const order = sourceBoundaryOrder(pattern, exclusion.segmentId)
     return order !== null && interval(exclusion, order) !== null
@@ -130,7 +129,7 @@ export function cleanupMaterialExclusions(pattern: CellPattern): CellPattern {
 }
 
 export const materialExclusionsDependingOn = (pattern: CellPattern, relation: { targetSegmentId: string; cutterSegmentId: string; relativeTransform: CellPattern['splitRelations'][number]['relativeTransform'] }) =>
-  (pattern.materialExclusions ?? []).filter((exclusion) => exclusion.segmentId === relation.targetSegmentId
+  pattern.materialExclusions.filter((exclusion) => exclusion.segmentId === relation.targetSegmentId
     && [exclusion.boundaryA, exclusion.boundaryB].some((boundary) => boundary.kind === 'split-boundary'
       && boundary.cutterSegmentId === relation.cutterSegmentId
       && relativeTransformKey(boundary.relativeTransform) === relativeTransformKey(relation.relativeTransform)))

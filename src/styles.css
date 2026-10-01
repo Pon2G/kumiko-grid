@@ -49,6 +49,12 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .pattern-line.generated { stroke: #718179; stroke-width: 2.5; stroke-dasharray: 8 7; cursor: default; }
 .pattern-line.material-ghost { stroke: #a9aaa3; stroke-dasharray: 4 8; opacity: .55; cursor: pointer; }
 .pattern-line.selected-fragment { stroke: #f19b42; stroke-width: 7; opacity: 1; }
+.segment-hit, .fragment-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
+.segment-hit.selected { stroke: rgba(241, 155, 66, .38); stroke-width: 11; }
+.segment-hit.cutter { stroke: rgba(49, 126, 174, .7); stroke-width: 10; }
+.fragment-hit.selected { stroke: rgba(241, 155, 66, .72); stroke-width: 10; }
+.split-candidate-marker { pointer-events: auto; cursor: pointer; }
+.split-candidate-marker.selected { fill: #bd4b31; stroke: #fff; }
 .object-inspector { display: flex; align-items: center; gap: 14px; padding: 14px 26px; border-top: 1px solid #d8d7cf; background: #eeece4; font-size: 11px; }
 .object-inspector span { margin-left: auto; }
 .object-inspector button { padding: 7px 11px; border: 1px solid #b8b9b1; background: #f8f6ef; }
@@ -58,26 +64,11 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .anchor:hover .anchor-dot, .anchor.selected .anchor-dot { fill: #bd4b31; stroke: #bd4b31; transform-box: fill-box; transform-origin: center; transform: scale(1.4); }
 .anchor.disabled { pointer-events: none; }
 .anchor.disabled .anchor-dot { fill: #e3e1d9; stroke: #969d99; }
-.split-candidate-list { display: grid; gap: 7px; padding: 14px 26px; border-top: 1px solid #d8d7cf; background: #eeece4; }
-.split-candidate-list > strong { font-size: 10px; letter-spacing: .05em; }
-.split-candidate-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 10px; }
-.split-candidate-item button { padding: 6px 10px; border: 1px solid #b8b9b1; background: #f8f6ef; font-size: 9px; white-space: nowrap; }
-.empty-candidates { color: #6b6961; font-size: 10px; }
 .legend { display: flex; gap: 22px; padding: 15px 26px; border-top: 1px solid #d8d7cf; color: #657069; font-size: 10px; }
 .legend span { display: flex; align-items: center; gap: 7px; }
 .legend i { display: inline-block; width: 25px; border-top: 3px solid #b84c34; }
 .legend .generated-key { border-color: #718179; border-top-style: dashed; }
 .legend .segment-count { margin-left: auto; font-family: 'DM Mono', monospace; }
-.segment-list { display: grid; gap: 7px; padding: 0 26px 18px; }
-.segment-item { display: grid; grid-template-columns: minmax(100px, 1fr) auto auto; align-items: center; border: 1px solid #d0cfc6; background: #f4f2eb; }
-.segment-item.selected { border-color: #bd4b31; box-shadow: inset 3px 0 #bd4b31; }
-.segment-name { padding: 7px 10px; font-size: 9px; white-space: nowrap; }
-.segment-name em { margin-left: 8px; padding: 2px 5px; color: white; background: #718179; font-style: normal; }
-.segment-item button { align-self: stretch; padding: 7px 10px; border: 0; border-left: 1px solid #d0cfc6; background: transparent; font-size: 9px; white-space: nowrap; }
-.segment-item .split-button { color: #405249; }
-.segment-item .delete-button { color: #b84c34; }
-.segment-item .relation-remove-button { grid-column: 1 / -1; border-top: 1px solid #d0cfc6; border-left: 0; color: #536159; text-align: left; }
-.segment-item button:hover { background: #e7e5dc; }
 .preview-meta { color: #777e79; font-size: 9px; }
 .preview-stage { position: relative; height: 290px; overflow: hidden; background: #24362e; }
 .preview-stage svg { width: 100%; height: 100%; }

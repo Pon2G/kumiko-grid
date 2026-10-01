@@ -46,6 +46,5 @@ export interface CellPattern {
   segments: Segment[]
   symmetry: Symmetry
   splitRelations: SplitRelation[]
-  /** 旧データを読み込んだ状態も空集合として解釈する。 */
-  materialExclusions?: MaterialExclusion[]
+  materialExclusions: MaterialExclusion[]
 }

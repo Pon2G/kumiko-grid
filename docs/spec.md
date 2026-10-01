@@ -143,7 +143,7 @@ Segment削除やSymmetry変更などによって、あるSegment instanceの論�
 ### 5.3 Material Exclusion
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION -->
-MaterialExclusionは、splitによって導出されたFragmentのうち「その区間には材が存在しない」ことを表すCell Patternのドメイン状態とする。source SegmentやSplitRelationを破壊的に変更して材を消すのではなく、Design Geometry上の区間に材なし状態を重ねる。表示上のhidden stateとは扱わない。
+MaterialExclusionは、Design Geometryから導出されるLogicalFragmentについて「その区間には材が存在しない」ことを表すCell Patternのドメイン状態とする。source SegmentやSplitRelationを破壊的に変更して材を消すのではなく、Design Geometry上の区間に材なし状態を重ねる。表示上のhidden stateとは扱わない。split境界がないSegment全体も `start-end` の1 LogicalFragmentとして扱われるため、Segment全体が材なしとなるMaterialExclusionも許可する。
 
 MaterialExclusionはconcreteなLogicalFragmentそのものや描画座標、Segment parameter、fragmentIndexを保存しない。選択されたconcrete Fragmentを、そのsource Segmentとsource-relativeな2つの境界へ正規化して保存する。概念上の境界参照は次のように扱う。
 
@@ -175,10 +175,12 @@ MaterialExclusionはsource Segment単位の状態とし、そのsourceからSymm
 
 材ありへ戻す操作は、選択した現在のDesign FragmentをMaterialExclusion集合から差し引く。例えば `I1-end` が材なしのときに `I1-I2` を戻すと、残るMaterialExclusionは `I2-end` となる。最大区間の正規化と、Editorで選択できるDesign Fragmentの粒度は独立して扱う。
 
+MaterialExclusionの区間順序・隣接・包含の判定は、source Segmentのidentity instanceを基準にDesign Geometryへ解決して行う。Symmetry展開配列の先頭要素や、操作時にクリックされたconcrete instanceを基準にはしない。
+
 <!-- test-contract: SPEC-PATTERN-EFFECTIVE-GEOMETRY -->
 Design Geometryはsource Segment、Symmetry、既存SplitRelationから導出され、MaterialExclusionの有無だけを理由にSplitRelation、IntersectionAnchor、LogicalFragmentを消滅させない。MaterialExclusionをDesign Geometryへ適用し、実際に材が存在する区間だけをEffective Geometryとする。
 
-Pattern Previewや加工上の材GeometryはEffective Geometryを用いる。新しく追加可能な交点・split候補もEffective Geometry同士の交差から導出し、材なし区間だけで成立する交点は新規候補にしない。
+Pattern Previewや加工上の材GeometryはEffective Geometryを用いる。新しく追加可能な交点・split候補もEffective Geometry同士の交差から導出し、材なし区間だけで成立する交点は新規候補にしない。新規split候補では、交点がtarget側の材ありEffective Fragmentの内部にあることを必須とする。cutter側は従来どおり端点でのtouchを許可する。
 
 一方、すでにCell Patternへ保持されているSplitRelationの有効性はDesign Geometryを基準に維持する。MaterialExclusionによって交点周辺の材がなくなったことを理由に既存SplitRelationを無効化しない。これにより、MaterialExclusion → SplitRelation消滅 → 境界消滅 → MaterialExclusion消滅という循環を作らない。
 
@@ -216,11 +218,17 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 split / Material Exclusion編集の主操作面はCanvasとする。cutter Segment、relativeTransform、Fragment IDなどの内部表現を一覧から選ばせることを基本操作にしない。
 
 <!-- test-contract: SPEC-EDITOR-DIRECT-OBJECT-SELECTION -->
-Canvas上で編集対象が未選択のとき、見えているSegmentをクリックまたはタップすると、そのconcrete `SegmentInstanceRef` を選択する。Segment選択中は、選択中Segment上のIntersection markerをLogicalFragmentより優先してhit testし、Intersection以外の区間をクリックまたはタップするとそのLogicalFragmentを選択する。別Segmentを操作した場合は、そのSegment instanceへ選択を切り替える。
+Canvas上のSegmentEndpointAnchorは、Segment / Fragmentの選択状態にかかわらず常にsource Segment作成対象とする。Anchorのhit testを最優先し、1点目のAnchorを選択したときは現在のオブジェクト選択を解除してSegment作成途中状態へ入る。2点目のAnchorを選択するとsource Segmentを作成し、作成途中状態を解除する。
 
-選択対象の優先順位は、少なくとも「Intersection marker → 選択中SegmentのFragment → その他のSegment → Canvas背景」とする。専用のsplitモード、材なしモード、材復元モードを必須にせず、選択対象の種類と現在状態からInspectorで可能な操作を決める。
+Segment作成途中でない状態で、見えているSegmentをクリックまたはタップすると、そのconcrete `SegmentInstanceRef` を選択する。Segment選択中は、選択中Segment上のIntersection markerをLogicalFragmentより優先してhit testし、Intersection以外の区間をクリックまたはタップするとそのLogicalFragmentを選択する。別Segmentを操作した場合は、そのSegment instanceへ選択を切り替える。
+
+選択対象の優先順位は「SegmentEndpointAnchor → Intersection marker → 選択中SegmentのFragment → その他のSegment → Canvas背景」とする。専用のsplitモード、材なしモード、材復元モードを必須にせず、選択対象の種類と現在状態からInspectorで可能な操作を決める。
+
+同じhit位置に複数のSegment instanceが存在する場合、Geometry一致だけで1つへ統合しない。クリックまたはタップを繰り返すことで候補を順に切り替え、現在選択中のSegment instanceをhighlightする。候補巡回順は永続identityにしない。
 
 Canvas内の対象物ではない場所をクリックまたはタップした場合、およびEscape操作では選択を解除する。Settings等のCell Editor外のUIを操作したことだけを理由にEditor選択を解除しない。選択解除時は候補選択とcutter highlightも解除する。
+
+Pattern変更後も現在選択中の論理対象が同じidentityで存在する場合は選択を維持してよい。Segment削除、SplitRelation解除、Symmetry変更などで選択対象の論理identityが消滅した場合は選択を解除し、Geometry上で同じ位置・形状に見える別identityへ自動で選択を付け替えない。
 
 <!-- test-contract: SPEC-EDITOR-INTERSECTION-SELECTION -->
 Segment instance選択中に提示する新規Intersection candidateはEffective Geometryから導出する。ユーザーがCanvas上のIntersection candidateを選択すると、そのcandidateを成立させるcutter Segment instanceを必ずhighlightする。候補が1件だけの場合もhighlightする。
@@ -232,12 +240,16 @@ Segment instance選択中に提示する新規Intersection candidateはEffective
 <!-- test-contract: SPEC-EDITOR-FRAGMENT-MATERIAL-SELECTION -->
 LogicalFragmentをCanvasから選択できる。材ありFragmentと材なしFragmentのどちらも同じDesign Fragmentを選択対象とし、Inspectorには現在のmaterial状態を表示する。材ありFragmentでは「材なしにする」、材なしFragmentでは「材を戻す」操作を提示する。
 
-MaterialExclusionにより実線が描画されないFragmentも、Cell Editorでは選択中SegmentのDesign Geometryを編集用のghost表示またはhit areaとして残し、元のLogicalFragment単位で選択・復元できるようにする。Pattern Previewでは材なしFragmentを描画しない。
+MaterialExclusionにより実線が描画されないFragmentも、Cell EditorではDesign Geometryを編集用のghost表示またはhit areaとして常時残し、元のLogicalFragment単位で選択・復元できるようにする。Segment全体が `start-end` のMaterialExclusionで材なしになっている場合も、ghostからSegmentを再選択できなければならない。選択中Segmentのghostは選択状態を判別できるよう強調してよい。Pattern Previewでは材なしFragmentを描画しない。
 
 <!-- test-contract: SPEC-EDITOR-SELECTION-INSPECTOR -->
 Cell Editor下部はSplitCandidateやFragmentの操作一覧を主UIとせず、現在選択しているオブジェクトのInspectorとする。Segment選択時はそのSegmentの状態、Intersection選択時はtarget / cutterとsplit状態、Fragment選択時は境界とmaterial状態を表示する。
 
-Patternを変更する操作は、選択対象に対して意味のあるものだけをInspectorへ提示する。少なくともIntersectionではsplit追加または解除、Fragmentでは材なしまたは材ありへの変更を行える。Inspectorの表示用ラベルや候補順をCell Patternの永続identityへ持ち込まない。
+Patternを変更する操作は、選択対象に対して意味のあるものだけをInspectorへ提示する。少なくともSegmentではsource Segment削除、Intersectionではsplit追加または解除、Fragmentでは材なしまたは材ありへの変更を行える。Symmetry生成されたSegment instanceを選択して削除する場合も、そのinstanceだけではなく対応するsource Segmentと同source familyを削除する操作として扱う。
+
+SplitRelation解除によって依存するMaterialExclusionが削除される場合、Inspectorでは解除前にその影響があることを明示し、ユーザー確認を経て実行する。依存MaterialExclusionがない通常のsplit解除では追加確認を必須にしない。依存MaterialExclusionは正規化済みの現在状態を基準に連動解除し、正規化前の操作履歴を復元しない。
+
+Inspectorの表示用ラベルや候補順をCell Patternの永続identityへ持ち込まない。
 
 スマートフォンでは端点Anchor、Intersection、Fragment、Segmentの各選択対象に十分なタップ領域を確保する。
 

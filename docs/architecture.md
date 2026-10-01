@@ -300,7 +300,7 @@ Symmetry変更でSplitRelationを引き継げることと、旧concrete SegmentI
 #### Split candidateとIntersection interaction candidate
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION -->
-新しく追加可能なSplitRelation候補は保存データではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開して**Effective Geometry上で**全concrete pairがsplit可能な候補だけを返す派生情報とする。
+新しく追加可能なSplitRelation候補は保存データではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開して**Effective Geometry上で**全concrete pairがsplit可能な候補だけを返す派生情報とする。新規候補の各concrete pairでは、交点がtarget側の材ありEffective Fragment内部にあることを要求する。cutter側は既存SplitRelationのsplit可能条件と同様、端点での `touch` を許容する。
 
 candidate生成はconcrete instance pairの列挙順や最初に発見された交点からrelation identityを決めない。MaterialExclusionで材が存在しない区間だけに成立する交点は新規SplitRelation候補にしない。一方、すでに保持されているSplitRelationの有効性検証はDesign Geometryを基準とし、Effective Geometryから消えたことを理由に既存relationを暗黙削除しない。
 
@@ -401,12 +401,12 @@ CellPattern内のMaterialExclusion集合は、同一source SegmentについてDe
 
 Fragmentを材なしにする操作では、選択されたconcrete LogicalFragmentをsource-relativeな境界pairへ変換し、現在のexclusion区間集合とのunionを取り、最大の連続区間へ再表現する。材を戻す操作では、選択された現在のDesign Fragmentの範囲をexclusion区間集合からsubtractし、必要なら1区間を2区間へ分割して再表現する。
 
-union / subtractionの計算中は、現在のDesign Geometryから解決したSegment parameterを一時的な順序・区間計算に利用してよい。ただしparameter、座標、Fragment配列indexをMaterialExclusionへ保存しない。
+union / subtractionの区間順序・隣接・包含判定は、source Segmentのidentity instance上へsource-relative境界を解決して行う。Symmetry展開配列の順序や、ユーザーが操作したconcrete instanceを基準にしない。計算中はDesign Geometryから得たSegment parameterを一時的な順序・区間計算に利用してよいが、parameter、座標、Fragment配列indexをMaterialExclusionへ保存しない。
 
 例えば `I1-I2` と `I2-end` の除外が `I1-end` へ統合されても、I2を成立させるSplitRelationとLogicalFragment境界はDesign Geometryに残る。MaterialExclusionのcanonicalizationはDesign topologyのcanonicalizationではない。
 
 <!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-INVARIANT -->
-CellPatternへ保持するMaterialExclusionは、source Segmentが存在し、両境界が現在のDesign Geometryで解決可能で、両境界が異なる有効区間を形成し、同一Segment上の他exclusionと重複・包含・隣接しない不変条件を満たす。
+CellPatternへ保持するMaterialExclusionは、source Segmentが存在し、両境界が現在のDesign Geometryで解決可能で、両境界が異なる有効区間を形成し、同一Segment上の他exclusionと重複・包含・隣接しない不変条件を満たす。`start-end` によるSegment全体のexclusionも有効な区間として許可する。
 
 `split-boundary` が参照するcanonical SplitRelationが存在しない場合、その境界は解決不能とする。MaterialExclusionの中間に存在するが外側境界として参照されていないSplitRelationは、exclusion正規化を理由に削除しない。
 
@@ -491,7 +491,7 @@ Layout固有の配置規則をCell Patternのモデルへ持ち込まない。
 
 ## 7. UIとの境界
 
-Reactはdivision数、Segment作成途中のAnchor、Canvas上の現在選択、同一点候補の巡回位置など一時的な操作状態を所有してよい。一方、CellPatternのSymmetry、SplitRelation、MaterialExclusionを変更するときの正規化・依存削除・不変条件回復はPattern層のドメイン操作へ委譲する。Reactから永続配列を便宜的に直接差し替えて不変条件を迂回しない。
+Reactはdivision数、Segment作成途中のAnchor、Canvas上の現在選択、同一点候補の巡回位置など一時的な操作状態を所有してよい。一方、CellPatternのSymmetry、SplitRelation、MaterialExclusionを変更するときの正規化・依存削除・不変条件回復はPattern層のドメイン操作へ委譲する。Reactから永続配列を便宜的に直接差し替えて不変条件を迂回しない。SegmentEndpointAnchorはオブジェクト選択中もSegment作成操作として利用可能にし、1点目のAnchor選択時はEditorSelectionを解除してSegment作成途中状態へ移る。
 
 <!-- test-contract: ARCH-EDITOR-SELECTION-STATE -->
 Cell Editorの選択状態は、永続モデルとは分離した一時状態として少なくとも次の意味を表せる構成とする。
@@ -504,17 +504,23 @@ type EditorSelection =
   | null
 ```
 
-具体的なReact stateの分割方法は契約としない。選択解除時はintersection candidateの巡回状態やcutter highlightなど、その選択に従属する一時状態も破棄する。
+具体的なReact stateの分割方法は契約としない。選択解除時はintersection candidateや重複Segment candidateの巡回状態、cutter highlightなど、その選択に従属する一時状態も破棄する。Pattern状態遷移後も同じ論理identityが存在する場合は選択を維持してよいが、identityが消滅した場合は選択解除し、Geometry一致する別identityへ自動で選択を付け替えない。
 
 <!-- test-contract: ARCH-EDITOR-HIT-TEST-PRIORITY -->
-Canvasのhit testでは、選択中target上のIntersection markerをFragmentより優先し、Fragmentをその他Segmentより優先する。材なしFragmentはEffective Geometryには存在しないため、選択中SegmentについてDesign Geometry由来の編集用hit areaを別に提供する。hit areaのSVG要素構造や具体サイズは契約にしない。
+Canvasのhit testではSegmentEndpointAnchorを最優先し、その次に選択中target上のIntersection marker、選択中SegmentのFragment、その他Segment、Canvas背景の順で扱う。Anchorは現在のEditorSelectionにかかわらずSegment作成対象とする。
+
+材なしFragmentはEffective Geometryには存在しないため、Cell EditorではDesign Geometry由来の編集用ghost / hit areaを常時提供する。Segment全体が材なしでEffective Geometryが空でも、そのDesign GeometryからSegmentを再選択できなければならない。hit areaのSVG要素構造や具体サイズは契約にしない。
 
 同一点に複数Intersection interaction candidateがある場合は、Pointを1つの論理候補へ統合せず、UI一時状態としてcandidateを巡回する。1候補の場合を含め、選択中candidateのcutter Segment instanceをCanvas上でhighlightする。
+
+同じhit位置に複数のSegment instanceが存在する場合もGeometry一致でidentityを統合せず、UI一時状態としてcandidateを巡回する。現在のcandidateだけを選択・highlightし、巡回順を永続状態へ持ち込まない。
 
 <!-- test-contract: ARCH-EDITOR-INSPECTOR-BOUNDARY -->
 Cell Editor下部は候補一覧の所有者ではなく、現在のEditorSelectionを表示・操作するInspectorとする。Canvasは「どの論理対象を操作するか」を選ぶ主操作面、Inspectorは「選択対象が現在どの状態で、どの状態遷移を実行できるか」を明示する面として責務を分ける。
 
-Intersectionのsplit追加・解除、Fragmentの材なし・材ありへの変更などCellPatternを変更する操作はInspectorからPattern層の状態遷移APIを呼ぶ。Canvas上の選択操作だけでCellPatternを暗黙変更しない。将来、操作手数を減らすショートカットを追加しても、同じPattern APIを利用し、この責務境界を迂回しない。
+Segmentのsource family削除、Intersectionのsplit追加・解除、Fragmentの材なし・材ありへの変更などCellPatternを変更する操作はInspectorからPattern層の状態遷移APIを呼ぶ。Symmetry生成instanceを選択した削除も、concrete instance単体ではなくsource Segment削除としてPattern層へ渡す。Canvas上の選択操作だけでCellPatternを暗黙変更しない。将来、操作手数を減らすショートカットを追加しても、同じPattern APIを利用し、この責務境界を迂回しない。
+
+SplitRelation解除により依存MaterialExclusionが連動削除される場合、UIは解除前にPattern層から影響を導出してInspectorへ表示し、確認を経て状態遷移を実行する。依存exclusionがない解除では確認を必須にしない。影響計算は現在のcanonical MaterialExclusionを基準とし、正規化前のユーザー操作履歴を保持・復元する設計にはしない。
 
 コンポーネントは計算済みモデルとcallbackを受け取り、次の処理をドメイン層へ委譲する。
 

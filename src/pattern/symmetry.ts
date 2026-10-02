@@ -153,12 +153,12 @@ export function relativeTransformBetween(
   return relative ? algebra.toRelative(relative) : null
 }
 
-export const supportedRelativeTransforms = (symmetry: Symmetry): SplitRelativeTransform[] => {
+export const supportedRelativeTransforms = (symmetry: Symmetry): readonly SplitRelativeTransform[] => {
   const algebra = symmetryTransformAlgebra(symmetry)
-  return algebra.transforms.flatMap((transform) => {
+  return Object.freeze(algebra.transforms.flatMap((transform) => {
     const relative = algebra.toRelative(transform)
     return relative ? [relative] : []
-  })
+  }))
 }
 
 /** relative表現をalgebra上へ戻してから逆元を求め、保存表現へ射影する。 */

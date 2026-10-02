@@ -117,6 +117,7 @@ describe('Symmetry transform algebra', () => {
       fromSourceSegmentId: 'old', toSourceSegmentId: 'new', toTransform: algebra.identity, direction: 'preserve',
     }, { sourceSegmentId: 'old', transform: rotation1 })!
     const relative = algebra.toRelative(rotation1)!
+    const relatives = supportedRelativeTransforms(symmetry)
 
     Reflect.set(algebra.identity, 'type', 'rotation')
     Reflect.set(rotation1, 'steps', 2)
@@ -125,6 +126,7 @@ describe('Symmetry transform algebra', () => {
     Reflect.set(restored, 'steps', 2)
     Reflect.set(mapped.transform, 'steps', 2)
     Reflect.set(relative, 'steps', 2)
+    Reflect.set(relatives, 0, { type: 'rotation', steps: 2 })
     Reflect.set(listed, 0, { type: 'rotation', steps: 2 })
     Reflect.set(algebra, 'compose', () => null)
     Reflect.set(identityInstance.instanceRef.transform, 'type', 'rotation')
@@ -134,6 +136,7 @@ describe('Symmetry transform algebra', () => {
       .toEqual({ type: 'rotation', steps: 2 })
     const expectedKeys = new Set(['identity', 'rotation:1', 'rotation:2'])
     expect(new Set(instanceTransforms(symmetry).map(instanceTransformKey))).toEqual(expectedKeys)
+    expect(relatives).toContainEqual({ type: 'rotation', steps: 1 })
     expect(supportedRelativeTransforms(symmetry)).toContainEqual({ type: 'rotation', steps: 1 })
     expect(new Set(firstExpansion.map(({ instanceRef }) => instanceTransformKey(instanceRef.transform)))).toEqual(expectedKeys)
     expect(new Set(expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })

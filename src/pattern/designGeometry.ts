@@ -3,7 +3,15 @@ import type { Point } from '../geometry/types'
 import type { PointSegment } from '../geometry/segment'
 import type { CellPattern, SegmentInstancePair, SegmentInstanceRef, SplitRelation, SplitRelativeTransform, Symmetry } from './cellPattern'
 import { createIntersectionAnchor, intersectionAnchorKey, type IntersectionAnchor, type ResolvedIntersectionAnchor } from './intersectionAnchor'
-import { expandPattern, instanceRefKey, instanceTransforms, type RenderedSegment } from './symmetry'
+import {
+  expandPattern,
+  inverseRelativeTransform as inverseSymmetryRelativeTransform,
+  instanceRefKey,
+  relativeTransformBetween,
+  supportedRelativeTransforms as symmetryRelativeTransforms,
+  symmetryTransformAlgebra,
+  type RenderedSegment,
+} from './symmetry'
 
 export type FragmentBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
@@ -29,43 +37,23 @@ export const relativeTransformKey = (value: SplitRelativeTransform): string =>
 export const splitRelationKey = (value: SplitRelation): string =>
   `${value.targetSegmentId}\0${value.cutterSegmentId}\0${relativeTransformKey(value.relativeTransform)}`
 
-const transformIndex = (ref: SegmentInstanceRef): number => ref.transform.type === 'rotation' ? ref.transform.steps
-  : ref.transform.type === 'mirror' ? 1 : 0
-
 /** concrete pairを現在の離散Symmetryにおける相対変換へ正規化する。 */
 export function normalizeRelativeTransform(symmetry: Symmetry, target: SegmentInstanceRef, cutter: SegmentInstanceRef): SplitRelativeTransform | null {
-  if (symmetry.type === 'none') return target.transform.type === 'identity' && cutter.transform.type === 'identity' ? { type: 'identity' } : null
-  if (symmetry.type === 'mirror') {
-    if ((target.transform.type === 'mirror' && target.transform.axis !== symmetry.axis)
-      || (cutter.transform.type === 'mirror' && cutter.transform.axis !== symmetry.axis)
-      || target.transform.type === 'rotation' || cutter.transform.type === 'rotation') return null
-    return transformIndex(target) === transformIndex(cutter) ? { type: 'identity' } : { type: 'mirror' }
-  }
-  if (target.transform.type === 'mirror' || cutter.transform.type === 'mirror') return null
-  const steps = (transformIndex(cutter) - transformIndex(target) + 3) % 3
-  return steps === 0 ? { type: 'identity' } : { type: 'rotation', steps: steps as 1 | 2 }
+  return relativeTransformBetween(symmetry, target.transform, cutter.transform)
 }
 
-export const inverseRelativeTransform = (relative: SplitRelativeTransform): SplitRelativeTransform =>
-  relative.type === 'rotation' ? { type: 'rotation', steps: relative.steps === 1 ? 2 : 1 } : relative
-
-export const supportedRelativeTransforms = (symmetry: Symmetry): SplitRelativeTransform[] => symmetry.type === 'none'
-  ? [{ type: 'identity' }]
-  : symmetry.type === 'mirror'
-    ? [{ type: 'identity' }, { type: 'mirror' }]
-    : [{ type: 'identity' }, { type: 'rotation', steps: 1 }, { type: 'rotation', steps: 2 }]
+export const inverseRelativeTransform = inverseSymmetryRelativeTransform
+export const supportedRelativeTransforms = symmetryRelativeTransforms
 
 /** canonical relationを描画モデルに依存しない安定したinstance identity pair群へ展開する。 */
 export const expandSplitRelationOrbit = (symmetry: Symmetry, relation: SplitRelation): SegmentInstancePair[] | null => {
   if (!supportedRelativeTransforms(symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
-  const transforms = instanceTransforms(symmetry)
-  const pairs = transforms.map((targetTransform) => {
+  const algebra = symmetryTransformAlgebra(symmetry)
+  const relative = algebra.fromRelative(relation.relativeTransform)
+  if (!relative) return null
+  const pairs = algebra.transforms.map((targetTransform) => {
     const target: SegmentInstanceRef = { sourceSegmentId: relation.targetSegmentId, transform: targetTransform }
-    const cutterTransform = transforms.find((transform) => {
-      const cutter: SegmentInstanceRef = { sourceSegmentId: relation.cutterSegmentId, transform }
-      const relative = normalizeRelativeTransform(symmetry, target, cutter)
-      return relative !== null && relativeTransformKey(relative) === relativeTransformKey(relation.relativeTransform)
-    })
+    const cutterTransform = algebra.compose(targetTransform, relative)
     return cutterTransform ? {
       target,
       cutter: { sourceSegmentId: relation.cutterSegmentId, transform: cutterTransform },

@@ -12,6 +12,7 @@ import {
   pendingEditorAnchor,
   reconcileEditorInteraction,
   type EditorInteraction,
+  type CanvasHitCandidate,
 } from '../components/CellEditor/editorInteraction'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
@@ -40,6 +41,16 @@ export default function App() {
       setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }
     setInteraction(idleEditorInteraction())
+  }
+
+  const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
+    const candidate = candidates.length === 1 ? candidates[0] : null
+    if (!candidate) setInteraction({ kind: 'choosing-target', candidates })
+    else if (candidate.kind === 'anchor') addAnchor(candidate.anchor)
+    else setInteraction({ kind: 'selected', selection: candidate.kind === 'segment'
+      ? { kind: 'segment', segment: candidate.segment }
+      : candidate.kind === 'intersection' ? { kind: 'intersection', candidate: candidate.candidate }
+        : { kind: 'fragment', fragment: candidate.fragment } })
   }
 
   const deleteSegment = (id: string) => {
@@ -78,11 +89,11 @@ export default function App() {
             divisions={divisions}
             pattern={pattern}
             pendingAnchor={pendingEditorAnchor(interaction)}
-            onAnchorClick={addAnchor}
             onDeleteSegment={deleteSegment}
             onToggleSplitRelation={toggleSplitRelation}
             selection={editorSelection(interaction)}
-            onSelectionChange={(selection) => setInteraction(selection ? { kind: 'selected', selection } : idleEditorInteraction())}
+            choosingCandidates={interaction.kind === 'choosing-target' ? interaction.candidates : null}
+            onHitCandidates={chooseCanvasTarget}
             onClearInteraction={() => setInteraction(idleEditorInteraction())}
             onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
             onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}

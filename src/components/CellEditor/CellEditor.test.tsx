@@ -11,7 +11,7 @@ import { excludeMaterial, restoreMaterial } from '../../pattern/materialExclusio
 import { addSplitRelation, removeSegment, removeSplitRelation } from '../../pattern/patternOperations'
 import type { Segment } from '../../pattern/segment'
 import { CellEditor } from './CellEditor'
-import { editorSelection, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, type EditorInteraction } from './editorInteraction'
+import { editorSelection, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, type CanvasHitCandidate, type EditorInteraction } from './editorInteraction'
 
 const target: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
 const cutter: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
@@ -28,9 +28,16 @@ function Harness({ initial = basePattern() }: { initial?: CellPattern }) {
   }, [pattern, interaction])
   const anchor = (next: SegmentEndpointAnchor) => setInteraction((current) => current.kind === 'creating-segment'
     ? idleEditorInteraction() : { kind: 'creating-segment', startAnchor: next })
+  const choose = (candidates: CanvasHitCandidate[]) => {
+    const candidate = candidates.length === 1 ? candidates[0] : null
+    if (!candidate) setInteraction({ kind: 'choosing-target', candidates })
+    else if (candidate.kind === 'anchor') anchor(candidate.anchor)
+    else setInteraction({ kind: 'selected', selection: candidate.kind === 'segment' ? { kind: 'segment', segment: candidate.segment }
+      : candidate.kind === 'intersection' ? { kind: 'intersection', candidate: candidate.candidate }
+        : { kind: 'fragment', fragment: candidate.fragment } })
+  }
   return <CellEditor divisions={4} pattern={pattern} pendingAnchor={pendingEditorAnchor(interaction)} selection={editorSelection(interaction)}
-    onAnchorClick={anchor}
-    onSelectionChange={(selection) => setInteraction(selection ? { kind: 'selected', selection } : idleEditorInteraction())}
+    choosingCandidates={interaction.kind === 'choosing-target' ? interaction.candidates : null} onHitCandidates={choose}
     onClearInteraction={() => setInteraction(idleEditorInteraction())}
     onDeleteSegment={(id) => setPattern((current) => removeSegment(current, id))}
     onToggleSplitRelation={(value) => setPattern((current) => current.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(value))
@@ -56,38 +63,30 @@ describe('Cell Editor直接操作', () => {
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('分割済み')
   })
 
-  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '表示Geometryと操作targetを分離し、Intersection targetを操作layerに置く', async () => {
-    const user = userEvent.setup()
-    const { container } = render(<Harness />)
-    await user.click(screen.getByLabelText('線分 1'))
-    expect(container.querySelector('[data-canvas-layer="geometry"] .split-candidate-marker')).toBeTruthy()
-    expect(container.querySelector('[data-canvas-layer="interaction"] .intersection-hit[aria-label="交点"]')).toBeTruthy()
-    expect(container.querySelector('[data-canvas-layer="geometry"] [aria-label="交点"]')).toBeNull()
-  })
-
-  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, 'Anchorと同一点のIntersectionを別hit領域で選択でき、AnchorもSegment作成に使える', async () => {
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, 'Anchorと同一点のIntersectionをInspectorで選び分ける', async () => {
     const edgeTarget: Segment = { id: 'edge', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'vertex', vertex: 'B' } }
     const touching: Segment = { id: 'touch', start: { kind: 'vertex', vertex: 'C' }, end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 } }
     const user = userEvent.setup()
-    const { container } = render(<Harness initial={{ ...basePattern(), segments: [edgeTarget, touching] }} />)
+    render(<Harness initial={{ ...basePattern(), segments: [edgeTarget, touching] }} />)
     await user.click(screen.getByLabelText('線分 1'))
-    const intersection = screen.getByLabelText('交点')
-    expect(intersection.classList.contains('around-anchor')).toBe(true)
-    await user.click(intersection)
+    await user.click(screen.getByRole('button', { name: 'AB辺を4等分した2番目の点' }))
+    expect(screen.getByLabelText('選択対象インスペクター')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: /Intersection:/ }))
     expect(screen.getByLabelText('Intersectionインスペクター')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'AB辺を4等分した2番目の点' }))
+    await user.click(screen.getByRole('button', { name: /Anchor:/ }))
     expect(screen.getByText('終点を選択')).toBeTruthy()
-    expect(container.querySelector('.anchor-hit')?.parentElement?.getAttribute('data-canvas-layer')).toBe('interaction')
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '同一点のIntersection candidateを統合せずクリックの繰り返しでcutterとともに巡回する', async () => {
+  contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, '同一点のIntersection candidateをInspectorで個別に選択する', async () => {
     const user = userEvent.setup()
     render(<Harness initial={{ ...basePattern(), segments: [target, cutter, colocatedCutter] }} />)
     await user.click(screen.getByLabelText('線分 1'))
-    const marker = screen.getAllByLabelText('交点')[0]
-    await user.click(marker)
+    await user.click(screen.getAllByLabelText('交点')[0])
+    await user.click(screen.getByRole('button', { name: 'Intersection: Segment 2 / 元の位置' }))
     expect(screen.getByLabelText('線分 2').getAttribute('aria-current')).toBe('true')
-    await user.click(marker)
+    await user.click(screen.getAllByLabelText('交点')[0])
+    await user.click(screen.getByRole('button', { name: 'Intersection: Segment 3 / 元の位置' }))
     expect(screen.getByLabelText('線分 3').getAttribute('aria-current')).toBe('true')
   })
 
@@ -126,15 +125,32 @@ describe('Cell Editor直接操作', () => {
     expect(screen.getByText('Canvasからオブジェクトを選択してください')).toBeTruthy()
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION' }, '同じGeometryのSegment instanceをクリックの繰り返しで巡回する', async () => {
+  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION' }, '完全重複Segment instanceをInspectorで個別に選択しFragment操作を妨げない', async () => {
     const duplicate: Segment = { ...target, id: 'duplicate' }
     const user = userEvent.setup()
     render(<Harness initial={{ ...basePattern(), segments: [target, duplicate] }} />)
     const lines = screen.getAllByLabelText('線分 2')
     await user.click(lines[0])
+    await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
     expect(screen.getByLabelText('Segmentインスペクター').textContent).toContain('Segment 1')
+    await user.click(screen.getByLabelText('Fragment'))
+    expect(screen.getByLabelText('Fragmentインスペクター')).toBeTruthy()
     await user.click(lines[0])
+    await user.click(screen.getByRole('button', { name: 'Segment 2 / 元の位置' }))
     expect(screen.getByLabelText('Segmentインスペクター').textContent).toContain('Segment 2')
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '背景とEscapeで曖昧候補状態を解除する', async () => {
+    const duplicate: Segment = { ...target, id: 'duplicate' }
+    const user = userEvent.setup()
+    render(<Harness initial={{ ...basePattern(), segments: [target, duplicate] }} />)
+    await user.click(screen.getAllByLabelText('線分 2')[0])
+    expect(screen.getByLabelText('選択対象インスペクター')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('正三角形セルエディター'))
+    expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
+    await user.click(screen.getAllByLabelText('線分 2')[0])
+    await user.keyboard('{Escape}')
+    expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
   })
 
   contractTest({ contract: 'SPEC-EDITOR-SELECTION-INSPECTOR', regression: 31 }, '依存exclusionがあるsplit解除だけ確認し、拒否時は状態を維持する', async () => {
@@ -181,5 +197,16 @@ describe('Cell Editor直接操作', () => {
     const interaction: EditorInteraction = { kind: 'selected', selection: { kind: 'segment', segment: { sourceSegmentId: 'A', transform: { type: 'rotation', steps: 1 } } } }
     expect(reconcileEditorInteraction(rotational, interaction)).toBe(interaction)
     expect(reconcileEditorInteraction({ ...rotational, symmetry: { type: 'none' } }, interaction).kind).toBe('idle')
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '曖昧候補のidentityが消滅しても残った候補を自動選択しない', () => {
+    const rotational: CellPattern = { ...basePattern(), symmetry: { type: 'rotational' } }
+    const interaction: EditorInteraction = { kind: 'choosing-target', candidates: [
+      { kind: 'segment', segment: { sourceSegmentId: 'A', transform: { type: 'identity' } } },
+      { kind: 'segment', segment: { sourceSegmentId: 'A', transform: { type: 'rotation', steps: 1 } } },
+    ] }
+    const reconciled = reconcileEditorInteraction({ ...rotational, symmetry: { type: 'none' } }, interaction)
+    expect(reconciled.kind).toBe('choosing-target')
+    if (reconciled.kind === 'choosing-target') expect(reconciled.candidates).toEqual([interaction.candidates[0]])
   })
 })

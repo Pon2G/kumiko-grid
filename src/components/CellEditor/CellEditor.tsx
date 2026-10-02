@@ -8,14 +8,15 @@ import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern
 import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
 import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
 import type { EditorSelection } from './editorSelection'
+import type { CanvasHitCandidate } from './editorInteraction'
 
 interface CellEditorProps {
   divisions: number
   pattern: CellPattern
   pendingAnchor: SegmentEndpointAnchor | null
   selection: EditorSelection
-  onAnchorClick: (anchor: SegmentEndpointAnchor) => void
-  onSelectionChange: (selection: EditorSelection) => void
+  choosingCandidates: CanvasHitCandidate[] | null
+  onHitCandidates: (candidates: CanvasHitCandidate[]) => void
   onClearInteraction: () => void
   onDeleteSegment: (id: string) => void
   onToggleSplitRelation: (relation: SplitRelation) => void
@@ -47,7 +48,7 @@ const boundaryLabel = (pattern: CellPattern, target: LogicalFragment['segmentIns
 }
 
 export function CellEditor(props: CellEditorProps) {
-  const { pattern, selection, onSelectionChange } = props
+  const { pattern, selection } = props
   const anchors = createSegmentEndpointAnchors(props.divisions)
   const designFragments = derivePatternGeometry(pattern)
   const instances = expandPattern(pattern)
@@ -68,16 +69,20 @@ export function CellEditor(props: CellEditorProps) {
 
   const selectSegment = (clicked: typeof instances[number]) => {
     const overlapping = instances.filter((instance) => sameGeometry(instance, clicked))
-    const current = selection?.kind === 'segment'
-      ? overlapping.findIndex(({ instanceRef }) => instanceRefKey(instanceRef) === instanceRefKey(selection.segment)) : -1
-    onSelectionChange({ kind: 'segment', segment: overlapping[(current + 1) % overlapping.length].instanceRef })
+    props.onHitCandidates(overlapping.map(({ instanceRef }) => ({ kind: 'segment', segment: instanceRef })))
   }
 
   const selectCandidateAt = (candidate: typeof candidates[number]) => {
     const colocated = candidates.filter((item) => pointsAreClose(item.point, candidate.point))
-    const current = selection?.kind === 'intersection'
-      ? colocated.findIndex((item) => intersectionCandidateKey(item) === intersectionCandidateKey(selection.candidate)) : -1
-    onSelectionChange({ kind: 'intersection', candidate: colocated[(current + 1) % colocated.length] })
+    const matchingAnchor = anchors.find((anchor) => pointsAreClose(resolveSegmentEndpoint(anchor), candidate.point))
+    props.onHitCandidates([...(matchingAnchor ? [{ kind: 'anchor' as const, anchor: matchingAnchor }] : []),
+      ...colocated.map((item) => ({ kind: 'intersection' as const, candidate: item }))])
+  }
+
+  const selectAnchorAt = (anchor: SegmentEndpointAnchor) => {
+    const point = resolveSegmentEndpoint(anchor)
+    props.onHitCandidates([{ kind: 'anchor', anchor }, ...candidates.filter((candidate) => pointsAreClose(candidate.point, point))
+      .map((candidate) => ({ kind: 'intersection' as const, candidate }))])
   }
 
   return <section className="panel editor-panel" aria-labelledby="editor-title">
@@ -120,21 +125,19 @@ export function CellEditor(props: CellEditorProps) {
         {target && designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey).map((fragment) => <line
           key={`fragment-${logicalFragmentKey(fragment.logicalFragment)}`} className="fragment-hit"
           aria-label="Fragment" x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)}
-          onClick={(event) => { event.stopPropagation(); onSelectionChange({ kind: 'fragment', fragment: fragment.logicalFragment }) }} />)}
+          onClick={(event) => { event.stopPropagation(); props.onHitCandidates([{ kind: 'fragment', fragment: fragment.logicalFragment }]) }} />)}
         {candidates.map((candidate) => {
-          const overlapsAnchor = anchors.some((anchor) => pointsAreClose(resolveSegmentEndpoint(anchor), candidate.point))
           return <circle key={intersectionCandidateKey(candidate)}
-          className={`intersection-hit ${overlapsAnchor ? 'around-anchor' : ''}`}
-          aria-label="交点" cx={px(candidate.point.x)} cy={py(candidate.point.y)} r={overlapsAnchor ? 22 : 16}
+          className="intersection-hit" aria-label="交点" cx={px(candidate.point.x)} cy={py(candidate.point.y)} r="11" vectorEffect="non-scaling-stroke"
           onClick={(event) => { event.stopPropagation(); selectCandidateAt(candidate) }} />
         })}
         {anchors.map((anchor) => {
           const point = resolveSegmentEndpoint(anchor)
           return <circle className="anchor-hit" key={segmentEndpointAnchorKey(anchor)} role="button"
             aria-label={anchorLabel(anchor)} tabIndex={0}
-            cx={px(point.x)} cy={py(point.y)} r="13"
-            onClick={(event) => { event.stopPropagation(); props.onAnchorClick(anchor) }}
-            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onAnchorClick(anchor) }} />
+            cx={px(point.x)} cy={py(point.y)} r="11" vectorEffect="non-scaling-stroke"
+            onClick={(event) => { event.stopPropagation(); selectAnchorAt(anchor) }}
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectAnchorAt(anchor) }} />
         })}
         </g>
       </svg>
@@ -147,6 +150,10 @@ export function CellEditor(props: CellEditorProps) {
 
 function Inspector(props: CellEditorProps) {
   const { selection, pattern } = props
+  if (props.choosingCandidates) return <div className="object-inspector target-chooser" aria-label="選択対象インスペクター">
+    <strong>選択対象</strong><div className="target-choices">{props.choosingCandidates.map((candidate) =>
+      <button type="button" key={canvasHitCandidateKey(candidate)} onClick={() => props.onHitCandidates([candidate])}>
+        {canvasHitCandidateLabel(pattern, candidate)}</button>)}</div></div>
   if (!selection) return <div className="object-inspector"><span>Canvasからオブジェクトを選択してください</span></div>
   if (selection.kind === 'segment') {
     const number = pattern.segments.findIndex(({ id }) => id === selection.segment.sourceSegmentId) + 1
@@ -174,3 +181,14 @@ function Inspector(props: CellEditorProps) {
     <button type="button" onClick={() => excluded ? props.onRestoreMaterial(selection.fragment) : props.onExcludeMaterial(selection.fragment)}>
       {excluded ? '材を戻す' : '材なしにする'}</button></div>
 }
+
+const canvasHitCandidateKey = (candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
+  ? `anchor:${segmentEndpointAnchorKey(candidate.anchor)}`
+  : candidate.kind === 'segment' ? `segment:${instanceRefKey(candidate.segment)}`
+    : candidate.kind === 'intersection' ? `intersection:${intersectionCandidateKey(candidate.candidate)}`
+      : `fragment:${logicalFragmentKey(candidate.fragment)}`
+const canvasHitCandidateLabel = (pattern: CellPattern, candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
+  ? `Anchor: ${anchorLabel(candidate.anchor)}`
+  : candidate.kind === 'segment' ? instanceLabel(pattern, candidate.segment)
+    : candidate.kind === 'intersection' ? `Intersection: ${instanceLabel(pattern, candidate.candidate.cutter)}`
+      : `Fragment: ${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryA)}–${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryB)}`

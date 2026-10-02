@@ -1,6 +1,4 @@
 import { useEffect, useState } from 'react'
-import { segmentEndpointAnchorKey } from '../pattern/anchor'
-import type { SegmentEndpointAnchor } from '../pattern/anchor'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
 import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
@@ -11,6 +9,7 @@ import {
   idleEditorInteraction,
   pendingEditorAnchor,
   reconcileEditorInteraction,
+  transitionEditorInteraction,
   type EditorInteraction,
   type CanvasHitCandidate,
 } from '../components/CellEditor/editorInteraction'
@@ -31,30 +30,17 @@ export default function App() {
     setInteraction(idleEditorInteraction())
   }, [divisions])
 
-  const addAnchor = (anchor: SegmentEndpointAnchor) => {
-    if (interaction.kind !== 'creating-segment') {
-      setInteraction({ kind: 'creating-segment', startAnchor: anchor })
-      return
-    }
-    if (segmentEndpointAnchorKey(anchor) !== segmentEndpointAnchorKey(interaction.startAnchor)) {
-      const segment: Segment = { id: globalThis.crypto.randomUUID(), start: interaction.startAnchor, end: anchor }
+  const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
+    const transition = transitionEditorInteraction(interaction, candidates)
+    setInteraction(transition.interaction)
+    if (transition.command?.kind === 'create-segment') {
+      const segment: Segment = {
+        id: globalThis.crypto.randomUUID(),
+        start: transition.command.startAnchor,
+        end: transition.command.endAnchor,
+      }
       setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }
-    setInteraction(idleEditorInteraction())
-  }
-
-  const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
-    if (candidates.length === 0) {
-      setInteraction(idleEditorInteraction())
-      return
-    }
-    const candidate = candidates.length === 1 ? candidates[0] : null
-    if (!candidate) setInteraction({ kind: 'choosing-target', candidates })
-    else if (candidate.kind === 'anchor') addAnchor(candidate.anchor)
-    else setInteraction({ kind: 'selected', selection: candidate.kind === 'segment'
-      ? { kind: 'segment', segment: candidate.segment }
-      : candidate.kind === 'intersection' ? { kind: 'intersection', candidate: candidate.candidate }
-        : { kind: 'fragment', fragment: candidate.fragment } })
   }
 
   const deleteSegment = (id: string) => {

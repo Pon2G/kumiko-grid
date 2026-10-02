@@ -50,6 +50,40 @@ const distanceToSegment = (point: Point, start: Point, end: Point): number => {
   return distance(point, { x: start.x + parameter * dx, y: start.y + parameter * dy })
 }
 
+interface ParameterInterval { start: number; end: number }
+
+/** line上に、上位priorityのpoint hit areaへ含まれない直接操作位置が残るかを判定する。 */
+const hasExclusiveHitRegion = (
+  start: Point,
+  end: Point,
+  higherPriorityPoints: Point[],
+  tapRadius: number,
+): boolean => {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const squaredLength = dx * dx + dy * dy
+  if (squaredLength === 0) return false
+
+  const covered = higherPriorityPoints.flatMap<ParameterInterval>((point) => {
+    const projection = ((point.x - start.x) * dx + (point.y - start.y) * dy) / squaredLength
+    const closest = { x: start.x + projection * dx, y: start.y + projection * dy }
+    const squaredPerpendicularDistance = (point.x - closest.x) ** 2 + (point.y - closest.y) ** 2
+    const squaredRadius = tapRadius * tapRadius
+    if (squaredPerpendicularDistance > squaredRadius) return []
+    const parameterRadius = Math.sqrt((squaredRadius - squaredPerpendicularDistance) / squaredLength)
+    const interval = { start: Math.max(0, projection - parameterRadius), end: Math.min(1, projection + parameterRadius) }
+    return interval.start <= interval.end ? [interval] : []
+  }).sort((left, right) => left.start - right.start)
+
+  let coveredUntil = 0
+  for (const interval of covered) {
+    if (interval.start > coveredUntil) return true
+    coveredUntil = Math.max(coveredUntil, interval.end)
+    if (coveredUntil >= 1) return false
+  }
+  return coveredUntil < 1
+}
+
 /** DOMの描画順に依存せず、1回のtapが届くlogical targetをscreen-spaceで解決する。 */
 export function resolveCanvasHitCandidates(
   pointer: Point,
@@ -61,13 +95,38 @@ export function resolveCanvasHitCandidates(
     .map(({ anchor }) => ({ kind: 'anchor' as const, anchor }))
   const intersections = context.intersections.filter(({ point }) => distance(pointer, canvasPointToScreen(point, viewport)) <= tapRadius)
     .map((candidate) => ({ kind: 'intersection' as const, candidate }))
-  if (anchors.length > 0 || intersections.length > 0) return [...anchors, ...intersections]
 
   const hitSegments = <T extends PatternFragment | RenderedSegment>(values: T[]) => values.filter((value) =>
     distanceToSegment(pointer, canvasPointToScreen(value.start, viewport), canvasPointToScreen(value.end, viewport)) <= tapRadius)
 
-  const fragments = hitSegments(context.fragments)
+  const hitFragments = hitSegments(context.fragments)
+  const fragments = hitFragments
     .map(({ logicalFragment: fragment }) => ({ kind: 'fragment' as const, fragment }))
+  const pointCandidates = [...anchors, ...intersections]
+  if (pointCandidates.length > 0) {
+    const higherPriorityPoints = [
+      ...context.anchors.map(({ point }) => canvasPointToScreen(point, viewport)),
+      ...context.intersections.map(({ point }) => canvasPointToScreen(point, viewport)),
+    ]
+    const unreachableFragments = hitFragments.filter((fragment) => !hasExclusiveHitRegion(
+      canvasPointToScreen(fragment.start, viewport),
+      canvasPointToScreen(fragment.end, viewport),
+      higherPriorityPoints,
+      tapRadius,
+    )).map(({ logicalFragment: fragment }) => ({ kind: 'fragment' as const, fragment }))
+    if (unreachableFragments.length > 0) return [...pointCandidates, ...unreachableFragments]
+
+    // 選択中SegmentではFragment操作を優先し、重複Segmentの再選択を強制しない。
+    if (fragments.length > 0) return pointCandidates
+
+    const unreachableSegments = hitSegments(context.segments).filter((segment) => !hasExclusiveHitRegion(
+      canvasPointToScreen(segment.start, viewport),
+      canvasPointToScreen(segment.end, viewport),
+      higherPriorityPoints,
+      tapRadius,
+    )).map(({ instanceRef: segment }) => ({ kind: 'segment' as const, segment }))
+    return [...pointCandidates, ...unreachableSegments]
+  }
   if (fragments.length > 0) return fragments
 
   return hitSegments(context.segments)

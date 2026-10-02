@@ -101,6 +101,12 @@ const pointerAtSegment = (pattern: CellPattern, sourceId: string, parameter = 0.
 }
 
 describe('Canvas hit resolver', () => {
+  const linePoint = (x: number) => ({ x, y: 0 })
+  const anchorAt = (index: number, x: number) => ({
+    anchor: { kind: 'edge-division', edge: 'AB', divisions: 12, index } as const,
+    point: linePoint(x),
+  })
+
   contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '十分離れたAnchorはpointer位置に応じて一意に解決する', () => {
     const anchors = createSegmentEndpointAnchors(4).slice(0, 2).map((anchor) => ({ anchor, point: resolveSegmentEndpoint(anchor) }))
     const candidates = resolveCanvasHitCandidates(canvasPointToScreen(anchors[0].point, mobileViewport), { ...emptyHitContext(), anchors }, mobileViewport)
@@ -156,6 +162,43 @@ describe('Canvas hit resolver', () => {
   contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION', regression: 31 }, '操作対象のない背景はcandidate 0件になる', () => {
     expect(resolveCanvasHitCandidates({ x: -100, y: -100 }, emptyHitContext(), mobileViewport)).toEqual([])
   })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '長いSegmentの端点では到達可能なSegmentを混ぜずAnchorを優先する', () => {
+    const segment = { ...expandPattern(basePattern())[0], start: linePoint(0), end: linePoint(1) }
+    const anchors = [anchorAt(1, 0), anchorAt(2, 1)]
+    const result = resolveCanvasHitCandidates(canvasPointToScreen(linePoint(0), mobileViewport),
+      { ...emptyHitContext(), anchors, segments: [segment] }, mobileViewport)
+    expect(result.map(({ kind }) => kind)).toEqual(['anchor'])
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '近接Anchorに全体を覆われた短いSegmentを曖昧候補へ含める', () => {
+    const segment = { ...expandPattern(basePattern())[0], start: linePoint(0), end: linePoint(1 / 12) }
+    const anchors = [anchorAt(1, 0), anchorAt(2, 1 / 12)]
+    const result = resolveCanvasHitCandidates(canvasPointToScreen(linePoint(1 / 24), mobileViewport),
+      { ...emptyHitContext(), anchors, segments: [segment] }, mobileViewport)
+    expect(result.map(({ kind }) => kind)).toEqual(['anchor', 'anchor', 'segment'])
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '長いFragmentは境界でpointを優先し中央から直接選択できる', () => {
+    const source = derivePatternGeometry(basePattern())[0]
+    const fragment = { ...source, start: linePoint(0), end: linePoint(1) }
+    const anchors = [anchorAt(1, 0), anchorAt(2, 1)]
+    const atBoundary = resolveCanvasHitCandidates(canvasPointToScreen(linePoint(0), mobileViewport),
+      { ...emptyHitContext(), anchors, fragments: [fragment] }, mobileViewport)
+    const atCenter = resolveCanvasHitCandidates(canvasPointToScreen(linePoint(0.5), mobileViewport),
+      { ...emptyHitContext(), anchors, fragments: [fragment] }, mobileViewport)
+    expect(atBoundary.map(({ kind }) => kind)).toEqual(['anchor'])
+    expect(atCenter.map(({ kind }) => kind)).toEqual(['fragment'])
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 31 }, '境界tap areaに全体を覆われた短いFragmentを曖昧候補へ含める', () => {
+    const source = derivePatternGeometry(basePattern())[0]
+    const fragment = { ...source, start: linePoint(0), end: linePoint(1 / 12) }
+    const anchors = [anchorAt(1, 0), anchorAt(2, 1 / 12)]
+    const result = resolveCanvasHitCandidates(canvasPointToScreen(linePoint(1 / 24), mobileViewport),
+      { ...emptyHitContext(), anchors, fragments: [fragment] }, mobileViewport)
+    expect(result.map(({ kind }) => kind)).toEqual(['anchor', 'anchor', 'fragment'])
+  })
 })
 
 describe('Cell Editor直接操作', () => {
@@ -166,8 +209,8 @@ describe('Cell Editor直接操作', () => {
     render(<Harness initial={initial} divisions={12} onPatternChange={onPatternChange} />)
     const start = { kind: 'edge-division', edge: 'AB', divisions: 12, index: 1 } as const
     const nearbyStart = { ...start, index: 2 } as const
-    const end = { kind: 'edge-division', edge: 'BC', divisions: 12, index: 2 } as const
-    const nearbyEnd = { ...end, index: 1 } as const
+    const end = { kind: 'edge-division', edge: 'AB', divisions: 12, index: 2 } as const
+    const nearbyEnd = { ...end, index: 3 } as const
     const midpoint = (first: SegmentEndpointAnchor, second: SegmentEndpointAnchor) => {
       const a = resolveSegmentEndpoint(first)
       const b = resolveSegmentEndpoint(second)
@@ -180,12 +223,16 @@ describe('Cell Editor直接操作', () => {
 
     pointerAt(midpoint(nearbyEnd, end))
     expect(screen.getByText('終点候補を選択')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Anchor: BC辺を12等分した2番目の点' }))
+    await user.click(screen.getByRole('button', { name: 'Anchor: AB辺を12等分した2番目の点' }))
 
     await waitFor(() => expect(onPatternChange.mock.lastCall?.[0].segments).toEqual([
       { id: 'test-1', start, end },
     ]))
     expect(screen.getByText('種となる線分：1本')).toBeTruthy()
+
+    pointerAt(midpoint(start, end))
+    await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
+    expect(screen.getByLabelText('Segmentインスペクター')).toBeTruthy()
   })
 
   contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '終点候補からAnchor以外を選ぶと作成を取り消して対象を選択する', async () => {
@@ -203,6 +250,44 @@ describe('Cell Editor直接操作', () => {
     expect(screen.getByLabelText('Segmentインスペクター').textContent).toContain('Segment 1')
     expect(screen.queryByText('終点を選択')).toBeNull()
     expect(screen.queryByText('終点候補を選択')).toBeNull()
+  })
+
+  contractTest({ contract: 'SPEC-EDITOR-FRAGMENT-MATERIAL-SELECTION', regression: 31 }, '短いFragmentと材なしghostへ曖昧候補から到達して材を切り替える', async () => {
+    const edge: Segment = { id: 'edge', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'vertex', vertex: 'B' } }
+    const firstCutter: Segment = { id: 'first', start: { kind: 'vertex', vertex: 'C' }, end: { kind: 'edge-division', edge: 'AB', divisions: 12, index: 1 } }
+    const secondCutter: Segment = { id: 'second', start: { kind: 'vertex', vertex: 'C' }, end: { kind: 'edge-division', edge: 'AB', divisions: 12, index: 2 } }
+    const pattern: CellPattern = {
+      segments: [edge, firstCutter, secondCutter],
+      symmetry: { type: 'none' },
+      splitRelations: [firstCutter, secondCutter].map((segment) => ({
+        targetSegmentId: edge.id,
+        cutterSegmentId: segment.id,
+        relativeTransform: { type: 'identity' as const },
+      })),
+      materialExclusions: [],
+    }
+    const shortFragment = derivePatternGeometry(pattern).find(({ logicalFragment }) =>
+      logicalFragment.segmentInstanceRef.sourceSegmentId === edge.id
+      && logicalFragment.boundaryA.kind === 'intersection'
+      && logicalFragment.boundaryB.kind === 'intersection')!
+    const midpoint = pointOnSegment(shortFragment, 0.5)
+    const user = userEvent.setup()
+    render(<Harness initial={pattern} divisions={12} />)
+
+    pointerAtSegment(pattern, edge.id, 0.5)
+    await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
+    pointerAt(midpoint)
+    await user.click(screen.getByRole('button', { name: /Fragment:.*Segment 2.*Segment 3/ }))
+    await user.click(screen.getByRole('button', { name: '材なしにする' }))
+    expect(screen.getByLabelText('Fragmentインスペクター').textContent).toContain('材なし')
+
+    pointerAtBackground()
+    pointerAtSegment(pattern, edge.id, 0.5)
+    await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
+    pointerAt(midpoint)
+    await user.click(screen.getByRole('button', { name: /Fragment:.*Segment 2.*Segment 3/ }))
+    await user.click(screen.getByRole('button', { name: '材を戻す' }))
+    expect(screen.getByLabelText('Fragmentインスペクター').textContent).toContain('材あり')
   })
 
   contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-SELECTION' }, 'SegmentからIntersectionを選択しcutterを強調してInspectorからsplitを追加する', async () => {

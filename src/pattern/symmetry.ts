@@ -16,23 +16,23 @@ export interface RenderedSegment extends PointSegment {
 }
 
 export interface SymmetryTransformAlgebra {
-  identity: SegmentInstanceTransform
-  transforms: readonly SegmentInstanceTransform[]
-  key(transform: SegmentInstanceTransform): string
-  isValid(transform: SegmentInstanceTransform): boolean
-  compose(first: SegmentInstanceTransform, second: SegmentInstanceTransform): SegmentInstanceTransform | null
-  inverse(transform: SegmentInstanceTransform): SegmentInstanceTransform | null
-  applyToPoint(transform: SegmentInstanceTransform, point: Point): Point | null
-  applyToSegment(transform: SegmentInstanceTransform, segment: PointSegment): PointSegment | null
-  toRelative(transform: SegmentInstanceTransform): SplitRelativeTransform | null
-  fromRelative(relative: SplitRelativeTransform): SegmentInstanceTransform | null
+  readonly identity: SegmentInstanceTransform
+  readonly transforms: readonly SegmentInstanceTransform[]
+  readonly key: (transform: SegmentInstanceTransform) => string
+  readonly isValid: (transform: SegmentInstanceTransform) => boolean
+  readonly compose: (first: SegmentInstanceTransform, second: SegmentInstanceTransform) => SegmentInstanceTransform | null
+  readonly inverse: (transform: SegmentInstanceTransform) => SegmentInstanceTransform | null
+  readonly applyToPoint: (transform: SegmentInstanceTransform, point: Point) => Point | null
+  readonly applyToSegment: (transform: SegmentInstanceTransform, segment: PointSegment) => PointSegment | null
+  readonly toRelative: (transform: SegmentInstanceTransform) => SplitRelativeTransform | null
+  readonly fromRelative: (relative: SplitRelativeTransform) => SegmentInstanceTransform | null
 }
 
 export interface SegmentInstanceBasisMapping {
-  fromSourceSegmentId: SegmentId
-  toSourceSegmentId: SegmentId
-  toTransform: SegmentInstanceTransform
-  direction: 'preserve' | 'reverse'
+  readonly fromSourceSegmentId: SegmentId
+  readonly toSourceSegmentId: SegmentId
+  readonly toTransform: SegmentInstanceTransform
+  readonly direction: 'preserve' | 'reverse'
 }
 
 /** 描画モデルの内部表現を利用側へ漏らさず、Symmetryで生成されたSegmentかを判定する。 */
@@ -50,11 +50,13 @@ const renderedSegmentId = (sourceId: string, transform: SegmentInstanceTransform
     : transform.type === 'mirror' ? `${sourceId}-mirror-${transform.axis}`
       : `${sourceId}-rotate-${transform.steps * 120}`
 
-const identity = { type: 'identity' } as const
+const identity: SegmentInstanceTransform = Object.freeze({ type: 'identity' })
 const rotation = (steps: number): SegmentInstanceTransform => {
   const normalized = ((steps % 3) + 3) % 3
-  return normalized === 0 ? identity : { type: 'rotation', steps: normalized as 1 | 2 }
+  return normalized === 0 ? identity : Object.freeze({ type: 'rotation', steps: normalized as 1 | 2 })
 }
+
+const immutableRelative = (relative: SplitRelativeTransform): SplitRelativeTransform => Object.freeze({ ...relative })
 
 const oppositeEdge = {
   A: ['B', 'C'],
@@ -75,27 +77,30 @@ const buildAlgebra = (
   toRelativeValid: (transform: SegmentInstanceTransform) => SplitRelativeTransform,
   fromRelativeValue: (relative: SplitRelativeTransform) => SegmentInstanceTransform | null,
 ): SymmetryTransformAlgebra => {
-  const keys = new Set(transforms.map(instanceTransformKey))
+  const immutableTransforms = Object.freeze(transforms.map((transform) => Object.freeze({ ...transform })))
+  const keys = new Set(immutableTransforms.map(instanceTransformKey))
   const isValid = (transform: SegmentInstanceTransform) => keys.has(instanceTransformKey(transform))
+  const canonicalTransform = (transform: SegmentInstanceTransform) =>
+    immutableTransforms.find((candidate) => instanceTransformKey(candidate) === instanceTransformKey(transform)) ?? null
   const algebra: SymmetryTransformAlgebra = {
-    identity,
-    transforms,
+    identity: canonicalTransform(identity)!,
+    transforms: immutableTransforms,
     key: instanceTransformKey,
     isValid,
-    compose: (first, second) => isValid(first) && isValid(second) ? composeValid(first, second) : null,
-    inverse: (transform) => isValid(transform) ? inverseValid(transform) : null,
+    compose: (first, second) => isValid(first) && isValid(second) ? canonicalTransform(composeValid(first, second)) : null,
+    inverse: (transform) => isValid(transform) ? canonicalTransform(inverseValid(transform)) : null,
     applyToPoint: (transform, point) => isValid(transform) ? applyValid(transform, point) : null,
     applyToSegment: (transform, segment) => {
       if (!isValid(transform)) return null
       return { start: applyValid(transform, segment.start), end: applyValid(transform, segment.end) }
     },
-    toRelative: (transform) => isValid(transform) ? toRelativeValid(transform) : null,
+    toRelative: (transform) => isValid(transform) ? immutableRelative(toRelativeValid(transform)) : null,
     fromRelative: (relative) => {
       const transform = fromRelativeValue(relative)
-      return transform && isValid(transform) ? transform : null
+      return transform ? canonicalTransform(transform) : null
     },
   }
-  return algebra
+  return Object.freeze(algebra)
 }
 
 /** Symmetry種別固有の有限変換規則を、この構築境界だけで選択する。 */
@@ -109,7 +114,7 @@ export function symmetryTransformAlgebra(symmetry: Symmetry): SymmetryTransformA
     (relative) => relative.type === 'identity' ? identity : null,
   )
   if (symmetry.type === 'mirror') {
-    const mirror = { type: 'mirror', axis: symmetry.axis } as const
+    const mirror = Object.freeze({ type: 'mirror', axis: symmetry.axis } as const)
     const [axisStart, axisEnd] = mirrorAxisPoints(symmetry.axis)
     return buildAlgebra(
       [identity, mirror],
@@ -133,8 +138,8 @@ export function symmetryTransformAlgebra(symmetry: Symmetry): SymmetryTransformA
   )
 }
 
-export const instanceTransforms = (symmetry: Symmetry): SegmentInstanceTransform[] =>
-  [...symmetryTransformAlgebra(symmetry).transforms]
+export const instanceTransforms = (symmetry: Symmetry): readonly SegmentInstanceTransform[] =>
+  symmetryTransformAlgebra(symmetry).transforms
 
 export function relativeTransformBetween(
   symmetry: Symmetry,

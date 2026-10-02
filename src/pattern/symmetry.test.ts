@@ -6,8 +6,11 @@ import type { CellPattern } from './cellPattern'
 import {
   expandPattern,
   inverseRelativeTransform,
+  instanceTransformKey,
+  instanceTransforms,
   isSymmetryGeneratedSegment,
   mapSegmentInstance,
+  supportedRelativeTransforms,
   symmetryTransformAlgebra,
   type RenderedSegment,
 } from './symmetry'
@@ -98,6 +101,43 @@ describe('Symmetry transform algebra', () => {
     expect(algebra.isValid({ type: 'mirror', axis: 'A' })).toBe(false)
     expect(algebra.compose(algebra.identity, { type: 'mirror', axis: 'A' })).toBeNull()
     expect(algebra.fromRelative({ type: 'rotation', steps: 1 })).toBeNull()
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, '返却値への変更操作が他のinstanceや後続の計算を破壊しない', () => {
+    const symmetry = { type: 'rotational' } as const
+    const algebra = symmetryTransformAlgebra(symmetry)
+    const listed = instanceTransforms(symmetry)
+    const firstExpansion = expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
+    const rotation1 = algebra.transforms.find((transform) => instanceTransformKey(transform) === 'rotation:1')!
+    const identityInstance = firstExpansion.find(({ instanceRef }) => instanceTransformKey(instanceRef.transform) === 'identity')!
+    const composed = algebra.compose(algebra.identity, rotation1)!
+    const inverse = algebra.inverse({ type: 'rotation', steps: 2 })!
+    const restored = algebra.fromRelative({ type: 'rotation', steps: 1 })!
+    const mapped = mapSegmentInstance(symmetry, {
+      fromSourceSegmentId: 'old', toSourceSegmentId: 'new', toTransform: algebra.identity, direction: 'preserve',
+    }, { sourceSegmentId: 'old', transform: rotation1 })!
+    const relative = algebra.toRelative(rotation1)!
+
+    Reflect.set(algebra.identity, 'type', 'rotation')
+    Reflect.set(rotation1, 'steps', 2)
+    Reflect.set(composed, 'steps', 2)
+    Reflect.set(inverse, 'steps', 2)
+    Reflect.set(restored, 'steps', 2)
+    Reflect.set(mapped.transform, 'steps', 2)
+    Reflect.set(relative, 'steps', 2)
+    Reflect.set(listed, 0, { type: 'rotation', steps: 2 })
+    Reflect.set(algebra, 'compose', () => null)
+    Reflect.set(identityInstance.instanceRef.transform, 'type', 'rotation')
+
+    expect(instanceTransformKey(algebra.identity)).toBe('identity')
+    expect(algebra.compose({ type: 'rotation', steps: 1 }, { type: 'rotation', steps: 1 }))
+      .toEqual({ type: 'rotation', steps: 2 })
+    const expectedKeys = new Set(['identity', 'rotation:1', 'rotation:2'])
+    expect(new Set(instanceTransforms(symmetry).map(instanceTransformKey))).toEqual(expectedKeys)
+    expect(supportedRelativeTransforms(symmetry)).toContainEqual({ type: 'rotation', steps: 1 })
+    expect(new Set(firstExpansion.map(({ instanceRef }) => instanceTransformKey(instanceRef.transform)))).toEqual(expectedKeys)
+    expect(new Set(expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
+      .map(({ instanceRef }) => instanceTransformKey(instanceRef.transform)))).toEqual(expectedKeys)
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SEGMENT-INSTANCE-MAPPING' }, 'basis mappingを任意instanceへ同じalgebraの合成順で適用する', () => {

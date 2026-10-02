@@ -45,7 +45,11 @@ src/
     anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
     intersectionAnchor.ts  # concrete instance pairのcanonical identity
-    splitting.ts           # SplitRelation、split境界、Anchor / Fragment Geometryの導出・解決
+    designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
+    materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
+    patternOperations.ts    # Pattern状態遷移とinvariant回復
+    splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
+    splitting.ts           # 上記moduleの公開互換entry point
   layout/
   components/
   app/
@@ -57,9 +61,11 @@ src/
 
 ### pattern
 
-Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界などの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成およびGeometryへの解決を編成する。
+Cell Patternの論理モデルを担当する。Anchor参照、source Segment、Segment instance identity、SplitRelation、IntersectionAnchor、Fragment境界、MaterialExclusionなどの論理identityと依存関係はPattern側の責務とし、Symmetry等による派生Segment生成、Design Geometry、Effective Geometryへの解決を編成する。
 
 Anchorやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。全Anchorのunionである `AnchorRef`、source Segment端点に現在許可する `SegmentEndpointAnchor`、その専用resolverである `resolveSegmentEndpoint` を名前でも区別する。
+
+Pattern内部の依存方向は `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` は両invariantを回復する状態遷移を、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。公開互換entry pointからのre-exportを除き、この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 
@@ -167,7 +173,7 @@ IntersectionAnchorを `SplitRelation + logical transform` で表現しない。S
 
 ### CellPattern
 
-ユーザーが定義した基本Segment群、Symmetry、および有効なSplitRelationを持つ。
+ユーザーが定義した基本Segment群、Symmetry、有効なSplitRelation、および正規化済みMaterialExclusionを持つ。
 
 <!-- test-contract: ARCH-PATTERN-DERIVED-SEGMENTS -->
 対称展開されたSegmentは基本Segment配列へ複製せず、派生データとして扱う。ユーザー入力の基本Segmentと対称操作による派生Segmentは区別できるようにするが、描画用IDの具体的な生成規則は契約としない。
@@ -296,14 +302,30 @@ invariantを満たす新しいCellPattern
 
 Symmetry変更でSplitRelationを引き継げることと、旧concrete SegmentInstanceRefや旧IntersectionAnchorを同一identityとして引き継げることは別である。relativeTransformの意味を維持してrelationを再展開した結果、concrete instance identityが変わる場合は、旧instanceに依存するAnchorやその下位データをGeometry上の近似で新instanceへ付け替えない。
 
-#### SplitCandidate
+#### Split candidateとIntersection interaction candidate
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION -->
-SplitCandidateは保存データではなく、選択中のtarget source Segmentについて現在成立するcanonical SplitRelation候補と表示用交点をまとめた派生情報とする。
+新しく追加可能なSplitRelation候補は保存データではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開して**Effective Geometry上で**全concrete pairがsplit可能な候補だけを返す派生情報とする。新規候補の各concrete pairでは、交点がtarget側の材ありEffective Fragment内部にあることを要求する。cutter側は既存SplitRelationのsplit可能条件と同様、端点での `touch` を許容する。
 
-candidate生成は、concrete instance pairの列挙順からrelation identityを決めるのではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開・検証して有効な候補だけを返す。これによりSymmetry展開配列の順序や最初に発見された交点へidentityを依存させない。
+candidate生成はconcrete instance pairの列挙順や最初に発見された交点からrelation identityを決めない。MaterialExclusionで材が存在しない区間だけに成立する交点は新規SplitRelation候補にしない。一方、すでに保持されているSplitRelationの有効性検証はDesign Geometryを基準とし、Effective Geometryから消えたことを理由に既存relationを暗黙削除しない。
 
-同一candidateのorbit内で複数pairがGeometry上同一点に交差する場合、表示用Pointは共通Geometry toleranceに従って重複除去してよい。ただしPointの重複除去はrelationの重複除去ではない。異なるSplitRelation候補が同じ座標を持っていてもcandidateを統合せず、座標をrelation identityとして利用しない。
+<!-- test-contract: ARCH-PATTERN-INTERSECTION-INTERACTION-CANDIDATE -->
+Canvas直接操作用には、source-levelのcanonical relation候補とは別に、選択中のconcrete target Segment instanceから見たIntersection interaction candidateを導出する。概念的には次を追跡する。
+
+```ts
+interface IntersectionInteractionCandidate {
+  target: SegmentInstanceRef
+  cutter: SegmentInstanceRef
+  anchor: IntersectionAnchor
+  point: Point
+  relation: SplitRelation
+  active: boolean
+}
+```
+
+新規候補では `relation` はEffective Geometry上で追加可能なcanonical SplitRelation、既存splitではDesign Geometry上で現在保持されているSplitRelationを表す。選択中target instanceとrelation orbitから、そのtargetに対応するcutter instanceとIntersectionAnchorを決定する。
+
+同じPointへ解決される異なるinteraction candidateを統合しない。座標はhit testと表示にのみ利用し、候補の表示順、描画順、Pointを永続identityにしない。Canvasで一意に識別できないcandidateはEditorの一時候補集合としてInspectorへ渡す。選択結果を保存するときは必ず `relation` をPattern層の状態遷移へ渡し、concrete pairや表示Pointそのものを保存しない。
 
 #### Fragmentと論理境界の導出
 
@@ -353,6 +375,80 @@ Resolved / renderable Design Geometry
 
 新しいIntersectionAnchorが既存2境界の間へ加わった場合、境界の現在順序からFragmentを再導出する。旧Fragmentの配列位置や `fragmentIndex` を維持しようとはしない。一方、元のAnchor identity自体はGeometry上の並び替えだけを理由に変更しない。
 
+
+#### MaterialExclusion
+
+<!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-MODEL -->
+MaterialExclusionはconcrete LogicalFragmentの保存データではなく、source Segment上の材なし区間をsource-relativeな境界pairで表す。Pattern層の概念モデルは次とする。
+
+```ts
+type MaterialBoundaryRef =
+  | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
+  | {
+      kind: 'split-boundary'
+      cutterSegmentId: SegmentId
+      relativeTransform: SplitRelativeTransform
+    }
+
+interface MaterialExclusion {
+  segmentId: SegmentId
+  boundaryA: MaterialBoundaryRef
+  boundaryB: MaterialBoundaryRef
+}
+```
+
+`split-boundary` は `segmentId` をtarget source Segmentとするcanonical SplitRelationを参照するsource-relativeな境界表現である。具体的なSegmentInstanceRefやIntersectionAnchorを保存しない。Symmetry展開時にはtarget instanceごとに同じrelativeTransformを使ってcutter instanceを解決し、そのconcrete pairからIntersectionAnchorを導出する。
+
+Segment端点の `start / end` はsource Segment定義の向きに対する論理参照であり、表示上の左右や上下を意味しない。`boundaryA / boundaryB` もSegment上の先後を永続意味にせず、現在のDesign Geometryへ解決して一時的にparameter順を求める。
+
+<!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-NORMALIZATION -->
+CellPattern内のMaterialExclusion集合は、同一source SegmentについてDesign Geometry上で重複・包含・隣接する材なし範囲を持たないcanonicalな区間集合に正規化する。
+
+Fragmentを材なしにする操作では、選択されたconcrete LogicalFragmentをsource-relativeな境界pairへ変換し、現在のexclusion区間集合とのunionを取り、最大の連続区間へ再表現する。材を戻す操作では、選択された現在のDesign Fragmentの範囲をexclusion区間集合からsubtractし、必要なら1区間を2区間へ分割して再表現する。
+
+union / subtractionの区間順序・隣接・包含判定は、source Segmentのidentity instance上へsource-relative境界を解決して行う。Symmetry展開配列の順序や、ユーザーが操作したconcrete instanceを基準にしない。計算中はDesign Geometryから得たSegment parameterを一時的な順序・区間計算に利用してよいが、parameter、座標、Fragment配列indexをMaterialExclusionへ保存しない。
+
+例えば `I1-I2` と `I2-end` の除外が `I1-end` へ統合されても、I2を成立させるSplitRelationとLogicalFragment境界はDesign Geometryに残る。MaterialExclusionのcanonicalizationはDesign topologyのcanonicalizationではない。
+
+<!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-INVARIANT -->
+CellPatternへ保持するMaterialExclusionは、source Segmentが存在し、両境界が現在のDesign Geometryで解決可能で、両境界が異なる有効区間を形成し、同一Segment上の他exclusionと重複・包含・隣接しない不変条件を満たす。`start-end` によるSegment全体のexclusionも有効な区間として許可する。
+
+`split-boundary` が参照するcanonical SplitRelationが存在しない場合、その境界は解決不能とする。MaterialExclusionの中間に存在するが外側境界として参照されていないSplitRelationは、exclusion正規化を理由に削除しない。
+
+MaterialExclusionを追加・復元するPattern API、およびSegment削除・SplitRelation解除・Symmetry変更などのPattern状態遷移は、返却前にSplitRelation invariantとMaterialExclusion invariantの双方を回復する。依存境界が失われたexclusionは削除し、後から同じGeometryが再成立しても自動復活させない。
+
+<!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY -->
+concrete LogicalFragmentからMaterialExclusionを作るときは、そのFragmentが属するtarget SegmentInstanceRefをsource Segmentへ戻し、Intersection境界をそのtargetからcutterへのrelativeTransformへ正規化する。同じSymmetry orbitに属するどのtarget instanceから操作しても同じsource-relative MaterialExclusionになる。
+
+Symmetry変更時は、MaterialBoundaryRefが参照するrelativeTransformを新Symmetryでも意味上維持でき、対応するSplitRelationが状態遷移後も有効な場合に限りMaterialExclusionを引き継ぐ。旧concrete IntersectionAnchorを新しいAnchorへGeometry近似で付け替えるのではなく、維持されたsource-relative境界から新しいconcrete Anchorを再導出する。
+
+#### Design GeometryとEffective Geometry
+
+<!-- test-contract: ARCH-PATTERN-DESIGN-EFFECTIVE-GEOMETRY -->
+Design Geometryはsource Segment、Symmetry、現在有効なSplitRelationから導出する。IntersectionAnchor、SegmentSplitBoundary、LogicalFragmentはDesign Geometryに属し、MaterialExclusionの適用結果だけを理由に追加・削除しない。
+
+Effective GeometryはDesign GeometryへMaterialExclusionを適用した結果であり、実際に材が存在するPointSegment群を表す。概念的な導出順は次とする。
+
+```text
+source Segment + Symmetry
+  ↓
+Segment instance / Design Geometry
+  ↓
+SplitRelation orbit
+  ↓
+IntersectionAnchor / SegmentSplitBoundary
+  ↓
+LogicalFragment
+  ↓
+MaterialExclusionをsource-relative境界から各instanceへ解決
+  ↓
+Effective Geometry
+```
+
+Pattern Preview、将来の加工出力、および新規split候補の交差判定にはEffective Geometryを利用する。一方、既存SplitRelationのinvariant、MaterialExclusion境界の解決、Editorで材を復元するためのLogicalFragment選択にはDesign Geometryを利用する。
+
+この二層を分けることで、exclusionで材が消えたためsplit境界が消滅し、その結果exclusion自身が成立しなくなる循環を避ける。
+
 ### CellPlacement
 
 基準CellのLocal CoordinateをPreview座標へ写す配置情報を表す。
@@ -400,14 +496,51 @@ Layout固有の配置規則をCell Patternのモデルへ持ち込まない。
 
 ## 7. UIとの境界
 
-Reactはdivision数、選択中SegmentEndpointAnchor、split対象などの操作状態を所有してよい。一方、CellPatternのSymmetryやSplitRelationを変更するときの整合性維持はPattern層のドメイン操作へ委譲する。Reactから `symmetry` や `splitRelations` を便宜的に直接差し替えて不変条件を迂回しない。
+Reactはdivision数、Segment作成途中のAnchor、Canvas上の現在選択、一意にhit testできなかった候補集合など一時的な操作状態を所有してよい。一方、CellPatternのSymmetry、SplitRelation、MaterialExclusionを変更するときの正規化・依存削除・不変条件回復はPattern層のドメイン操作へ委譲する。Reactから永続配列を便宜的に直接差し替えて不変条件を迂回しない。SegmentEndpointAnchorはオブジェクト選択中もSegment作成操作として利用可能にし、1点目のAnchor選択時はEditorSelectionを解除してSegment作成途中状態へ移る。
+
+<!-- test-contract: ARCH-EDITOR-SELECTION-STATE -->
+Cell Editorの選択状態は、永続モデルとは分離した一時状態として少なくとも次の意味を表せる構成とする。
+
+```ts
+type EditorSelection =
+  | { kind: 'segment'; segment: SegmentInstanceRef }
+  | { kind: 'intersection'; candidate: IntersectionInteractionCandidate }
+  | { kind: 'fragment'; fragment: LogicalFragment }
+  | null
+```
+
+Segment作成途中、EditorSelection、Canvas上で曖昧だった候補集合はトップレベルでは排他的な一時interaction stateとして表現し、複数を独立して同時保持できないことを不変条件とする。ただし曖昧候補状態は、開始済みgestureを継続するためのcontextを内包してよい。Segment終点の候補選択では開始Anchorをcontextとして保持し、Anchor決定時に同じ状態遷移からSegment作成commandを返す。候補集合とgesture contextはEditor専用でありCellPatternへ永続化しない。選択解除時は作成途中のAnchor、曖昧候補、cutter highlightなど、そのinteractionに従属する一時状態も破棄する。Pattern状態遷移後も同じ論理identityが存在する場合だけselectionまたは候補を維持し、identityが消滅した場合は解除する。候補が1件へ減っても自動選択せず、保持したgesture contextとともに明示選択を待つ。Geometry一致する別identityへ自動で付け替えない。
+
+<!-- test-contract: ARCH-EDITOR-HIT-TEST-PRIORITY -->
+Canvasの通常hit testではSegmentEndpointAnchor、選択中target上のIntersection marker、選択中SegmentのFragment、その他Segment、Canvas背景の優先関係を利用してよい。Anchorは現在のEditorSelectionにかかわらずSegment作成対象とする。ただし、この優先関係は曖昧なlogical candidateを必ず1対象へ潰す規則ではない。同一点、完全重複、十分なtap area同士の競合などCanvas上で安定して選び分けられない場合は、logical identityを失わない候補集合をInspectorへ渡す。
+
+priorityによって下位のlogical targetがCanvas上の全操作位置から到達不能になってはならない。line targetのGeometry全体が上位point targetのscreen-space hit areaに覆われる場合は、そのline targetも曖昧候補としてInspectorへ渡す。一方、上位hit area外に直接操作可能な領域が残るline targetは通常のpriorityに従い、上位target操作のたびに候補へ混ぜない。到達可能性の具体的な計算法は長寿命なArchitecture contractとしない。
+
+pointer / tapのlogical hit resolutionはCanvas surfaceの1つの入口へ集約する。resolverはpointer位置、現在のAnchor・Intersection・選択中Fragment・Segment instance、およびviewBoxから実画面への変換を受け取り、screen-spaceのtap半径内にある候補を導出する。個別SVG要素のDOM hit testや描画順をlogical targetの決定に利用しない。keyboard操作はfocusされたAnchorが明示済みなので、そのAnchorを直接操作してよい。
+
+Cell EditorのSVGは、pattern line、ghost、選択highlight、markerなどの表示Geometryと、pointer位置からlogical candidateを判定する責務を分離する。表示Geometryはpointer eventを受けない。具体的なDOM構造やmarker形状、透明stroke幅は長寿命な契約にせず、縮小表示時にもresolverが実画面上で十分なtap areaを判定することを契約とする。同一点や近接するAnchorとIntersectionをCanvas上の精密な狙い分けで解決してはならない。
+
+材なしFragmentはEffective Geometryには存在しないため、Cell EditorではDesign Geometry由来の編集用ghost / hit areaを常時提供する。Segment全体が材なしでEffective Geometryが空でも、そのDesign GeometryからSegmentを再選択できなければならない。hit areaのSVG要素構造や具体サイズは契約にしない。
+
+同一点に複数Intersection interaction candidateがある場合は、Pointを1つの論理候補へ統合せず、UI一時状態の候補集合としてInspectorへ渡す。候補選択後は通常のIntersection selectionへ遷移し、選択中candidateのcutter Segment instanceをCanvas上でhighlightする。
+
+同じhit位置に完全重複する複数のSegment instanceが存在する場合もGeometry一致でidentityを統合せず、UI一時状態の候補集合としてInspectorへ渡す。候補選択後は通常のSegment selectionへ遷移する。選択中Segment上では通常のFragment hit targetを優先し、重複Segment候補の再選択を強制しない。
+
+<!-- test-contract: ARCH-EDITOR-INSPECTOR-BOUNDARY -->
+Cell Editor下部は候補一覧の所有者ではなく、現在のEditorSelectionを表示・操作するInspectorとする。Canvasは「どの論理対象を操作するか」を選ぶ主操作面、Inspectorは「選択対象が現在どの状態で、どの状態遷移を実行できるか」を明示する面として責務を分ける。
+
+Segmentのsource family削除、Intersectionのsplit追加・解除、Fragmentの材なし・材ありへの変更などCellPatternを変更する操作はInspectorからPattern層の状態遷移APIを呼ぶ。Symmetry生成instanceを選択した削除も、concrete instance単体ではなくsource Segment削除としてPattern層へ渡す。Canvas上の選択操作だけでCellPatternを暗黙変更しない。将来、操作手数を減らすショートカットを追加しても、同じPattern APIを利用し、この責務境界を迂回しない。
+
+SplitRelation解除により依存MaterialExclusionが連動削除される場合、UIは解除前にPattern層から影響を導出してInspectorへ表示し、確認を経て状態遷移を実行する。依存exclusionがない解除では確認を必須にしない。影響計算は現在のcanonical MaterialExclusionを基準とし、正規化前のユーザー操作履歴を保持・復元する設計にはしない。
 
 コンポーネントは計算済みモデルとcallbackを受け取り、次の処理をドメイン層へ委譲する。
 
 - SegmentEndpointAnchorから座標への解決
 - mirror / rotational変換
 - SplitRelationの正規化、検証、Symmetry変更時の再検証
-- split候補とFragment Geometryの導出
+- MaterialExclusionの正規化、依存削除、Fragment単位のexclude / restore
+- Design Geometry / Effective Geometryの導出
+- canonical SplitRelation候補とIntersection interaction candidateの導出
 - Cell配置
 - その他の幾何計算
 
@@ -423,9 +556,9 @@ Reactはdivision数、選択中SegmentEndpointAnchor、split対象などの操�
 
 交点座標とSegment parameterは保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。IntersectionAnchorは座標そのものではなくconcrete SegmentInstanceRef pairを参照する論理identityであり、Geometry上の交点とは区別する。Layout層はsplitの意味論や交差計算を扱わない。
 
-ここで扱うDesign Geometry / IntersectionAnchorは、source Segment、Symmetry、既存SplitRelationから解決する設計上の論理境界である。将来Material Exclusionの境界として利用されても、exclusion自身を適用した結果によってそのIntersectionAnchorを自動消滅させない。
+Design Geometry / IntersectionAnchorは、source Segment、Symmetry、既存SplitRelationから解決する設計上の論理境界である。MaterialExclusionの境界解決とEditor上のLogicalFragment選択はDesign Geometryを利用し、exclusion自身を適用した結果によってDesign IntersectionAnchorを自動消滅させない。
 
-将来のEffective GeometryはMaterial Exclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。Material Exclusion、Effective Geometry、Effective intersectionの計算自体は今回の実装対象に含めない。
+Effective GeometryはMaterialExclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。
 
 派生Geometry上の完全重複は、ユーザー入力の不正とは分けて扱う。Geometry上の一致・重複を検出しても、それを理由に論理identityを自動統合・削除・付け替えしない。意味上異なる部材や区間が重なる場合は、必要に応じてGeometry診断として警告し、解消はユーザー操作へ委ねる。
 

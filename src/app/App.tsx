@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
-import { segmentEndpointAnchorKey } from '../pattern/anchor'
-import type { SegmentEndpointAnchor } from '../pattern/anchor'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
 import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
+import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
+import {
+  editorSelection,
+  idleEditorInteraction,
+  pendingEditorAnchor,
+  reconcileEditorInteraction,
+  transitionEditorInteraction,
+  type EditorInteraction,
+  type CanvasHitCandidate,
+} from '../components/CellEditor/editorInteraction'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
 
@@ -14,29 +22,30 @@ export default function App() {
     segments: [],
     symmetry: { type: 'rotational' },
     splitRelations: [],
+    materialExclusions: [],
   })
-  const [pendingAnchor, setPendingAnchor] = useState<SegmentEndpointAnchor | null>(null)
-  const [splitTargetId, setSplitTargetId] = useState<string | null>(null)
+  const [interaction, setInteraction] = useState<EditorInteraction>(idleEditorInteraction)
 
   useEffect(() => {
-    setPendingAnchor(null)
+    setInteraction(idleEditorInteraction())
   }, [divisions])
 
-  const addAnchor = (anchor: SegmentEndpointAnchor) => {
-    if (!pendingAnchor) {
-      setPendingAnchor(anchor)
-      return
-    }
-    if (segmentEndpointAnchorKey(anchor) !== segmentEndpointAnchorKey(pendingAnchor)) {
-      const segment: Segment = { id: globalThis.crypto.randomUUID(), start: pendingAnchor, end: anchor }
+  const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
+    const transition = transitionEditorInteraction(interaction, candidates)
+    setInteraction(transition.interaction)
+    if (transition.command?.kind === 'create-segment') {
+      const segment: Segment = {
+        id: globalThis.crypto.randomUUID(),
+        start: transition.command.startAnchor,
+        end: transition.command.endAnchor,
+      }
       setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
     }
-    setPendingAnchor(null)
   }
 
   const deleteSegment = (id: string) => {
     setPattern((current) => removeSegment(current, id))
-    setSplitTargetId((current) => current === id ? null : current)
+    setInteraction(idleEditorInteraction())
   }
 
   const toggleSplitRelation = (relation: SplitRelation) => {
@@ -44,10 +53,10 @@ export default function App() {
       ? removeSplitRelation(current, relation) : addSplitRelation(current, relation))
   }
 
-  const selectSplitTarget = (id: string | null) => {
-    setPendingAnchor(null)
-    setSplitTargetId(id)
-  }
+  useEffect(() => {
+    const next = reconcileEditorInteraction(pattern, interaction)
+    if (next !== interaction) setInteraction(next)
+  }, [pattern, interaction])
 
   return (
     <>
@@ -69,12 +78,15 @@ export default function App() {
           <CellEditor
             divisions={divisions}
             pattern={pattern}
-            pendingAnchor={pendingAnchor}
-            splitTargetId={splitTargetId}
-            onAnchorClick={addAnchor}
+            pendingAnchor={pendingEditorAnchor(interaction)}
             onDeleteSegment={deleteSegment}
-            onSelectSplitTarget={selectSplitTarget}
             onToggleSplitRelation={toggleSplitRelation}
+            selection={editorSelection(interaction)}
+            choosingCandidates={interaction.kind === 'choosing-target' ? interaction.candidates : null}
+            onHitCandidates={chooseCanvasTarget}
+            onClearInteraction={() => setInteraction(idleEditorInteraction())}
+            onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
+            onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}
           />
           <PatternPreview pattern={pattern} />
         </div>

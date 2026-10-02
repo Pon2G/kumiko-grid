@@ -24,14 +24,14 @@ describe('CellPatternの対称展開', () => {
       [{ type: 'rotational' }, 3],
     ]
     for (const [symmetry, count] of cases) {
-      const expanded = expandPattern({ segments: [seed], symmetry, splitRelations: [] })
+      const expanded = expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
       expect(expanded).toHaveLength(count)
       expect(expanded.some(({ id }) => id === seed.id)).toBe(true)
     }
   })
 
   contractTest({ contract: 'ARCH-PATTERN-DERIVED-SEGMENTS' }, '基本Segmentを変更せず派生Segmentと区別できる', () => {
-    const pattern: CellPattern = { segments: [seed], symmetry: { type: 'rotational' }, splitRelations: [] }
+    const pattern: CellPattern = { segments: [seed], materialExclusions: [], symmetry: { type: 'rotational' }, splitRelations: [] }
     const expanded = expandPattern(pattern)
     expect(pattern.segments).toEqual([seed])
     expect(expanded.filter(isSymmetryGeneratedSegment)).toHaveLength(2)
@@ -39,12 +39,12 @@ describe('CellPatternの対称展開', () => {
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-MIRROR' }, 'mirror Aは基本SegmentをAからCへのSegmentへ鏡映する', () => {
-    const expanded = expandPattern({ segments: [seed], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] })
+    const expanded = expandPattern({ segments: [seed], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] })
     expectSegment(expanded.filter(isSymmetryGeneratedSegment), canonicalTriangle.A, canonicalTriangle.C)
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-ROTATIONAL' }, 'rotationalは基本Segmentを120°と240°回転した位置へ配置する', () => {
-    const expanded = expandPattern({ segments: [seed], symmetry: { type: 'rotational' }, splitRelations: [] })
+    const expanded = expandPattern({ segments: [seed], materialExclusions: [], symmetry: { type: 'rotational' }, splitRelations: [] })
     const derived = expanded.filter(isSymmetryGeneratedSegment)
     expectSegment(derived, canonicalTriangle.C, canonicalTriangle.A)
     expectSegment(derived, canonicalTriangle.B, canonicalTriangle.C)

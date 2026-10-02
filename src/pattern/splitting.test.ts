@@ -27,7 +27,7 @@ const anotherCutter: Segment = {
   end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 },
 }
 const pattern = (splitRelations: CellPattern['splitRelations'], symmetry: CellPattern['symmetry'] = { type: 'none' }): CellPattern => ({
-  segments: [target, cutter], symmetry, splitRelations,
+  segments: [target, cutter], symmetry, splitRelations, materialExclusions: [],
 })
 
 describe('CellPatternのsplit派生', () => {
@@ -48,6 +48,7 @@ describe('CellPatternのsplit派生', () => {
     const original = [target]
     const rotational: CellPattern = {
       segments: original,
+      materialExclusions: [],
       symmetry: { type: 'rotational' },
       splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A', relativeTransform: { type: 'rotation', steps: 1 } }],
     }
@@ -69,6 +70,7 @@ describe('CellPatternのsplit派生', () => {
     }
     const current: CellPattern = {
       segments: [crossTransformTarget, crossTransformCutter],
+      materialExclusions: [],
       symmetry: { type: 'rotational' },
       splitRelations: [{
         targetSegmentId: crossTransformTarget.id,
@@ -93,6 +95,7 @@ describe('CellPatternのsplit派生', () => {
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-DERIVATION' }, '同一点に複数のcutterが交差してもゼロ長Fragmentを生成しない', () => {
     const current: CellPattern = {
       segments: [target, cutter, anotherCutter],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [
         { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } },
@@ -105,6 +108,7 @@ describe('CellPatternのsplit派生', () => {
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同一点の複数cutterをsource pairごとの候補として導出する', () => {
     const current: CellPattern = {
       segments: [target, cutter, anotherCutter],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [],
     }
@@ -145,6 +149,7 @@ describe('CellPatternのsplit派生', () => {
       { targetSegmentId: 'B', cutterSegmentId: 'A', relativeTransform: { type: 'identity' } },
     ])
     expect(removeSegment(current, 'B')).toEqual({
+      materialExclusions: [],
       segments: [target], symmetry: { type: 'none' }, splitRelations: [],
     })
   })

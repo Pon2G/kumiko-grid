@@ -70,6 +70,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION' }, '1つのrotational relation orbitから各concrete pairのAnchorを導出する', () => {
     const pattern: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'rotational' },
       splitRelations: [relation('A', 'B')],
     }
@@ -80,6 +81,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION' }, '逆向きrelationは同じconcrete pairのAnchorを共有する', () => {
     const pattern: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B'), relation('B', 'A')],
     }
@@ -92,6 +94,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
     const bToA = relation('B', 'A')
     const bidirectional: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [aToB, bToA],
     }
@@ -116,6 +119,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
     const aToB = relation('A', 'B')
     const withRelation: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [aToB],
     }
@@ -130,6 +134,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '逆向きrelationだけならAnchorは存在しB側境界だけが有効になる', () => {
     const reverseOnly: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('B', 'A')],
     }
@@ -144,6 +149,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '旧Fragmentの途中へ新しい境界が加わると隣接しない旧境界pairを解決しない', () => {
     const initial: CellPattern = {
       segments: [target, cutterB, earlierCutter],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B')],
     }
@@ -177,6 +183,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
     const otherCutter: Segment = { ...cutterB, id: 'E' }
     const initial: CellPattern = {
       segments: [target, cutterB, otherTarget, otherCutter],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B')],
     }
@@ -193,6 +200,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'ARCH-DOMAIN-LOGICAL-IDENTITY-GEOMETRY-SEPARATION' }, '同一点の異なるinstance pairを別Anchorとして維持する', () => {
     const pattern: CellPattern = {
       segments: [target, cutterB, cutterC],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B'), relation('A', 'C')],
     }
@@ -206,6 +214,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '同一点の論理境界とその間のゼロ長Logical Fragmentを失わない', () => {
     const pattern: CellPattern = {
       segments: [target, cutterB, cutterC],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B'), relation('A', 'C')],
     }
@@ -222,6 +231,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP' }, 'Segment削除で消えたinstanceを参照するAnchorとFragment境界を残さない', () => {
     const pattern: CellPattern = {
       segments: [target, cutterB],
+      materialExclusions: [],
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B')],
     }
@@ -234,6 +244,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
   contractTest({ contract: 'SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP' }, 'Symmetry変更で失われた旧instanceのAnchorをGeometry一致から復活させない', () => {
     const rotational: CellPattern = {
       segments: [target],
+      materialExclusions: [],
       symmetry: { type: 'rotational' },
       splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A', relativeTransform: { type: 'rotation', steps: 1 } }],
     }

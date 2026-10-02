@@ -255,7 +255,7 @@ interface SegmentInstanceBasisMapping {
 
 型名や具体的な格納形式は固定しない。`toTransform` は同一Symmetry内で有効なtransformであり、旧sourceのidentity Geometryが `toSourceSegmentId + toTransform` の無向Segment Geometryに対応することを意味する。`direction` はMaterialExclusionのstart / endのようにSegment方向へ意味がある参照を移行するときだけ利用し、SegmentInstanceRefそのものへ方向フラグを混ぜない。
 
-旧sourceの任意のinstance transform `g` は、basisの `toTransform` と `g` の合成から新source側のinstance transformへ写す。SplitRelationの移行が必要な場合は、target / cutterそれぞれのinstanceをこの共通写像で移した後、写像後の2 instanceからrelative transformを再計算する。rotationalのstep加減算やmirrorのXORをmigration側へ直接実装しない。
+旧sourceの任意のinstance transform `g` は、`compose(toTransform, g)` によって新source側のinstance transformへ写す。これは「旧sourceのidentityに対応する新source instanceへ、旧instanceと同じ `g` をさらに作用させる」という意味であり、前節で定義したcompose順序に従う。SplitRelationの移行が必要な場合は、target / cutterそれぞれのinstanceをこの共通写像で移した後、写像後の2 instanceからrelative transformを再計算する。rotationalのstep加減算やmirrorのXORをmigration側へ直接実装しない。
 
 instance mappingは**同一Symmetry文脈内のlogical mapping**とする。異なるSymmetry間で何を引き継ぐかは `changeSymmetry` 等のPattern状態遷移が決定し、Geometry上で近いinstanceを探してmappingを推測しない。また、mappingが定義できない参照を同じ位置に見える別identityへ自動付け替えしない。
 

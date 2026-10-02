@@ -5,9 +5,9 @@ import type { Point } from '../geometry/types'
 import type { CellPattern } from './cellPattern'
 import {
   expandPattern,
+  inverseRelativeTransform,
   isSymmetryGeneratedSegment,
   mapSegmentInstance,
-  relativeTransformBetween,
   symmetryTransformAlgebra,
   type RenderedSegment,
 } from './symmetry'
@@ -59,28 +59,44 @@ describe('CellPatternの対称展開', () => {
 })
 
 describe('Symmetry transform algebra', () => {
-  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, '合成・逆元・Geometry適用が同じ変換規則に従う', () => {
-    const algebra = symmetryTransformAlgebra({ type: 'rotational' })
-    const rotation1 = { type: 'rotation', steps: 1 } as const
-    const rotation2 = { type: 'rotation', steps: 2 } as const
+  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, '各Symmetryの有効transform集合が共通のalgebra lawを満たす', () => {
     const point = canonicalTriangle.A
+    const symmetries: CellPattern['symmetry'][] = [
+      { type: 'none' },
+      { type: 'mirror', axis: 'B' },
+      { type: 'rotational' },
+    ]
+    for (const symmetry of symmetries) {
+      const algebra = symmetryTransformAlgebra(symmetry)
+      expect(algebra.isValid(algebra.identity)).toBe(true)
+      for (const transform of algebra.transforms) {
+        const inverse = algebra.inverse(transform)
+        expect(inverse).not.toBeNull()
+        expect(algebra.isValid(inverse!)).toBe(true)
+        expect(algebra.key(algebra.compose(transform, inverse!)!)).toBe(algebra.key(algebra.identity))
 
-    expect(algebra.compose(rotation1, rotation1)).toEqual(rotation2)
-    expect(algebra.compose(rotation1, algebra.inverse(rotation1)!)).toEqual({ type: 'identity' })
-    const composedPoint = algebra.applyToPoint(algebra.compose(rotation1, rotation1)!, point)!
-    const sequentialPoint = algebra.applyToPoint(rotation1, algebra.applyToPoint(rotation1, point)!)!
-    expect(pointsAreClose(composedPoint, sequentialPoint)).toBe(true)
-    expect(relativeTransformBetween({ type: 'rotational' }, rotation1, { type: 'identity' }))
-      .toEqual({ type: 'rotation', steps: 2 })
+        const relative = algebra.toRelative(transform)
+        expect(relative).not.toBeNull()
+        expect(algebra.key(algebra.fromRelative(relative!)!)).toBe(algebra.key(transform))
+        expect(inverseRelativeTransform(symmetry, relative!))
+          .toEqual(algebra.toRelative(inverse!))
+
+        for (const second of algebra.transforms) {
+          const composed = algebra.compose(transform, second)
+          expect(composed).not.toBeNull()
+          expect(algebra.isValid(composed!)).toBe(true)
+          const composedPoint = algebra.applyToPoint(composed!, point)!
+          const sequentialPoint = algebra.applyToPoint(second, algebra.applyToPoint(transform, point)!)!
+          expect(pointsAreClose(composedPoint, sequentialPoint)).toBe(true)
+        }
+      }
+    }
   })
 
-  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, 'relative表現の集合をabsolute transform集合から導出する', () => {
+  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, '現在のSymmetryで無効なabsolute・relative transformを受理しない', () => {
     const algebra = symmetryTransformAlgebra({ type: 'mirror', axis: 'B' })
-    expect(algebra.transforms.map((transform) => algebra.toRelative(transform))).toEqual([
-      { type: 'identity' },
-      { type: 'mirror' },
-    ])
-    expect(algebra.fromRelative({ type: 'mirror' })).toEqual({ type: 'mirror', axis: 'B' })
+    expect(algebra.isValid({ type: 'mirror', axis: 'A' })).toBe(false)
+    expect(algebra.compose(algebra.identity, { type: 'mirror', axis: 'A' })).toBeNull()
     expect(algebra.fromRelative({ type: 'rotation', steps: 1 })).toBeNull()
   })
 

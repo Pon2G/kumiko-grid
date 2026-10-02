@@ -156,9 +156,17 @@ export const supportedRelativeTransforms = (symmetry: Symmetry): SplitRelativeTr
   })
 }
 
-/** 保存用relative transformの逆元も、Symmetry規則と同じ境界で扱う。 */
-export const inverseRelativeTransform = (relative: SplitRelativeTransform): SplitRelativeTransform =>
-  relative.type === 'rotation' ? { type: 'rotation', steps: relative.steps === 1 ? 2 : 1 } : relative
+/** relative表現をalgebra上へ戻してから逆元を求め、保存表現へ射影する。 */
+export function inverseRelativeTransform(
+  symmetry: Symmetry,
+  relative: SplitRelativeTransform,
+): SplitRelativeTransform | null {
+  const algebra = symmetryTransformAlgebra(symmetry)
+  const transform = algebra.fromRelative(relative)
+  if (!transform) return null
+  const inverse = algebra.inverse(transform)
+  return inverse ? algebra.toRelative(inverse) : null
+}
 
 export function mapSegmentInstance(
   symmetry: Symmetry,

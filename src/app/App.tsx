@@ -44,6 +44,10 @@ export default function App() {
   }
 
   const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
+    if (candidates.length === 0) {
+      setInteraction(idleEditorInteraction())
+      return
+    }
     const candidate = candidates.length === 1 ? candidates[0] : null
     if (!candidate) setInteraction({ kind: 'choosing-target', candidates })
     else if (candidate.kind === 'anchor') addAnchor(candidate.anchor)

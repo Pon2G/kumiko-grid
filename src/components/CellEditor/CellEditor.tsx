@@ -1,5 +1,4 @@
-import { useEffect } from 'react'
-import { pointsAreClose } from '../../geometry/intersections'
+import { useEffect, type PointerEvent } from 'react'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
 import { createSegmentEndpointAnchors, resolveSegmentEndpoint, segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
@@ -9,6 +8,7 @@ import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '
 import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
 import type { EditorSelection } from './editorSelection'
 import type { CanvasHitCandidate } from './editorInteraction'
+import { CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
   divisions: number
@@ -24,15 +24,10 @@ interface CellEditorProps {
   onRestoreMaterial: (fragment: LogicalFragment) => void
 }
 
-const SCALE = 440
-const PAD = 42
-const px = (value: number) => PAD + value * SCALE
-const py = (value: number) => PAD + value * SCALE
+const px = (value: number) => CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE
+const py = (value: number) => CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE
 const anchorLabel = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
   ? `頂点${anchor.vertex}` : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
-const sameGeometry = (left: { start: { x: number; y: number }; end: { x: number; y: number } }, right: typeof left) =>
-  (pointsAreClose(left.start, right.start) && pointsAreClose(left.end, right.end))
-  || (pointsAreClose(left.start, right.end) && pointsAreClose(left.end, right.start))
 const instanceLabel = (pattern: CellPattern, instance: { sourceSegmentId: string; transform: { type: string; steps?: number; axis?: string } }): string => {
   const number = pattern.segments.findIndex(({ id }) => id === instance.sourceSegmentId) + 1
   const transform = instance.transform.type === 'identity' ? '元の位置'
@@ -67,30 +62,28 @@ export function CellEditor(props: CellEditorProps) {
     return () => globalThis.removeEventListener('keydown', clear)
   }, [props.onClearInteraction])
 
-  const selectSegment = (clicked: typeof instances[number]) => {
-    const overlapping = instances.filter((instance) => sameGeometry(instance, clicked))
-    props.onHitCandidates(overlapping.map(({ instanceRef }) => ({ kind: 'segment', segment: instanceRef })))
-  }
-
-  const selectCandidateAt = (candidate: typeof candidates[number]) => {
-    const colocated = candidates.filter((item) => pointsAreClose(item.point, candidate.point))
-    const matchingAnchor = anchors.find((anchor) => pointsAreClose(resolveSegmentEndpoint(anchor), candidate.point))
-    props.onHitCandidates([...(matchingAnchor ? [{ kind: 'anchor' as const, anchor: matchingAnchor }] : []),
-      ...colocated.map((item) => ({ kind: 'intersection' as const, candidate: item }))])
-  }
-
-  const selectAnchorAt = (anchor: SegmentEndpointAnchor) => {
-    const point = resolveSegmentEndpoint(anchor)
-    props.onHitCandidates([{ kind: 'anchor', anchor }, ...candidates.filter((candidate) => pointsAreClose(candidate.point, point))
-      .map((candidate) => ({ kind: 'intersection' as const, candidate }))])
+  const targetFragments = target ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey) : []
+  const resolvePointer = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button > 0) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    props.onHitCandidates(resolveCanvasHitCandidates(
+      { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
+      {
+        anchors: anchors.map((anchor) => ({ anchor, point: resolveSegmentEndpoint(anchor) })),
+        intersections: candidates,
+        fragments: targetFragments,
+        segments: instances,
+      },
+      { width: bounds.width, height: bounds.height, viewBoxHeight: TRIANGLE_HEIGHT * CELL_CANVAS_SCALE + CELL_CANVAS_PAD * 2 },
+    ))
   }
 
   return <section className="panel editor-panel" aria-labelledby="editor-title">
     <div className="panel-heading editor-heading"><div><span className="eyebrow">02 / セル</span><h2 id="editor-title">セルエディター</h2></div>
-      <span className="status-pill">{props.pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
+      <span className="status-pill">{props.choosingCandidates ? '選択対象を選択' : props.pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
     <div className="editor-stage">
-      <svg viewBox={`0 0 ${SCALE + PAD * 2} ${TRIANGLE_HEIGHT * SCALE + PAD * 2}`} aria-label="正三角形セルエディター"
-        onClick={props.onClearInteraction}>
+      <svg viewBox={`0 0 ${CELL_CANVAS_WIDTH} ${TRIANGLE_HEIGHT * CELL_CANVAS_SCALE + CELL_CANVAS_PAD * 2}`} aria-label="正三角形セルエディター"
+        onPointerUp={resolvePointer}>
         <g className="geometry-layer" data-canvas-layer="geometry" aria-hidden="true">
           <polygon className="triangle-fill" points={points} />
           <polygon className="triangle-border" points={points} />
@@ -120,24 +113,23 @@ export function CellEditor(props: CellEditorProps) {
             aria-label={`線分 ${pattern.segments.findIndex(({ id }) => id === instance.sourceId) + 1}`}
             aria-current={cutterKey === key ? 'true' : undefined}
             x1={px(instance.start.x)} y1={py(instance.start.y)} x2={px(instance.end.x)} y2={py(instance.end.y)}
-            onClick={(event) => { event.stopPropagation(); selectSegment(instance) }} />
+            />
         })}
-        {target && designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey).map((fragment) => <line
+        {targetFragments.map((fragment) => <line
           key={`fragment-${logicalFragmentKey(fragment.logicalFragment)}`} className="fragment-hit"
           aria-label="Fragment" x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)}
-          onClick={(event) => { event.stopPropagation(); props.onHitCandidates([{ kind: 'fragment', fragment: fragment.logicalFragment }]) }} />)}
+          />)}
         {candidates.map((candidate) => {
           return <circle key={intersectionCandidateKey(candidate)}
           className="intersection-hit" aria-label="交点" cx={px(candidate.point.x)} cy={py(candidate.point.y)} r="11" vectorEffect="non-scaling-stroke"
-          onClick={(event) => { event.stopPropagation(); selectCandidateAt(candidate) }} />
+          />
         })}
         {anchors.map((anchor) => {
           const point = resolveSegmentEndpoint(anchor)
           return <circle className="anchor-hit" key={segmentEndpointAnchorKey(anchor)} role="button"
             aria-label={anchorLabel(anchor)} tabIndex={0}
             cx={px(point.x)} cy={py(point.y)} r="11" vectorEffect="non-scaling-stroke"
-            onClick={(event) => { event.stopPropagation(); selectAnchorAt(anchor) }}
-            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') selectAnchorAt(anchor) }} />
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onHitCandidates([{ kind: 'anchor', anchor }]) }} />
         })}
         </g>
       </svg>

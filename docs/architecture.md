@@ -44,6 +44,7 @@ src/
   pattern/
     anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
+    symmetry.ts            # Symmetry transform algebra、instance identity、派生Segment展開
     intersectionAnchor.ts  # concrete instance pairのcanonical identity
     designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
@@ -65,7 +66,9 @@ Cell Patternの論理モデルを担当する。Anchor参照、source Segment、
 
 Anchorやsource Segmentの型はPatternの論理モデルに置き、PatternからGeometryのpure functionを利用する。GeometryからPatternの論理型へ依存させない。全Anchorのunionである `AnchorRef`、source Segment端点に現在許可する `SegmentEndpointAnchor`、その専用resolverである `resolveSegmentEndpoint` を名前でも区別する。
 
-Pattern内部の依存方向は `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` は両invariantを回復する状態遷移を、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。公開互換entry pointからのre-exportを除き、この依存方向を逆転させたり循環させたりしない。
+Pattern内部では、Symmetryの離散transformに関する列挙・合成・逆変換・相対化・Geometry適用を `symmetry` の責務へ集約し、`designGeometry`、`materialExclusion`、`patternOperations`、`splitCandidates` がSymmetry種別ごとの分岐を個別に持たない。`symmetry` はGeometry層のpureな回転・鏡映primitiveを利用してよいが、Geometry層へPatternのSymmetry型やlogical identityを持ち込まない。
+
+その上で依存方向は `symmetry / designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` は両invariantを回復する状態遷移を、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。公開互換entry pointからのre-exportを除き、この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 
@@ -199,7 +202,64 @@ type SegmentInstanceTransform =
 
 rotationalの `steps: 1 / 2` はそれぞれ基準instanceから120度 / 240度回転した論理位置を表す。角度によるPoint変換はGeometry解決時に行い、instance identity自体はSymmetry内の離散位置として表現する。mirrorでは軸も具体instance identityの一部とする。
 
-論理identityとGeometryの一致は別概念とする。例えばmirror軸上のSegmentでは `identity` instanceと `mirror` instanceが同じPointSegmentへ解決され得るが、`SegmentInstanceRef` としては別instanceのままとする。Geometry上の一致を理由にinstance identityを統合しない。
+論理identityとGeometryの一致は別概念とする。例えばmirror軸上のSegmentでは `identity` instanceと `mirror` instanceが同じPointSegmentへ解決され得るが、現行仕様では `SegmentInstanceRef` としては別instanceのままとする。Geometry上の一致を理由にinstance identityを統合しない。この現行identity契約自体を変更する場合は、Segment Familyのcanonicalizationと依存参照の移行を同じPattern状態遷移として別途定義する。
+
+#### Symmetry transform algebra
+
+<!-- test-contract: ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA -->
+Symmetry固有の離散transform規則はPattern層の1つの境界へ集約する。上位のPattern操作は `none / mirror / rotational` を列挙して分岐するのではなく、現在のSymmetryから得たtransform algebraの共通操作だけを利用する。
+
+各Symmetryは、現在有効な `SegmentInstanceTransform` の有限集合と、その集合上の少なくとも次の操作を提供するものとして扱う。
+
+- identity transform
+- 有効transform集合の決定的な列挙
+- transformのcanonical key
+- transformの合成
+- transformの逆元
+- transformが現在のSymmetryで有効かの判定
+- Point / PointSegmentへのtransform適用
+- absoluteなinstance transformと `SplitRelativeTransform` の相互変換
+
+概念上、`compose(a, b)` は「`a` を適用した後に `b` を適用する」合成とし、Geometryへ解決した場合に次を満たす。
+
+```text
+apply(compose(a, b), geometry)
+  = apply(b, apply(a, geometry))
+```
+
+有効transform集合はidentityを含み、合成とinverseについて閉じる。relative transformは別個のcase表から計算せず、target transformを `t`、cutter transformを `c` としたとき、`compose(inverse(t), c)` で得られる同じalgebra上の要素を永続表現の `SplitRelativeTransform` へ射影して得る。逆にSplitRelationをorbit展開するときは、relative表現をalgebra要素へ戻し、各target transformへ合成してcutter transformを得る。
+
+したがって、現在表現可能なrelative transform集合もinstance transform集合から導出する。`instanceTransforms` と `supportedRelativeTransforms` がSymmetry種別ごとに独立した対応表を持ち、両者の整合性を呼び出し側が維持する構造にはしない。
+
+`SegmentInstanceTransform` はabsoluteなconcrete instance identity、`SplitRelativeTransform` は同じSymmetry文脈内で使う永続的な相対表現という区別を維持する。mirror axisのようにSymmetry文脈から一意に補える情報をrelative表現へ重複保存しない。relative表現へ変換できないtransformは、そのSymmetryでは表現不能として扱う。
+
+Symmetry種別を識別する処理が必要な場合、そのdispatchはtransform algebraを構築するPattern層の境界へ閉じ込める。Geometry層、`designGeometry`、`materialExclusion`、`patternOperations`、`splitCandidates` へ同じcase分岐を複製しない。UI上のラベルや設定項目の表示分岐はこのdomain制約とは別責務とする。
+
+このalgebraは現在の離散Symmetryを一貫して扱うためのものであり、将来の未知のSymmetryを先回りした汎用数学frameworkにはしない。具体的なclass / object / helper名や内部テーブル表現はArchitecture contractとせず、上記の操作と法則、および分岐の責務境界を契約とする。
+
+#### Segment instance mapping
+
+<!-- test-contract: ARCH-PATTERN-SEGMENT-INSTANCE-MAPPING -->
+Pattern状態遷移でsource Segmentのlogical representativeを変更する必要が生じた場合に備え、instanceの写像はGeometry座標の近似やSymmetry種別ごとのoffset式ではなく、同一Symmetry文脈のtransform algebraで表現できる構成とする。
+
+概念上のbasis mappingは、少なくとも「旧sourceのidentity instanceが、新sourceのどのinstanceに対応するか」と「Segment方向が維持されるか反転するか」を表す。
+
+```ts
+interface SegmentInstanceBasisMapping {
+  fromSourceSegmentId: SegmentId
+  toSourceSegmentId: SegmentId
+  toTransform: SegmentInstanceTransform
+  direction: 'preserve' | 'reverse'
+}
+```
+
+型名や具体的な格納形式は固定しない。`toTransform` は同一Symmetry内で有効なtransformであり、旧sourceのidentity Geometryが `toSourceSegmentId + toTransform` の無向Segment Geometryに対応することを意味する。`direction` はMaterialExclusionのstart / endのようにSegment方向へ意味がある参照を移行するときだけ利用し、SegmentInstanceRefそのものへ方向フラグを混ぜない。
+
+旧sourceの任意のinstance transform `g` は、`compose(toTransform, g)` によって新source側のinstance transformへ写す。これは「旧sourceのidentityに対応する新source instanceへ、旧instanceと同じ `g` をさらに作用させる」という意味であり、前節で定義したcompose順序に従う。SplitRelationの移行が必要な場合は、target / cutterそれぞれのinstanceをこの共通写像で移した後、写像後の2 instanceからrelative transformを再計算する。rotationalのstep加減算やmirrorのXORをmigration側へ直接実装しない。
+
+instance mappingは**同一Symmetry文脈内のlogical mapping**とする。異なるSymmetry間で何を引き継ぐかは `changeSymmetry` 等のPattern状態遷移が決定し、Geometry上で近いinstanceを探してmappingを推測しない。また、mappingが定義できない参照を同じ位置に見える別identityへ自動付け替えしない。
+
+本節はmappingを表現・適用するprimitiveの責務を定めるものであり、Segment Familyの統合、重複instanceの削除、SplitRelation / MaterialExclusionの実際のsource移行を現行仕様へ導入するものではない。それらのPattern意味論を変更する場合は、対応する仕様・invariantと状態遷移を別途更新する。
 
 #### SplitRelationとrelative transform
 
@@ -223,11 +283,9 @@ type SplitRelativeTransform =
 
 `SegmentInstanceTransform` は具体instanceの絶対identity、`SplitRelativeTransform` は同じSymmetry内でのinstance間の相対位置であり、別概念として扱う。mirror軸は具体instance identityには含めるが、`relativeTransform: mirror` 自体には含めない。
 
-相対transformは概念的に、target transformを `t`、cutter transformを `c` としたとき `inverse(t) ∘ c` に相当する。現在対応するSymmetryでは、汎用Group abstractionを導入せず次の離散規則で決定的に正規化・展開する。
+相対transformの正規化・inverse・orbit展開は前節のSymmetry transform algebraを利用する。SplitRelation側で `none / mirror / rotational` ごとの算術や対応表を持たない。target transformを `t`、cutter transformを `c` としたrelativeはalgebra上の `compose(inverse(t), c)` から導出し、orbit展開時は各target transformとrelativeに対応するalgebra要素を合成してcutter transformを得る。
 
-- `none`: `identity` のみ。
-- `rotational`: transformを `0 = identity / 1 = rotate120 / 2 = rotate240` とし、`relativeSteps = (cutterSteps - targetSteps + 3) % 3` とする。orbit展開時は各 `g ∈ {0,1,2}` に対して `target = g`、`cutter = (g + relativeSteps) % 3` とする。
-- `mirror`: `0 = identity / 1 = mirror` とし、relativeはtargetとcutterのXOR、orbit展開時のcutterはtargetとrelativeのXORとする。具体的なmirror instanceには現在のmirror軸を付与する。
+現在の外部意味は従来どおり、`none` では `identity`、mirrorでは `identity / mirror`、rotationalでは `identity / rotation +1 / rotation +2` を表現する。この列挙は保存モデルの意味であり、計算ロジックを各利用箇所へ分散させる根拠にはしない。
 
 この正規化により、同じorbit内のどのconcrete pairから操作しても同じSplitRelationになる。relation identityは `targetSegmentId / cutterSegmentId / relativeTransform` の組とし、操作時に選ばれた代表pairを保存しない。同じrelationは重複保持しない。
 

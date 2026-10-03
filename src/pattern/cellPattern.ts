@@ -7,13 +7,13 @@ export type Symmetry =
   | { type: 'rotational' }
 
 export type SegmentInstanceTransform =
-  | { type: 'identity' }
-  | { type: 'mirror'; axis: MirrorAxis }
-  | { type: 'rotation'; steps: 1 | 2 }
+  | { readonly type: 'identity' }
+  | { readonly type: 'mirror'; readonly axis: MirrorAxis }
+  | { readonly type: 'rotation'; readonly steps: 1 | 2 }
 
 export interface SegmentInstanceRef {
-  sourceSegmentId: SegmentId
-  transform: SegmentInstanceTransform
+  readonly sourceSegmentId: SegmentId
+  readonly transform: SegmentInstanceTransform
 }
 
 export interface SegmentInstancePair {
@@ -22,9 +22,9 @@ export interface SegmentInstancePair {
 }
 
 export type SplitRelativeTransform =
-  | { type: 'identity' }
-  | { type: 'mirror' }
-  | { type: 'rotation'; steps: 1 | 2 }
+  | { readonly type: 'identity' }
+  | { readonly type: 'mirror' }
+  | { readonly type: 'rotation'; readonly steps: 1 | 2 }
 
 export interface SplitRelation {
   targetSegmentId: SegmentId

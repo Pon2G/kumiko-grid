@@ -28,7 +28,7 @@ describe('相対変換によるsplit軌道', () => {
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('A', 1), ref('B', 2))).toEqual({ type: 'rotation', steps: 1 })
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('A', 2), ref('B', 0))).toEqual({ type: 'rotation', steps: 1 })
     expect(normalizeRelativeTransform({ type: 'rotational' }, ref('B', 1), ref('A', 0))).toEqual({ type: 'rotation', steps: 2 })
-    expect(inverseRelativeTransform({ type: 'rotation', steps: 1 })).toEqual({ type: 'rotation', steps: 2 })
+    expect(inverseRelativeTransform({ type: 'rotational' }, { type: 'rotation', steps: 1 })).toEqual({ type: 'rotation', steps: 2 })
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-RELATIVE-TRANSFORM' }, 'mirrorの相対変換をXORとして正規化する', () => {

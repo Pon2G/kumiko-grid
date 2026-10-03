@@ -338,7 +338,7 @@ IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitR
 #### SplitRelationの有効性とCellPattern invariant
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-ORBIT-VALIDITY -->
-relationから展開される対称軌道の全concrete pairがsplit可能な場合だけ、そのrelationを有効とする。各pairについて次をすべて満たすことをsplit可能条件とする。
+relationのraw symmetry orbitをsourceごとのcanonical SegmentInstanceRefへ射影し、重複するdirected pairを除いた**canonical concrete pair orbit**の全pairがsplit可能な場合だけ、そのrelationを有効とする。各pairについて次をすべて満たすことをsplit可能条件とする。
 
 - targetとcutterが同一の `SegmentInstanceRef` 自身ではない。
 - intersection kindが `cross` または `touch` である。
@@ -349,10 +349,10 @@ cutter側parameterが内部であることは要求しない。これはtarget�
 
 1つのrelationはSymmetry orbit全体を表すため、orbitの一部だけがsplit可能な部分relationは保持しない。現在のmirror / rotationalは等長変換であり、同じorbit内でsplit可否が不一致になる場合は部分relationとして救済せず、Geometryまたはtoleranceの不整合として扱う。
 
-同一source Segment間のrelationも許可するが、`targetSegmentId === cutterSegmentId` かつ `relativeTransform === identity` は同一instance自身を参照するため常に無効とする。mirrorまたはrotationalのnon-identity relationは、展開された全pairがsplit可能なら有効とする。
+同一source Segment間のrelationも、canonical concrete pair orbitが異なるinstance同士を参照し、その全pairがsplit可能なら許可する。`targetSegmentId === cutterSegmentId` かどうかやraw `relativeTransform` の種類だけで有効性を決めない。stabilizerによってnon-identity relativeTransformが同一concrete instance自身へ潰れるrelationは無効とする。
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-RELATION-INVARIANT -->
-CellPatternへ保持されるSplitRelationは常に、参照するsource Segmentが存在し、現在のSymmetryでrelativeTransformを表現でき、canonicalに正規化され、重複せず、orbit全体がsplit可能という不変条件を満たす。無効なrelationや「現在は効かないが将来復活するかもしれないrelation」をCellPatternへ保持しない。
+CellPatternへ保持されるSplitRelationは常に、参照するcanonical source Segmentが存在し、現在のSymmetryでrelativeTransformを表現でき、canonical concrete pair orbitの代表relativeTransformへ正規化され、同じpair orbitを重複保持せず、orbit全体がsplit可能という不変条件を満たす。無効なrelationや「現在は効かないが将来復活するかもしれないrelation」をCellPatternへ保持しない。
 
 relation追加APIはこの不変条件を満たさないrelationを追加できないものとする。Segment削除時はそのSegmentをtargetまたはcutterとして参照するrelationを除去する。
 
@@ -401,9 +401,9 @@ Symmetry変更で旧relationを引き継げるか、source統合で新しいrela
 #### Split candidateとIntersection interaction candidate
 
 <!-- test-contract: ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION -->
-新しく追加可能なSplitRelation候補は保存データではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからcanonicalなrelation候補を列挙し、それぞれのorbitを展開して**Effective Geometry上で**全concrete pairがsplit可能な候補だけを返す派生情報とする。新規候補の各concrete pairでは、交点がtarget側の材ありEffective Fragment内部にあることを要求する。cutter側は既存SplitRelationのsplit可能条件と同様、端点での `touch` を許容する。
+新しく追加可能なSplitRelation候補は保存データではなく、target source、cutter source、現在のSymmetryで表現可能なrelativeTransformからrelation候補を作り、それぞれをcanonical concrete pair orbitへ正規化して**Effective Geometry上で**全concrete pairがsplit可能な候補だけを返す派生情報とする。stabilizerによって複数relativeTransformが同じpair orbitへ収束する場合はcanonical relation 1件だけを候補にする。新規候補の各concrete pairでは、交点がtarget側の材ありEffective Fragment内部にあることを要求する。cutter側は既存SplitRelationのsplit可能条件と同様、端点での `touch` を許容する。
 
-candidate生成はconcrete instance pairの列挙順や最初に発見された交点からrelation identityを決めない。MaterialExclusionで材が存在しない区間だけに成立する交点は新規SplitRelation候補にしない。一方、すでに保持されているSplitRelationの有効性検証はDesign Geometryを基準とし、Effective Geometryから消えたことを理由に既存relationを暗黙削除しない。
+candidate生成はraw relativeTransform、concrete instance pairの列挙順、最初に発見された交点からrelation identityを決めない。MaterialExclusionで材が存在しない区間だけに成立する交点は新規SplitRelation候補にしない。一方、すでに保持されているSplitRelationの有効性検証はDesign Geometryを基準とし、Effective Geometryから消えたことを理由に既存relationを暗黙削除しない。
 
 <!-- test-contract: ARCH-PATTERN-INTERSECTION-INTERACTION-CANDIDATE -->
 Canvas直接操作用には、source-levelのcanonical relation候補とは別に、選択中のconcrete target Segment instanceから見たIntersection interaction candidateを導出する。概念的には次を追跡する。

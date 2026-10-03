@@ -518,7 +518,9 @@ MaterialExclusionを追加・復元するPattern API、およびSegment削除・
 <!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY -->
 concrete LogicalFragmentからMaterialExclusionを作るときは、そのFragmentが属するtarget SegmentInstanceRefの逆変換をtarget / cutter双方へ作用させ、source identity targetとcanonical cutterのpairへ正規化する。同じSymmetry orbitに属するどのtarget instanceから操作しても同じsource-relative MaterialExclusionになるが、target stabilizer内で異なるcanonical cutterへ至る境界は区別する。その後、Fragmentのstabilizer orbit全体をcanonical区間集合へ反映する。
 
-Symmetry変更やSegment Family統合では、各旧MaterialExclusionの `segmentId` をtarget sourceのbasis mappingでrepresentativeへ写す。endpoint boundaryはtarget mappingの `direction` がreverseなら `start / end` を交換する。split-boundaryは旧target identity instanceと保存されたconcrete cutter instanceを、それぞれtarget / cutter source mappingへ通し、写像後のpairを新しいsource identity targetへ正規化する。対応するcanonical SplitRelationはpairから再導出するため、relation canonicalization後もconcrete boundary identityを失わない。
+Symmetry変更やSegment Family統合では、各旧MaterialExclusionの `segmentId` をtarget sourceのbasis mappingでrepresentativeへ写す。endpoint boundaryはtarget mappingの `direction` がreverseなら `start / end` を交換する。split-boundaryに保存されたcutterのabsolute transformは旧Symmetry文脈に属するため、旧transform algebraの `toRelative` でsource identity targetに対するmember semanticsへ戻し、新algebraの `fromRelative` で新Symmetryのabsolute transformへ変換してからcutter source mappingへ渡す。例えばmirror軸変更では `mirror(oldAxis) → relative mirror → mirror(newAxis)` と移す。新Symmetryで表現不能なmemberは移行不能とし、別transformやGeometry一致から推測しない。
+
+変換後の旧target identity instanceとconcrete cutter instanceを、それぞれtarget / cutter source mappingへ通し、写像後のpairを新しいsource identity targetへ正規化する。対応するcanonical SplitRelationはpairから再導出するため、relation canonicalization後もconcrete boundary identityを失わない。canonical SplitRelation orbit自体のmigrationと、そのorbit内の特定concrete boundary memberのmigrationは別々に成立を検証する。
 
 複数旧sourceから同じrepresentativeへ移行したMaterialExclusionはすべて同じsource上の区間としてunionし、移行後のDesign Geometryで通常の最大区間正規化を行う。これは新SymmetryでFamily全体へ同じ材状態を適用するためであり、representativeだけの旧状態を優先して他sourceの材なし指定を捨てない。
 

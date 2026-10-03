@@ -71,6 +71,7 @@ function migratePair(
 }
 
 function migrateBoundary(
+  previousSymmetry: Symmetry,
   next: Pick<CellPattern, 'segments' | 'symmetry' | 'splitRelations'>,
   mappings: ReadonlyMap<string, SegmentInstanceBasisMapping>,
   targetId: string,
@@ -86,7 +87,14 @@ function migrateBoundary(
   }
   const cutterMapping = mappings.get(boundary.cutter.sourceSegmentId)
   const target = mapCanonicalInstance(next, targetMapping, identityRef(targetId))
-  const cutter = cutterMapping && mapCanonicalInstance(next, cutterMapping, boundary.cutter)
+  const previousAlgebra = symmetryTransformAlgebra(previousSymmetry)
+  const nextAlgebra = symmetryTransformAlgebra(next.symmetry)
+  const member = previousAlgebra.toRelative(boundary.cutter.transform)
+  const nextTransform = member && nextAlgebra.fromRelative(member)
+  const cutter = cutterMapping && nextTransform && mapCanonicalInstance(next, cutterMapping, {
+    sourceSegmentId: boundary.cutter.sourceSegmentId,
+    transform: nextTransform,
+  })
   if (!target || !cutter) return null
   const migrated = normalizeConcreteSplitBoundary(next, target, cutter)
   if (!migrated) return null
@@ -95,14 +103,15 @@ function migrateBoundary(
 }
 
 function migrateExclusion(
+  previousSymmetry: Symmetry,
   next: Pick<CellPattern, 'segments' | 'symmetry' | 'splitRelations'>,
   mappings: ReadonlyMap<string, SegmentInstanceBasisMapping>,
   exclusion: MaterialExclusion,
 ): MaterialExclusion | null {
   const targetMapping = mappings.get(exclusion.segmentId)
   if (!targetMapping) return null
-  const boundaryA = migrateBoundary(next, mappings, exclusion.segmentId, exclusion.boundaryA)
-  const boundaryB = migrateBoundary(next, mappings, exclusion.segmentId, exclusion.boundaryB)
+  const boundaryA = migrateBoundary(previousSymmetry, next, mappings, exclusion.segmentId, exclusion.boundaryA)
+  const boundaryB = migrateBoundary(previousSymmetry, next, mappings, exclusion.segmentId, exclusion.boundaryB)
   return boundaryA && boundaryB ? { segmentId: targetMapping.toSourceSegmentId, boundaryA, boundaryB } : null
 }
 
@@ -119,7 +128,7 @@ export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPa
   const withRelations = [...new Map(migratedRelations.map((relation) => [splitRelationKey(relation), relation])).values()]
     .reduce<CellPattern>((current, relation) => addSplitRelation(current, relation), base)
   const materialExclusions = pattern.materialExclusions.flatMap((exclusion) => {
-    const migrated = migrateExclusion(withRelations, families.mappings, exclusion)
+    const migrated = migrateExclusion(pattern.symmetry, withRelations, families.mappings, exclusion)
     return migrated ? [migrated] : []
   })
   return cleanupMaterialExclusions({ ...withRelations, materialExclusions })

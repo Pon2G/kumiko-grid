@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern } from './cellPattern'
 import { deriveLogicalFragments } from './designGeometry'
-import { excludeMaterial, isFragmentExcluded } from './materialExclusion'
+import { deriveEffectiveGeometry, excludeMaterial, isFragmentExcluded, materialBoundaryRelation } from './materialExclusion'
 import { addSegment, addSplitRelation, changeSymmetry } from './patternOperations'
 import type { Segment } from './segment'
 
@@ -96,5 +96,50 @@ describe('Segment Family canonicalization', () => {
       && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'segment-endpoint' && boundary.endpoint === 'end')
       && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'intersection'))!
     expect(isFragmentExcluded(changed, migratedFragment)).toBe(true)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY', regression: 37 }, 'mirror境界memberをold algebraからnew algebraへ移して部分区間を維持する', () => {
+    const selfSymmetricTarget: Segment = {
+      id: 'T',
+      start: { kind: 'edge-division', edge: 'AB', divisions: 4, index: 3 },
+      end: { kind: 'edge-division', edge: 'CA', divisions: 4, index: 1 },
+    }
+    const asymmetricCutter: Segment = {
+      id: 'C',
+      start: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 },
+      end: { kind: 'edge-division', edge: 'CA', divisions: 4, index: 3 },
+    }
+    const initial = addSplitRelation({
+      ...empty({ type: 'mirror', axis: 'A' }), segments: [selfSymmetricTarget, asymmetricCutter],
+    }, { targetSegmentId: 'T', cutterSegmentId: 'C', relativeTransform: { type: 'identity' } })
+    const targetFragments = deriveLogicalFragments(initial)
+      .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'T')
+    const excluded = excludeMaterial(initial, targetFragments[0])
+    const oldBoundaries = excluded.materialExclusions.flatMap(({ boundaryA, boundaryB }) => [boundaryA, boundaryB])
+      .filter((boundary) => boundary.kind === 'split-boundary')
+
+    expect(oldBoundaries.map(({ cutter }) => cutter.transform)).toEqual([
+      { type: 'identity' }, { type: 'mirror', axis: 'A' },
+    ])
+    expect(oldBoundaries.map((boundary) => materialBoundaryRelation(initial, 'T', boundary)))
+      .toEqual([initial.splitRelations[0], initial.splitRelations[0]])
+
+    const changed = changeSymmetry(excluded, { type: 'mirror', axis: 'B' })
+    expect(changed.splitRelations).toEqual([{
+      targetSegmentId: 'T', cutterSegmentId: 'T', relativeTransform: { type: 'mirror' },
+    }])
+    expect(changed.materialExclusions).toEqual([{
+      segmentId: 'T',
+      boundaryA: { kind: 'segment-endpoint', endpoint: 'start' },
+      boundaryB: {
+        kind: 'split-boundary',
+        cutter: { sourceSegmentId: 'T', transform: { type: 'mirror', axis: 'B' } },
+      },
+    }])
+    const changedTargetFragments = deriveLogicalFragments(changed)
+      .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'T')
+    expect(changedTargetFragments.some((fragment) => isFragmentExcluded(changed, fragment))).toBe(true)
+    expect(deriveEffectiveGeometry(changed).filter(({ sourceId }) => sourceId === 'T').length)
+      .toBeLessThan(changedTargetFragments.length)
   })
 })

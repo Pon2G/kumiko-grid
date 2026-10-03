@@ -169,6 +169,8 @@ SymmetryによるFamily判定は、PointSegmentへ解決した浮動小数点座
 
 canonicalizationでは各旧sourceについて、representative source上のどのtransformへidentity instanceが対応するか、および端点方向がpreserve / reverseのどちらかを `SegmentInstanceBasisMapping` として導出する。複数transformが同じdefinitionへ作用するstabilizerがある場合は、後述するcanonical concrete transformを選ぶ。
 
+source Segmentを追加するPattern APIは、同一unordered Anchor pairと現在のSymmetry上のFamily重複を同じinvariantとして検証し、重複する新規sourceを追加しない。Symmetry変更も返却前に同じFamily invariantを回復する。React / Appが `segments` 配列へ直接appendしてこの検証を迂回しない。
+
 #### IntersectionAnchor
 
 <!-- test-contract: ARCH-PATTERN-INTERSECTION-ANCHOR-IDENTITY -->
@@ -277,7 +279,7 @@ interface SegmentInstanceBasisMapping {
 }
 ```
 
-型名や具体的な格納形式は固定しない。`toTransform` は同一Symmetry内で有効なtransformであり、旧sourceのidentity Geometryが `toSourceSegmentId + toTransform` の無向Segment Geometryに対応することを意味する。`direction` はMaterialExclusionのstart / endのようにSegment方向へ意味がある参照を移行するときだけ利用し、SegmentInstanceRefそのものへ方向フラグを混ぜない。
+型名や具体的な格納形式は固定しない。`toTransform` は同一Symmetry内で有効なtransformであり、旧sourceのidentity Segment definitionが `toSourceSegmentId + toTransform` の論理Segment definitionに対応することを意味する。`direction` は旧sourceのorderedなstart / endが、そのtransformed representativeのstart / endと同順か逆順かを表す。MaterialExclusionのstart / endのようにSegment方向へ意味がある参照を移行するときだけ利用し、SegmentInstanceRefそのものへ方向フラグを混ぜない。
 
 旧sourceの任意のinstance transform `g` は、`compose(toTransform, g)` によって新source側のraw instance transformへ写す。sourceのstabilizerによって複数raw transformが同じconcrete instanceを表す場合は、さらにrepresentative source上のcanonical concrete transformへ射影する。SplitRelationの移行ではtarget / cutterそれぞれのinstanceをこの共通写像で移した後、写像後の2 concrete instanceからrelative transformを再計算する。rotationalのstep加減算やmirrorのXORをmigration側へ直接実装しない。
 
@@ -635,6 +637,7 @@ SplitRelation解除により依存MaterialExclusionが連動削除される場�
 
 コンポーネントは計算済みモデルとcallbackを受け取り、次の処理をドメイン層へ委譲する。
 
+- source Segment追加時のSegment Family検証・canonicalization
 - SegmentEndpointAnchorから座標への解決
 - mirror / rotational変換
 - SplitRelationの正規化、検証、Symmetry変更時の再検証

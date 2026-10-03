@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
-import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
+import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {
@@ -39,7 +39,7 @@ export default function App() {
         start: transition.command.startAnchor,
         end: transition.command.endAnchor,
       }
-      setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
+      setPattern((current) => addSegment(current, segment))
     }
   }
 

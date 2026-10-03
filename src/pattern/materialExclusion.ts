@@ -1,7 +1,7 @@
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef } from './cellPattern'
 import type { LogicalFragment, PatternFragment } from './designGeometry'
-import { deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, relativeTransformKey, splitRelationKey } from './designGeometry'
+import { canonicalizeSplitRelation, deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, relativeTransformKey, splitRelationKey } from './designGeometry'
 import { instanceRefKey } from './symmetry'
 
 const boundaryKey = (boundary: MaterialBoundaryRef): string => boundary.kind === 'segment-endpoint'
@@ -22,7 +22,13 @@ export function normalizeMaterialBoundary(
     : instanceRefKey(boundary.second) === targetKey ? boundary.first : null
   if (!other) return null
   const relativeTransform = normalizeRelativeTransform(pattern.symmetry, target, other)
-  return relativeTransform ? { kind: 'split-boundary', cutterSegmentId: other.sourceSegmentId, relativeTransform } : null
+  if (!relativeTransform) return null
+  const relation = canonicalizeSplitRelation(pattern, {
+    targetSegmentId: target.sourceSegmentId,
+    cutterSegmentId: other.sourceSegmentId,
+    relativeTransform,
+  })
+  return relation ? { kind: 'split-boundary', cutterSegmentId: relation.cutterSegmentId, relativeTransform: relation.relativeTransform } : null
 }
 
 interface BoundaryOrder { boundaries: MaterialBoundaryRef[]; index: Map<string, number> }

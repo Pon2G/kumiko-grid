@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern } from './cellPattern'
 import type { Segment } from './segment'
-import { deriveEffectiveGeometry, excludeMaterial, isFragmentExcluded, restoreMaterial } from './materialExclusion'
+import { deriveEffectiveGeometry, excludeMaterial, isFragmentExcluded, materialBoundaryRelation, restoreMaterial } from './materialExclusion'
 import { addSplitRelation, changeSymmetry, deriveIntersectionAnchors, deriveLogicalFragments, getIntersectionInteractionCandidates, getSplitCandidates, removeSegment, removeSplitRelation } from './splitting'
 
 const target: Segment = {
@@ -67,9 +67,45 @@ describe('MaterialExclusion', () => {
 
     expect(excluded.materialExclusions).toHaveLength(1)
     expect([excluded.materialExclusions[0].boundaryA, excluded.materialExclusions[0].boundaryB]).toContainEqual({
-      kind: 'split-boundary', cutterSegmentId: 'B', relativeTransform: { type: 'identity' },
+      kind: 'split-boundary', cutter: { sourceSegmentId: 'B', transform: { type: 'identity' } },
     })
     expect(deriveEffectiveGeometry(excluded).filter(({ sourceId }) => sourceId === 'A')).toHaveLength(3)
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY', regression: 37 }, '自己対称target上の同一relation由来境界を区別し、Fragment orbitを一括で除外・復元する', () => {
+    const selfSymmetricTarget: Segment = {
+      id: 'T', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'vertex', vertex: 'C' },
+    }
+    const asymmetricCutter: Segment = {
+      id: 'C', start: { kind: 'vertex', vertex: 'A' },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 },
+    }
+    const initial = addSplitRelation({
+      segments: [selfSymmetricTarget, asymmetricCutter], symmetry: { type: 'mirror', axis: 'A' },
+      splitRelations: [], materialExclusions: [],
+    }, { targetSegmentId: 'T', cutterSegmentId: 'C', relativeTransform: { type: 'identity' } })
+    const targetLogicalFragments = deriveLogicalFragments(initial)
+      .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'T')
+
+    expect(targetLogicalFragments).toHaveLength(3)
+    const middleExcluded = excludeMaterial(initial, targetLogicalFragments[1])
+    const splitBoundaries = middleExcluded.materialExclusions.flatMap(({ boundaryA, boundaryB }) => [boundaryA, boundaryB])
+      .filter((boundary) => boundary.kind === 'split-boundary')
+    expect(splitBoundaries).toEqual([
+      { kind: 'split-boundary', cutter: { sourceSegmentId: 'C', transform: { type: 'identity' } } },
+      { kind: 'split-boundary', cutter: { sourceSegmentId: 'C', transform: { type: 'mirror', axis: 'A' } } },
+    ])
+    expect(splitBoundaries.map((boundary) => materialBoundaryRelation(initial, 'T', boundary))).toEqual([
+      initial.splitRelations[0], initial.splitRelations[0],
+    ])
+    expect(deriveEffectiveGeometry(middleExcluded).filter(({ sourceId }) => sourceId === 'T')).toHaveLength(2)
+    expect(restoreMaterial(middleExcluded, targetLogicalFragments[1]).materialExclusions).toEqual([])
+
+    const outerExcluded = excludeMaterial(initial, targetLogicalFragments[0])
+    expect(targetLogicalFragments.map((fragment) => isFragmentExcluded(outerExcluded, fragment))).toEqual([true, false, true])
+    expect(deriveEffectiveGeometry(outerExcluded).filter(({ sourceId }) => sourceId === 'T')).toHaveLength(1)
+    const outerRestored = restoreMaterial(outerExcluded, targetLogicalFragments[0])
+    expect(targetLogicalFragments.every((fragment) => !isFragmentExcluded(outerRestored, fragment))).toBe(true)
   })
 
   contractTest({ contract: 'SPEC-PATTERN-MATERIAL-EXCLUSION-NORMALIZATION' }, '隣接Fragmentの除外を最大区間へ統合し、Fragment単位の復元で差し引く', () => {

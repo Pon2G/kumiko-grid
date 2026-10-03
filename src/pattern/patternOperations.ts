@@ -7,7 +7,7 @@ import {
   supportedRelativeTransforms,
   validateSplitRelationOrbit,
 } from './designGeometry'
-import { cleanupMaterialExclusions } from './materialExclusion'
+import { cleanupMaterialExclusions, materialBoundaryRelation, normalizeConcreteSplitBoundary } from './materialExclusion'
 import { canonicalizeSegmentFamilies, mapCanonicalInstance } from './segmentFamily'
 import type { Segment } from './segment'
 import { segmentFamilyKey, symmetryTransformAlgebra, type SegmentInstanceBasisMapping } from './symmetry'
@@ -84,9 +84,14 @@ function migrateBoundary(
       ? boundary.endpoint === 'start' ? 'end' : 'start'
       : boundary.endpoint,
   }
-  const relation = migratePair(next, mappings, targetId, boundary.cutterSegmentId, boundary.relativeTransform)
-  if (!relation || !next.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))) return null
-  return { kind: 'split-boundary', cutterSegmentId: relation.cutterSegmentId, relativeTransform: relation.relativeTransform }
+  const cutterMapping = mappings.get(boundary.cutter.sourceSegmentId)
+  const target = mapCanonicalInstance(next, targetMapping, identityRef(targetId))
+  const cutter = cutterMapping && mapCanonicalInstance(next, cutterMapping, boundary.cutter)
+  if (!target || !cutter) return null
+  const migrated = normalizeConcreteSplitBoundary(next, target, cutter)
+  if (!migrated) return null
+  const relation = materialBoundaryRelation(next, target.sourceSegmentId, migrated)
+  return relation && next.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation)) ? migrated : null
 }
 
 function migrateExclusion(

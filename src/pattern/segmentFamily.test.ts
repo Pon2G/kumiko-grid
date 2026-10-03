@@ -81,14 +81,14 @@ describe('Segment Family canonicalization', () => {
     expect(excluded.materialExclusions[0]).toEqual({
       segmentId: 'B',
       boundaryA: { kind: 'segment-endpoint', endpoint: 'start' },
-      boundaryB: { kind: 'split-boundary', cutterSegmentId: 'C', relativeTransform: { type: 'identity' } },
+      boundaryB: { kind: 'split-boundary', cutter: { sourceSegmentId: 'C', transform: { type: 'identity' } } },
     })
     expect(changed.splitRelations).toEqual([{
       targetSegmentId: 'A', cutterSegmentId: 'C', relativeTransform: { type: 'rotation', steps: 1 },
     }])
     expect(changed.materialExclusions).toEqual([{
       segmentId: 'A',
-      boundaryA: { kind: 'split-boundary', cutterSegmentId: 'C', relativeTransform: { type: 'rotation', steps: 1 } },
+      boundaryA: { kind: 'split-boundary', cutter: { sourceSegmentId: 'C', transform: { type: 'rotation', steps: 1 } } },
       boundaryB: { kind: 'segment-endpoint', endpoint: 'end' },
     }])
     const migratedFragment = deriveLogicalFragments(changed).find(({ segmentInstanceRef, boundaryA, boundaryB }) =>

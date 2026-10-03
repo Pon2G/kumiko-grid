@@ -34,7 +34,7 @@ export interface SplitRelation {
 
 export type MaterialBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
-  | { kind: 'split-boundary'; cutterSegmentId: SegmentId; relativeTransform: SplitRelativeTransform }
+  | { kind: 'split-boundary'; cutter: SegmentInstanceRef }
 
 export interface MaterialExclusion {
   segmentId: SegmentId

@@ -167,8 +167,7 @@ type MaterialBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
   | {
       kind: 'split-boundary'
-      cutterSegmentId: SegmentId
-      relativeTransform: SplitRelativeTransform
+      cutter: SegmentInstanceRef
     }
 
 interface MaterialExclusion {
@@ -178,12 +177,12 @@ interface MaterialExclusion {
 }
 ```
 
-`split-boundary` は、`segmentId` をtarget source SegmentとするSplitRelation由来の境界をsource-relativeに参照する。保存上の `boundaryA / boundaryB` の順序はSegment上の先後を意味せず、現在のDesign Geometryへ解決したときに順序を求める。
+`split-boundary` は、`segmentId` のsource identity instanceをtargetとするconcrete pairのcutterを参照する。対応するcanonical SplitRelationもこのpairから導出できなければならない。source stabilizerがある場合、1つのcanonical SplitRelation orbitに同じidentity targetと異なるcanonical cutter instanceのpairが複数含まれ得るため、SplitRelationだけで境界を同一視しない。座標やSegment parameterではなくcanonical `SegmentInstanceRef` によって各IntersectionAnchorを区別する。保存上の `boundaryA / boundaryB` の順序はSegment上の先後を意味せず、現在のDesign Geometryへ解決したときに順序を求める。
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION-SYMMETRY -->
-MaterialExclusionはsource Segment単位の状態とし、そのsourceからSymmetry生成される全Segment instanceへ同じ論理区間として適用する。どのconcrete Segment instance上のFragmentから操作しても、同じ対称軌道に属するFragmentであれば同じMaterialExclusionへ正規化する。個々の対称コピーごとに材の有無を別設定しない。
+MaterialExclusionはsource Segment単位の状態とし、そのsourceからSymmetry生成される全Segment instanceへ同じ論理区間として適用する。どのconcrete Segment instance上のFragmentから操作しても、同じ対称軌道に属するFragmentであれば同じMaterialExclusionへ正規化する。source stabilizerが1つのconcrete Segment instanceを自身へ写し、その上の異なるFragmentを交換する場合も、それらを同じFragment orbitとして一括で除外・復元する。個々の対称コピーや同じorbitのFragmentごとに材の有無を別設定しない。
 
-Symmetry変更で複数sourceが1つのSegment Familyへ統合される場合、各旧sourceのMaterialExclusionをrepresentative sourceへlogical mappingで移行し、移行後の全exclusionをunionして通常の区間正規化を行う。sourceの向きがrepresentativeに対して反転するmappingでは `start / end` を入れ替える。split-boundaryはtarget / cutterのinstance mapping後のpairからrelativeTransformを再導出し、移行後に対応するSplitRelationが残る境界だけを保持する。
+Symmetry変更で複数sourceが1つのSegment Familyへ統合される場合、各旧sourceのMaterialExclusionをrepresentative sourceへlogical mappingで移行し、移行後の全exclusionをunionして通常の区間正規化を行う。sourceの向きがrepresentativeに対して反転するmappingでは `start / end` を入れ替える。split-boundaryはtarget / cutter双方のinstance mapping後のconcrete pairを新source identity targetへ正規化し、移行後に対応するcanonical SplitRelationが残る境界だけを保持する。
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION-NORMALIZATION -->
 同じ材なし状態を複数の冗長な区間表現で保持しない。重複、包含、隣接するMaterialExclusionは、現在のDesign Geometry上で同じ材なし範囲を表す最大区間へ正規化する。

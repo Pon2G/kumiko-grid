@@ -485,8 +485,7 @@ type MaterialBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
   | {
       kind: 'split-boundary'
-      cutterSegmentId: SegmentId
-      relativeTransform: SplitRelativeTransform
+      cutter: SegmentInstanceRef
     }
 
 interface MaterialExclusion {
@@ -496,7 +495,7 @@ interface MaterialExclusion {
 }
 ```
 
-`split-boundary` は `segmentId` をtarget source Segmentとするcanonical SplitRelationを参照するsource-relativeな境界表現である。具体的なSegmentInstanceRefやIntersectionAnchorを保存しない。Symmetry展開時にはtarget instanceごとに同じrelativeTransformを使ってcutter instanceを解決し、そのconcrete pairからIntersectionAnchorを導出する。
+`split-boundary` は `segmentId` のsource identity instanceをtargetとするconcrete pairについて、canonical cutter `SegmentInstanceRef` を保持するsource-relativeな境界表現である。1つのcanonical SplitRelation orbitには、source stabilizerにより同じcanonical targetと異なるcutterを持つpairが複数含まれ得るため、relation identityだけではIntersectionAnchorを一意にできない。境界からtarget / cutter pairを復元して対応するcanonical SplitRelationの存在を検証する一方、異なるcutter instanceは別境界として維持する。Point、Segment parameter、Fragment indexはidentityとして保存しない。
 
 Segment端点の `start / end` はsource Segment定義の向きに対する論理参照であり、表示上の左右や上下を意味しない。`boundaryA / boundaryB` もSegment上の先後を永続意味にせず、現在のDesign Geometryへ解決して一時的にparameter順を求める。
 
@@ -505,21 +504,21 @@ CellPattern内のMaterialExclusion集合は、同一source SegmentについてDe
 
 Fragmentを材なしにする操作では、選択されたconcrete LogicalFragmentをsource-relativeな境界pairへ変換し、現在のexclusion区間集合とのunionを取り、最大の連続区間へ再表現する。材を戻す操作では、選択された現在のDesign Fragmentの範囲をexclusion区間集合からsubtractし、必要なら1区間を2区間へ分割して再表現する。
 
-union / subtractionの区間順序・隣接・包含判定は、source Segmentのidentity instance上へsource-relative境界を解決して行う。Symmetry展開配列の順序や、ユーザーが操作したconcrete instanceを基準にしない。計算中はDesign Geometryから得たSegment parameterを一時的な順序・区間計算に利用してよいが、parameter、座標、Fragment配列indexをMaterialExclusionへ保存しない。
+union / subtractionの区間順序・隣接・包含判定は、source Segmentのidentity instance上へsource-relative境界を解決して行う。Symmetry展開配列の順序や、ユーザーが操作したconcrete instanceを基準にしない。選択Fragmentをidentity instanceへ正規化した後、source stabilizerが交換する全Fragmentの区間をorbitとして閉じてからunion / subtractionへ渡す。これにより、同じconcrete Segment上の異なるFragmentであっても同じSymmetry orbitなら材状態を分離しない。計算中はDesign Geometryから得たSegment parameterを一時的な順序・区間計算に利用してよいが、parameter、座標、Fragment配列indexをMaterialExclusionへ保存しない。
 
 例えば `I1-I2` と `I2-end` の除外が `I1-end` へ統合されても、I2を成立させるSplitRelationとLogicalFragment境界はDesign Geometryに残る。MaterialExclusionのcanonicalizationはDesign topologyのcanonicalizationではない。
 
 <!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-INVARIANT -->
 CellPatternへ保持するMaterialExclusionは、source Segmentが存在し、両境界が現在のDesign Geometryで解決可能で、両境界が異なる有効区間を形成し、同一Segment上の他exclusionと重複・包含・隣接しない不変条件を満たす。`start-end` によるSegment全体のexclusionも有効な区間として許可する。
 
-`split-boundary` が参照するcanonical SplitRelationが存在しない場合、その境界は解決不能とする。MaterialExclusionの中間に存在するが外側境界として参照されていないSplitRelationは、exclusion正規化を理由に削除しない。
+`split-boundary` のidentity target / concrete cutter pairから導出されるcanonical SplitRelationが存在しない場合、その境界は解決不能とする。SplitRelation解除時の依存判定も各境界pairからcanonical relationを導出して行う。MaterialExclusionの中間に存在するが外側境界として参照されていないSplitRelationは、exclusion正規化を理由に削除しない。
 
 MaterialExclusionを追加・復元するPattern API、およびSegment削除・SplitRelation解除・Symmetry変更などのPattern状態遷移は、返却前にSplitRelation invariantとMaterialExclusion invariantの双方を回復する。依存境界が失われたexclusionは削除し、後から同じGeometryが再成立しても自動復活させない。
 
 <!-- test-contract: ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY -->
-concrete LogicalFragmentからMaterialExclusionを作るときは、そのFragmentが属するtarget SegmentInstanceRefをsource Segmentへ戻し、Intersection境界をそのtargetからcutterへのrelativeTransformへ正規化する。同じSymmetry orbitに属するどのtarget instanceから操作しても同じsource-relative MaterialExclusionになる。
+concrete LogicalFragmentからMaterialExclusionを作るときは、そのFragmentが属するtarget SegmentInstanceRefの逆変換をtarget / cutter双方へ作用させ、source identity targetとcanonical cutterのpairへ正規化する。同じSymmetry orbitに属するどのtarget instanceから操作しても同じsource-relative MaterialExclusionになるが、target stabilizer内で異なるcanonical cutterへ至る境界は区別する。その後、Fragmentのstabilizer orbit全体をcanonical区間集合へ反映する。
 
-Symmetry変更やSegment Family統合では、各旧MaterialExclusionの `segmentId` をtarget sourceのbasis mappingでrepresentativeへ写す。endpoint boundaryはtarget mappingの `direction` がreverseなら `start / end` を交換する。split-boundaryは旧target identity instanceと旧relativeTransformから得たcutter instanceを、それぞれtarget / cutter source mappingへ通し、写像後のcanonical concrete pairから `cutterSegmentId / relativeTransform` を再導出する。
+Symmetry変更やSegment Family統合では、各旧MaterialExclusionの `segmentId` をtarget sourceのbasis mappingでrepresentativeへ写す。endpoint boundaryはtarget mappingの `direction` がreverseなら `start / end` を交換する。split-boundaryは旧target identity instanceと保存されたconcrete cutter instanceを、それぞれtarget / cutter source mappingへ通し、写像後のpairを新しいsource identity targetへ正規化する。対応するcanonical SplitRelationはpairから再導出するため、relation canonicalization後もconcrete boundary identityを失わない。
 
 複数旧sourceから同じrepresentativeへ移行したMaterialExclusionはすべて同じsource上の区間としてunionし、移行後のDesign Geometryで通常の最大区間正規化を行う。これは新SymmetryでFamily全体へ同じ材状態を適用するためであり、representativeだけの旧状態を優先して他sourceの材なし指定を捨てない。
 

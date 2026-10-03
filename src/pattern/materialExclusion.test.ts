@@ -177,7 +177,11 @@ describe('MaterialExclusion', () => {
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION' }, 'target Effective Fragment端点の交点は候補にせず、cutter endpoint touchは許可する', () => {
-    const samePointCutter: Segment = { ...horizontalCutters[1], id: 'same-point' }
+    const samePointCutter: Segment = {
+      id: 'same-point',
+      start: { kind: 'edge-division', edge: 'AB', divisions: 8, index: 4 },
+      end: { kind: 'edge-division', edge: 'CA', divisions: 8, index: 4 },
+    }
     const base = multiSplitPattern()
     const withBoundary: CellPattern = { ...base, segments: [...base.segments, samePointCutter], splitRelations: [base.splitRelations[1]] }
     const fragments = targetFragments(withBoundary)

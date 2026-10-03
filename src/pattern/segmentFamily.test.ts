@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern } from './cellPattern'
 import { deriveLogicalFragments } from './designGeometry'
-import { excludeMaterial } from './materialExclusion'
+import { excludeMaterial, isFragmentExcluded } from './materialExclusion'
 import { addSegment, addSplitRelation, changeSymmetry } from './patternOperations'
 import type { Segment } from './segment'
 
@@ -58,5 +58,43 @@ describe('Segment Family canonicalization', () => {
       boundaryA: { kind: 'segment-endpoint', endpoint: 'start' },
       boundaryB: { kind: 'segment-endpoint', endpoint: 'end' },
     }])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-MATERIAL-EXCLUSION-SYMMETRY', regression: 37 }, 'reverse mappingでendpointとsplit-boundaryを移行して同じ部分区間を材なしに保つ', () => {
+    const reversedFamilyB: Segment = { id: 'B', start: b.end, end: b.start }
+    const asymmetricCutter: Segment = {
+      id: 'C',
+      start: { kind: 'vertex', vertex: 'A' },
+      end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 },
+    }
+    const initial = addSplitRelation({
+      ...empty({ type: 'none' }),
+      segments: [a, reversedFamilyB, asymmetricCutter],
+    }, { targetSegmentId: 'B', cutterSegmentId: 'C', relativeTransform: { type: 'identity' } })
+    const sourceFragment = deriveLogicalFragments(initial).find(({ segmentInstanceRef, boundaryA, boundaryB }) =>
+      segmentInstanceRef.sourceSegmentId === 'B'
+      && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'segment-endpoint' && boundary.endpoint === 'start')
+      && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'intersection'))!
+    const excluded = excludeMaterial(initial, sourceFragment)
+    const changed = changeSymmetry(excluded, { type: 'rotational' })
+
+    expect(excluded.materialExclusions[0]).toEqual({
+      segmentId: 'B',
+      boundaryA: { kind: 'segment-endpoint', endpoint: 'start' },
+      boundaryB: { kind: 'split-boundary', cutterSegmentId: 'C', relativeTransform: { type: 'identity' } },
+    })
+    expect(changed.splitRelations).toEqual([{
+      targetSegmentId: 'A', cutterSegmentId: 'C', relativeTransform: { type: 'rotation', steps: 1 },
+    }])
+    expect(changed.materialExclusions).toEqual([{
+      segmentId: 'A',
+      boundaryA: { kind: 'split-boundary', cutterSegmentId: 'C', relativeTransform: { type: 'rotation', steps: 1 } },
+      boundaryB: { kind: 'segment-endpoint', endpoint: 'end' },
+    }])
+    const migratedFragment = deriveLogicalFragments(changed).find(({ segmentInstanceRef, boundaryA, boundaryB }) =>
+      segmentInstanceRef.sourceSegmentId === 'A'
+      && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'segment-endpoint' && boundary.endpoint === 'end')
+      && [boundaryA, boundaryB].some((boundary) => boundary.kind === 'intersection'))!
+    expect(isFragmentExcluded(changed, migratedFragment)).toBe(true)
   })
 })

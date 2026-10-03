@@ -15,7 +15,8 @@ import {
 import { expandPattern, instanceRefKey } from './symmetry'
 
 const a: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
-const b: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
+const b: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 } }
+const familyB: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
 const rotational = (relations: SplitRelation[] = []): CellPattern => ({ segments: [a, b], materialExclusions: [], symmetry: { type: 'rotational' }, splitRelations: relations })
 const ref = (sourceSegmentId: string, steps: 0 | 1 | 2): SegmentInstanceRef => ({
   sourceSegmentId,
@@ -46,14 +47,14 @@ describe('相対変換によるsplit軌道', () => {
     expect(instanceRefKey(instances[0].instanceRef)).toContain('identity')
   })
 
-  contractTest({ contract: 'ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION' }, 'identityと回転+1/+2を別relationとして列挙する', () => {
+  contractTest({ contract: 'ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION' }, '同一sourceの回転+1/+2を別relationとして列挙する', () => {
     const candidates = getSplitCandidates(rotational(), 'A')
-    const relatives = candidates.map((candidate) => candidate.relativeTransform)
-    expect(relatives).toContainEqual({ type: 'identity' })
-    expect(relatives).toContainEqual({ type: 'rotation', steps: 1 })
-    expect(relatives).toContainEqual({ type: 'rotation', steps: 2 })
     const sameSourceRotations = candidates.filter((candidate) => candidate.cutterSegmentId === 'A')
     expect(sameSourceRotations).toHaveLength(2)
+    expect(sameSourceRotations.map(({ relativeTransform }) => relativeTransform)).toEqual(expect.arrayContaining([
+      { type: 'rotation', steps: 1 },
+      { type: 'rotation', steps: 2 },
+    ]))
     expect(sameSourceRotations[0].points).toEqual(sameSourceRotations[1].points)
   })
 
@@ -91,13 +92,7 @@ describe('相対変換によるsplit軌道', () => {
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-RELATION-INVARIANT' }, '同じsource pairでも異なるrelativeTransformは共存して個別解除できる', () => {
-    const sameGeometryB: Segment = { ...a, id: 'B' }
-    const initial: CellPattern = {
-      segments: [a, sameGeometryB],
-      materialExclusions: [],
-      symmetry: { type: 'rotational' },
-      splitRelations: [],
-    }
+    const initial = rotational()
     const rotation1 = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'rotation', steps: 1 } } as const
     const rotation2 = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'rotation', steps: 2 } } as const
 
@@ -117,7 +112,7 @@ describe('相対変換によるsplit軌道', () => {
 
   contractTest({ contract: 'SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE' }, 'identity relationをFamily mapping後のcanonical relationへ移行する', () => {
     const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } } as const
-    const none = addSplitRelation({ segments: [a, b], materialExclusions: [], symmetry: { type: 'none' }, splitRelations: [] }, relation)
+    const none = addSplitRelation({ segments: [a, familyB], materialExclusions: [], symmetry: { type: 'none' }, splitRelations: [] }, relation)
     const mirror = changeSymmetry(none, { type: 'mirror', axis: 'A' })
     const rotational = changeSymmetry(mirror, { type: 'rotational' })
     const backToNone = changeSymmetry(rotational, { type: 'none' })
@@ -130,16 +125,16 @@ describe('相対変換によるsplit軌道', () => {
     }])
     expect(backToNone.splitRelations).toEqual([])
 
-    const mirrorOrbit = expandSplitRelationOrbit(mirror.symmetry, relation)
+    const mirrorOrbit = expandSplitRelationOrbit(mirror, relation)
     expect(new Set(mirrorOrbit?.map(({ target, cutter }) => JSON.stringify([target.transform, cutter.transform])))).toEqual(new Set([
       JSON.stringify([{ type: 'identity' }, { type: 'identity' }]),
-      JSON.stringify([{ type: 'mirror', axis: 'A' }, { type: 'mirror', axis: 'A' }]),
+      JSON.stringify([{ type: 'identity' }, { type: 'mirror', axis: 'A' }]),
     ]))
     expect(expandSplitRelationOrbit(rotational, rotational.splitRelations[0])).toHaveLength(3)
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-STATE-TRANSITION' }, 'mirror軸変更時に統合sourceへrelationをmappingして再検証する', () => {
-    const initial: CellPattern = { segments: [a, b], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
+    const initial: CellPattern = { segments: [a, familyB], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
     const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'mirror' } } as const
     const withRelation = addSplitRelation(initial, relation)
     const changed = changeSymmetry(withRelation, { type: 'mirror', axis: 'C' })
@@ -149,7 +144,7 @@ describe('相対変換によるsplit軌道', () => {
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-STATE-TRANSITION' }, 'mirror軸変更後はbasis mappingからrelativeTransformを再導出する', () => {
-    const initial: CellPattern = { segments: [a, b], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
+    const initial: CellPattern = { segments: [a, familyB], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] }
     const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'mirror' } } as const
     const changed = changeSymmetry(addSplitRelation(initial, relation), { type: 'mirror', axis: 'B' })
 

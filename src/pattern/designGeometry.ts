@@ -46,9 +46,8 @@ export function normalizeRelativeTransform(symmetry: Symmetry, target: SegmentIn
 export const inverseRelativeTransform = inverseSymmetryRelativeTransform
 export const supportedRelativeTransforms = symmetryRelativeTransforms
 
-/** canonical relationを描画モデルに依存しない安定したinstance identity pair群へ展開する。 */
-export const expandSplitRelationOrbit = (context: Symmetry | Pick<CellPattern, 'segments' | 'symmetry'>, relation: SplitRelation): SegmentInstancePair[] | null => {
-  const symmetry = 'segments' in context ? context.symmetry : context
+/** canonicalization前のSymmetry作用だけを列挙する。concrete instance identityとして公開しない。 */
+const expandRawSplitRelationOrbit = (symmetry: Symmetry, relation: SplitRelation): SegmentInstancePair[] | null => {
   if (!supportedRelativeTransforms(symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
   const algebra = symmetryTransformAlgebra(symmetry)
   const relative = algebra.fromRelative(relation.relativeTransform)
@@ -61,12 +60,17 @@ export const expandSplitRelationOrbit = (context: Symmetry | Pick<CellPattern, '
       cutter: { sourceSegmentId: relation.cutterSegmentId, transform: cutterTransform },
     } : null
   })
-  if (!pairs.every((pair) => pair !== null)) return null
-  if (!('segments' in context)) return pairs as SegmentInstancePair[]
+  return pairs.every((pair) => pair !== null) ? pairs as SegmentInstancePair[] : null
+}
+
+/** source stabilizerを反映したcanonical concrete pair orbitへ展開する。 */
+export const expandSplitRelationOrbit = (pattern: Pick<CellPattern, 'segments' | 'symmetry'>, relation: SplitRelation): SegmentInstancePair[] | null => {
+  const pairs = expandRawSplitRelationOrbit(pattern.symmetry, relation)
+  if (!pairs) return null
   const unique = new Map<string, SegmentInstancePair>()
-  for (const pair of pairs as SegmentInstancePair[]) {
-    const target = canonicalizeInstanceRef(context, pair.target)
-    const cutter = canonicalizeInstanceRef(context, pair.cutter)
+  for (const pair of pairs) {
+    const target = canonicalizeInstanceRef(pattern, pair.target)
+    const cutter = canonicalizeInstanceRef(pattern, pair.cutter)
     if (!target || !cutter) return null
     unique.set(`${instanceRefKey(target)}\0${instanceRefKey(cutter)}`, { target, cutter })
   }

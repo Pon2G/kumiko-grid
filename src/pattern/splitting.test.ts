@@ -6,6 +6,7 @@ import {
   addSplitRelation,
   derivePatternGeometry,
   expandSplitRelationOrbit,
+  getIntersectionInteractionCandidates,
   getSplitCandidates,
   removeSegment,
   removeSplitRelation,
@@ -80,7 +81,7 @@ describe('CellPatternのsplit派生', () => {
     }
 
     const relation = current.splitRelations[0]
-    const orbit = expandSplitRelationOrbit(current.symmetry, relation)
+    const orbit = expandSplitRelationOrbit(current, relation)
     const pairTransforms = new Set(orbit?.map(({ target: orbitTarget, cutter: orbitCutter }) =>
       JSON.stringify([orbitTarget.transform, orbitCutter.transform])))
 
@@ -123,6 +124,34 @@ describe('CellPatternのsplit派生', () => {
     expect(candidateB?.points).toHaveLength(1)
     expect(candidateC?.points).toHaveLength(1)
     expect(candidateB?.points[0]).toEqual(candidateC?.points[0])
+  })
+
+  contractTest({ contract: 'ARCH-PATTERN-INTERSECTION-INTERACTION-CANDIDATE', regression: 37 }, '自己対称targetに対応するcanonical orbitの全cutterを個別候補として導出する', () => {
+    const axisTarget = target
+    const asymmetricCutter: Segment = {
+      id: 'B',
+      start: { kind: 'vertex', vertex: 'B' },
+      end: { kind: 'edge-division', edge: 'CA', divisions: 4, index: 1 },
+    }
+    const current: CellPattern = {
+      segments: [axisTarget, asymmetricCutter],
+      symmetry: { type: 'mirror', axis: 'A' },
+      splitRelations: [],
+      materialExclusions: [],
+    }
+    const candidates = getIntersectionInteractionCandidates(current, {
+      sourceSegmentId: axisTarget.id,
+      transform: { type: 'identity' },
+    }).filter(({ relation }) => relation.cutterSegmentId === asymmetricCutter.id
+      && relation.relativeTransform.type === 'identity')
+
+    expect(candidates).toHaveLength(2)
+    expect(new Set(candidates.map(({ cutter }) => JSON.stringify(cutter.transform)))).toEqual(new Set([
+      JSON.stringify({ type: 'identity' }),
+      JSON.stringify({ type: 'mirror', axis: 'A' }),
+    ]))
+    expect(candidates[0].point).toEqual(candidates[1].point)
+    expect(candidates[0].anchor).not.toEqual(candidates[1].anchor)
   })
 
   contractTest({ contract: 'SPEC-PATTERN-SEGMENT-SPLIT' }, '同じcanonical SplitRelationを重複追加しない', () => {

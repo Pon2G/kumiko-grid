@@ -45,24 +45,26 @@ export function getSplitCandidates(pattern: CellPattern, targetSegmentId: string
 export function getIntersectionInteractionCandidates(pattern: CellPattern, target: SegmentInstanceRef): IntersectionInteractionCandidate[] {
   const instances = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
   return getSplitCandidates(pattern, target.sourceSegmentId).flatMap((candidate) => {
-    const pair = expandSplitRelationOrbit(pattern, candidate)
-      ?.find((item) => instanceRefKey(item.target) === instanceRefKey(target))
-    if (!pair) return []
-    const targetSegment = instances.get(instanceRefKey(pair.target))
-    const cutterSegment = instances.get(instanceRefKey(pair.cutter))
-    if (!targetSegment || !cutterSegment) return []
-    const intersection = intersectSegments(targetSegment, cutterSegment)
-    if (intersection.kind !== 'cross' && intersection.kind !== 'touch') return []
-    return [{
-      target: pair.target,
-      cutter: pair.cutter,
-      anchor: createIntersectionAnchor(pair.target, pair.cutter),
-      point: intersection.point,
-      relation: { targetSegmentId: candidate.targetSegmentId, cutterSegmentId: candidate.cutterSegmentId,
-        relativeTransform: candidate.relativeTransform.type === 'rotation'
-          ? { type: 'rotation', steps: candidate.relativeTransform.steps } : { type: candidate.relativeTransform.type } },
-      active: candidate.active,
-    }]
+    const targetKey = instanceRefKey(target)
+    return (expandSplitRelationOrbit(pattern, candidate) ?? [])
+      .filter((pair) => instanceRefKey(pair.target) === targetKey)
+      .flatMap((pair) => {
+        const targetSegment = instances.get(instanceRefKey(pair.target))
+        const cutterSegment = instances.get(instanceRefKey(pair.cutter))
+        if (!targetSegment || !cutterSegment) return []
+        const intersection = intersectSegments(targetSegment, cutterSegment)
+        if (intersection.kind !== 'cross' && intersection.kind !== 'touch') return []
+        return [{
+          target: pair.target,
+          cutter: pair.cutter,
+          anchor: createIntersectionAnchor(pair.target, pair.cutter),
+          point: intersection.point,
+          relation: { targetSegmentId: candidate.targetSegmentId, cutterSegmentId: candidate.cutterSegmentId,
+            relativeTransform: candidate.relativeTransform.type === 'rotation'
+              ? { type: 'rotation', steps: candidate.relativeTransform.steps } : { type: candidate.relativeTransform.type } },
+          active: candidate.active,
+        }]
+      })
   })
 }
 

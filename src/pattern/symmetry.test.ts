@@ -2,6 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import { canonicalTriangle } from '../geometry/triangle'
 import type { Point } from '../geometry/types'
+import { resolveSegmentEndpoint, type SegmentEndpointAnchor } from './anchor'
 import type { CellPattern } from './cellPattern'
 import {
   expandPattern,
@@ -62,6 +63,33 @@ describe('CellPatternの対称展開', () => {
 })
 
 describe('Symmetry transform algebra', () => {
+  contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA', regression: 37 }, 'logical Anchor作用を各transformのGeometry作用と整合させる', () => {
+    const anchors: SegmentEndpointAnchor[] = [
+      { kind: 'vertex', vertex: 'A' },
+      { kind: 'edge-division', edge: 'AB', divisions: 3, index: 1 },
+      { kind: 'edge-division', edge: 'CA', divisions: 4, index: 3 },
+    ]
+    const symmetries: CellPattern['symmetry'][] = [
+      { type: 'none' },
+      { type: 'mirror', axis: 'A' },
+      { type: 'mirror', axis: 'B' },
+      { type: 'mirror', axis: 'C' },
+      { type: 'rotational' },
+    ]
+    for (const symmetry of symmetries) {
+      const algebra = symmetryTransformAlgebra(symmetry)
+      for (const transform of algebra.transforms) {
+        for (const anchor of anchors) {
+          const transformedAnchor = algebra.applyToAnchor(transform, anchor)
+          const transformedPoint = algebra.applyToPoint(transform, resolveSegmentEndpoint(anchor))
+          expect(transformedAnchor).not.toBeNull()
+          expect(transformedPoint).not.toBeNull()
+          expect(pointsAreClose(resolveSegmentEndpoint(transformedAnchor!), transformedPoint!)).toBe(true)
+        }
+      }
+    }
+  })
+
   contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA' }, '各Symmetryの有効transform集合が共通のalgebra lawを満たす', () => {
     const point = canonicalTriangle.A
     const symmetries: CellPattern['symmetry'][] = [

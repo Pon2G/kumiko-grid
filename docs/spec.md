@@ -118,7 +118,7 @@ splitはsource Segmentを破壊的に複数Segmentへ置換しない。Symmetry�
 
 現在のSymmetryに対する相対transformは、`none` では `identity`、`mirror` では `identity / mirror`、`rotational` では `identity / rotation +1 / rotation +2` を扱う。relation orbitを展開するときは、各raw target / cutter transformをsourceごとのcanonical concrete Segment instanceへ正規化する。sourceの自己対称性によって複数relativeTransformが同じdirected concrete pair orbitを表す場合は、それらも同じSplitRelation semanticsとして1つのcanonical relationへ統合する。同じ対称軌道に属するどの具体pairから操作しても同じ `SplitRelation` へ正規化し、同じrelationを重複保持しない。relationは交点座標、Segment parameter、候補表示用情報、操作時に選ばれた代表instance pairを保持しない。
 
-relationは有向であり、対称軌道内のtarget側instanceだけを分割する。双方を分割するには逆向きのrelationも必要とする。逆向きrelationでは相対transformも逆向きとなり、rotationalの `+1` と `+2` は互いに逆、mirrorは自身が逆、identityは自身が逆となる。
+relationは有向であり、対称軌道内のtarget側instanceだけを分割する。双方を分割するには逆向きのrelationも必要とする。逆向きrelationはconcrete pair orbitのtarget / cutterを反転して再canonicalizeする。sourceの自己対称性によるcollapseがない通常例では、rotationalの `+1` と `+2` は互いに逆、mirrorは自身が逆、identityは自身が逆となる。
 
 relationから導出されるcanonical concrete pair orbitの**すべての具体pair**がsplit可能な場合だけ、そのrelationをCell Patternへ保持できる。split可能とは、交差が `cross` または `touch` であり、その交点がtarget instanceの内部に位置することをいう。有限長の `overlap` はsplitしない。同一のcanonical Segment instance自身との比較もsplit対象外とする。同一source Segment間でもcanonicalization後に異なるinstance同士を参照するrelationは許可するが、raw relativeTransformがnon-identityでも自己対称性によって同一instance自身へ潰れるrelationは許可しない。対称軌道の一部だけをrelationとして保持することはしない。
 

@@ -1,50 +1,93 @@
+import { segmentEndpointAnchorKey } from './anchor'
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
-import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef } from './cellPattern'
-import type { LogicalFragment, PatternFragment } from './designGeometry'
-import { deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, relativeTransformKey, splitRelationKey } from './designGeometry'
-import { instanceRefKey } from './symmetry'
+import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation } from './cellPattern'
+import type { FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
+import { canonicalizeSplitRelation, deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, splitRelationKey } from './designGeometry'
+import { createIntersectionAnchor } from './intersectionAnchor'
+import { canonicalizeInstanceRef } from './segmentFamily'
+import { instanceRefKey, symmetryTransformAlgebra, transformedSegmentDefinition } from './symmetry'
 
 const boundaryKey = (boundary: MaterialBoundaryRef): string => boundary.kind === 'segment-endpoint'
   ? `endpoint:${boundary.endpoint}`
-  : `split:${boundary.cutterSegmentId}:${relativeTransformKey(boundary.relativeTransform)}`
+  : `split:${instanceRefKey(boundary.cutter)}`
 
 const sameBoundary = (left: MaterialBoundaryRef, right: MaterialBoundaryRef) => boundaryKey(left) === boundaryKey(right)
+const identityRef = (sourceSegmentId: string): SegmentInstanceRef => ({ sourceSegmentId, transform: { type: 'identity' } })
 
-/** concreteなIntersectionAnchorを、target sourceから見た保存用境界へ戻す。 */
+/** concrete pairをsource identity targetへ移し、stabilizerで区別されるcutter identityを保存する。 */
+export function normalizeConcreteSplitBoundary(
+  pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
+  target: SegmentInstanceRef,
+  cutter: SegmentInstanceRef,
+): MaterialBoundaryRef | null {
+  const algebra = symmetryTransformAlgebra(pattern.symmetry)
+  const inverseTarget = algebra.inverse(target.transform)
+  if (!inverseTarget) return null
+  const rebasedTargetTransform = algebra.compose(inverseTarget, target.transform)
+  const rebasedCutterTransform = algebra.compose(inverseTarget, cutter.transform)
+  if (!rebasedTargetTransform || !rebasedCutterTransform) return null
+  const rebasedTarget = canonicalizeInstanceRef(pattern, { sourceSegmentId: target.sourceSegmentId, transform: rebasedTargetTransform })
+  const rebasedCutter = canonicalizeInstanceRef(pattern, { sourceSegmentId: cutter.sourceSegmentId, transform: rebasedCutterTransform })
+  if (!rebasedTarget || !rebasedCutter || instanceRefKey(rebasedTarget) !== instanceRefKey(identityRef(target.sourceSegmentId))) return null
+  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, rebasedTarget, rebasedCutter)
+  if (!relativeTransform) return null
+  const relation = canonicalizeSplitRelation(pattern, {
+    targetSegmentId: target.sourceSegmentId,
+    cutterSegmentId: cutter.sourceSegmentId,
+    relativeTransform,
+  })
+  return relation ? { kind: 'split-boundary', cutter: rebasedCutter } : null
+}
+
+/** concreteなIntersectionAnchorを、target source identity上のconcrete pair境界へ戻す。 */
 export function normalizeMaterialBoundary(
   pattern: CellPattern,
   target: SegmentInstanceRef,
-  boundary: LogicalFragment['boundaryA'],
+  boundary: FragmentBoundaryRef,
 ): MaterialBoundaryRef | null {
   if (boundary.kind === 'segment-endpoint') return boundary
   const targetKey = instanceRefKey(target)
-  const other = instanceRefKey(boundary.first) === targetKey ? boundary.second
+  const cutter = instanceRefKey(boundary.first) === targetKey ? boundary.second
     : instanceRefKey(boundary.second) === targetKey ? boundary.first : null
-  if (!other) return null
-  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, target, other)
-  return relativeTransform ? { kind: 'split-boundary', cutterSegmentId: other.sourceSegmentId, relativeTransform } : null
+  return cutter ? normalizeConcreteSplitBoundary(pattern, target, cutter) : null
 }
 
-interface BoundaryOrder { boundaries: MaterialBoundaryRef[]; index: Map<string, number> }
+/** boundaryが属するcanonical relation。concrete cutter identity自体は失わない。 */
+export function materialBoundaryRelation(
+  pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
+  segmentId: string,
+  boundary: MaterialBoundaryRef,
+): SplitRelation | null {
+  if (boundary.kind === 'segment-endpoint') return null
+  const target = identityRef(segmentId)
+  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, target, boundary.cutter)
+  return relativeTransform ? canonicalizeSplitRelation(pattern, {
+    targetSegmentId: segmentId,
+    cutterSegmentId: boundary.cutter.sourceSegmentId,
+    relativeTransform,
+  }) : null
+}
+
+interface BoundaryOrder {
+  boundaries: MaterialBoundaryRef[]
+  index: Map<string, number>
+  fragments: LogicalFragment[]
+}
 
 /** sourceのidentity instanceを正準な区間順序として利用する。 */
 function sourceBoundaryOrder(pattern: CellPattern, segmentId: string): BoundaryOrder | null {
-  const identity: SegmentInstanceRef = { sourceSegmentId: segmentId, transform: { type: 'identity' } }
+  const identity = identityRef(segmentId)
   const fragments = deriveLogicalFragments(pattern).filter(({ segmentInstanceRef }) => instanceRefKey(segmentInstanceRef) === instanceRefKey(identity))
   if (fragments.length === 0) return null
-  for (const fragment of fragments) {
-    const pair = [fragment.boundaryA, fragment.boundaryB].map((item) => normalizeMaterialBoundary(pattern, identity, item))
-    if (pair.some((item) => item === null)) return null
-  }
-  // deriveLogicalFragmentsはparameter順なので、隣接Fragmentをたどって順序を復元する。
   const ordered: MaterialBoundaryRef[] = []
   for (const fragment of fragments) {
-    const a = normalizeMaterialBoundary(pattern, identity, fragment.boundaryA)!
-    const b = normalizeMaterialBoundary(pattern, identity, fragment.boundaryB)!
+    const a = normalizeMaterialBoundary(pattern, identity, fragment.boundaryA)
+    const b = normalizeMaterialBoundary(pattern, identity, fragment.boundaryB)
+    if (!a || !b) return null
     if (ordered.length === 0) ordered.push(a)
     if (!sameBoundary(ordered.at(-1)!, b)) ordered.push(b)
   }
-  return { boundaries: ordered, index: new Map(ordered.map((boundary, index) => [boundaryKey(boundary), index])) }
+  return { boundaries: ordered, index: new Map(ordered.map((boundary, index) => [boundaryKey(boundary), index])), fragments }
 }
 
 function interval(exclusion: MaterialExclusion, order: BoundaryOrder): [number, number] | null {
@@ -53,11 +96,72 @@ function interval(exclusion: MaterialExclusion, order: BoundaryOrder): [number, 
   return a === undefined || b === undefined || a === b ? null : [Math.min(a, b), Math.max(a, b)]
 }
 
+function orderedDefinitionKey(value: { start: Parameters<typeof segmentEndpointAnchorKey>[0]; end: Parameters<typeof segmentEndpointAnchorKey>[0] }) {
+  return `${segmentEndpointAnchorKey(value.start)}\0${segmentEndpointAnchorKey(value.end)}`
+}
+
+/** Symmetry作用後の境界をcanonical targetへ移す。endpoint方向もlogical definitionで判定する。 */
+function transformFragmentBoundary(
+  pattern: CellPattern,
+  fragment: LogicalFragment,
+  boundary: FragmentBoundaryRef,
+  action: SegmentInstanceRef['transform'],
+): { target: SegmentInstanceRef; boundary: FragmentBoundaryRef } | null {
+  const algebra = symmetryTransformAlgebra(pattern.symmetry)
+  const rawTargetTransform = algebra.compose(action, fragment.segmentInstanceRef.transform)
+  if (!rawTargetTransform) return null
+  const target = canonicalizeInstanceRef(pattern, { sourceSegmentId: fragment.segmentInstanceRef.sourceSegmentId, transform: rawTargetTransform })
+  if (!target) return null
+  if (boundary.kind === 'segment-endpoint') {
+    const source = pattern.segments.find(({ id }) => id === fragment.segmentInstanceRef.sourceSegmentId)
+    const raw = source && transformedSegmentDefinition(pattern.symmetry, source, rawTargetTransform)
+    const canonical = source && transformedSegmentDefinition(pattern.symmetry, source, target.transform)
+    if (!raw || !canonical) return null
+    const reverse = orderedDefinitionKey(raw) !== orderedDefinitionKey(canonical)
+    return { target, boundary: { kind: 'segment-endpoint', endpoint: reverse ? boundary.endpoint === 'start' ? 'end' : 'start' : boundary.endpoint } }
+  }
+  const mapRef = (ref: SegmentInstanceRef) => {
+    const transform = algebra.compose(action, ref.transform)
+    return transform ? canonicalizeInstanceRef(pattern, { sourceSegmentId: ref.sourceSegmentId, transform }) : null
+  }
+  const first = mapRef(boundary.first)
+  const second = mapRef(boundary.second)
+  return first && second ? { target, boundary: createIntersectionAnchor(first, second) } : null
+}
+
+function fragmentOrbitRanges(pattern: CellPattern, fragment: LogicalFragment, order: BoundaryOrder): Array<[number, number]> {
+  const ranges = new Map<string, [number, number]>()
+  for (const action of symmetryTransformAlgebra(pattern.symmetry).transforms) {
+    const a = transformFragmentBoundary(pattern, fragment, fragment.boundaryA, action)
+    const b = transformFragmentBoundary(pattern, fragment, fragment.boundaryB, action)
+    if (!a || !b || instanceRefKey(a.target) !== instanceRefKey(b.target)) continue
+    const boundaryA = normalizeMaterialBoundary(pattern, a.target, a.boundary)
+    const boundaryB = normalizeMaterialBoundary(pattern, b.target, b.boundary)
+    if (!boundaryA || !boundaryB) continue
+    const value = interval({ segmentId: fragment.segmentInstanceRef.sourceSegmentId, boundaryA, boundaryB }, order)
+    if (value) ranges.set(`${value[0]}:${value[1]}`, value)
+  }
+  return [...ranges.values()]
+}
+
+/** range内の各LogicalFragmentをstabilizer orbitへ閉じる。 */
+function closeRangesUnderSymmetry(pattern: CellPattern, order: BoundaryOrder, ranges: Array<[number, number]>): Array<[number, number]> {
+  const elementary = new Set<number>()
+  for (const [start, end] of ranges) for (let index = start; index < end; index += 1) elementary.add(index)
+  const closed = new Map<string, [number, number]>()
+  for (const index of elementary) {
+    const fragment = order.fragments[index]
+    if (!fragment) continue
+    for (const range of fragmentOrbitRanges(pattern, fragment, order)) closed.set(`${range[0]}:${range[1]}`, range)
+  }
+  return [...closed.values()]
+}
+
 function normalizeIntervals(pattern: CellPattern, segmentId: string, ranges: Array<[number, number]>): MaterialExclusion[] {
   const order = sourceBoundaryOrder(pattern, segmentId)
   if (!order) return []
   const merged: Array<[number, number]> = []
-  for (const range of ranges.sort((a, b) => a[0] - b[0] || a[1] - b[1])) {
+  for (const range of closeRangesUnderSymmetry(pattern, order, ranges).sort((a, b) => a[0] - b[0] || a[1] - b[1])) {
     const last = merged.at(-1)
     if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1])
     else merged.push([...range])
@@ -65,47 +169,43 @@ function normalizeIntervals(pattern: CellPattern, segmentId: string, ranges: Arr
   return merged.map(([start, end]) => ({ segmentId, boundaryA: order.boundaries[start], boundaryB: order.boundaries[end] }))
 }
 
-function fragmentRange(pattern: CellPattern, fragment: LogicalFragment): { order: BoundaryOrder; range: [number, number] } | null {
+function fragmentRanges(pattern: CellPattern, fragment: LogicalFragment): { order: BoundaryOrder; ranges: Array<[number, number]> } | null {
   const segmentId = fragment.segmentInstanceRef.sourceSegmentId
   const order = sourceBoundaryOrder(pattern, segmentId)
-  const a = normalizeMaterialBoundary(pattern, fragment.segmentInstanceRef, fragment.boundaryA)
-  const b = normalizeMaterialBoundary(pattern, fragment.segmentInstanceRef, fragment.boundaryB)
-  if (!order || !a || !b) return null
-  const value = interval({ segmentId, boundaryA: a, boundaryB: b }, order)
-  return value ? { order, range: value } : null
+  if (!order) return null
+  const ranges = fragmentOrbitRanges(pattern, fragment, order)
+  return ranges.length > 0 ? { order, ranges } : null
 }
 
 export function excludeMaterial(pattern: CellPattern, fragment: LogicalFragment): CellPattern {
-  const current = fragmentRange(pattern, fragment)
+  const current = fragmentRanges(pattern, fragment)
   if (!current) return pattern
   const segmentId = fragment.segmentInstanceRef.sourceSegmentId
   const retained = pattern.materialExclusions.filter((item) => item.segmentId !== segmentId)
   const ranges = pattern.materialExclusions.filter((item) => item.segmentId === segmentId)
     .map((item) => interval(item, current.order)).filter((item): item is [number, number] => item !== null)
-  return { ...pattern, materialExclusions: [...retained, ...normalizeIntervals(pattern, segmentId, [...ranges, current.range])] }
+  return { ...pattern, materialExclusions: [...retained, ...normalizeIntervals(pattern, segmentId, [...ranges, ...current.ranges])] }
 }
 
 export function restoreMaterial(pattern: CellPattern, fragment: LogicalFragment): CellPattern {
-  const current = fragmentRange(pattern, fragment)
+  const current = fragmentRanges(pattern, fragment)
   if (!current) return pattern
   const segmentId = fragment.segmentInstanceRef.sourceSegmentId
   const retained = pattern.materialExclusions.filter((item) => item.segmentId !== segmentId)
-  const ranges = pattern.materialExclusions.filter((item) => item.segmentId === segmentId).flatMap((item) => {
-    const value = interval(item, current.order)
-    if (!value) return []
-    const [start, end] = value
-    const [cutStart, cutEnd] = current.range
-    if (cutEnd <= start || cutStart >= end) return [value]
+  let ranges = pattern.materialExclusions.filter((item) => item.segmentId === segmentId)
+    .map((item) => interval(item, current.order)).filter((item): item is [number, number] => item !== null)
+  for (const [cutStart, cutEnd] of current.ranges) ranges = ranges.flatMap(([start, end]) => {
+    if (cutEnd <= start || cutStart >= end) return [[start, end]]
     return [[start, Math.max(start, cutStart)], [Math.min(end, cutEnd), end]].filter(([a, b]) => a < b) as Array<[number, number]>
   })
   return { ...pattern, materialExclusions: [...retained, ...normalizeIntervals(pattern, segmentId, ranges)] }
 }
 
 export function isFragmentExcluded(pattern: CellPattern, fragment: LogicalFragment): boolean {
-  const current = fragmentRange(pattern, fragment)
+  const current = fragmentRanges(pattern, fragment)
   if (!current) return false
-  return pattern.materialExclusions.some((item) => item.segmentId === fragment.segmentInstanceRef.sourceSegmentId
-    && (() => { const value = interval(item, current.order); return value !== null && value[0] <= current.range[0] && value[1] >= current.range[1] })())
+  return current.ranges.every((range) => pattern.materialExclusions.some((item) => item.segmentId === fragment.segmentInstanceRef.sourceSegmentId
+    && (() => { const value = interval(item, current.order); return value !== null && value[0] <= range[0] && value[1] >= range[1] })()))
 }
 
 /** Design Geometryを残したまま、材が存在する区間だけを返す。 */
@@ -113,7 +213,7 @@ export function deriveEffectiveGeometry(pattern: CellPattern): PatternFragment[]
   return derivePatternGeometry(pattern).filter(({ logicalFragment }) => !isFragmentExcluded(pattern, logicalFragment))
 }
 
-/** 状態遷移後に解決不能となった境界を捨て、残る区間を再正規化する。 */
+/** 状態遷移後に解決不能となった境界を捨て、stabilizer orbitを含めて再正規化する。 */
 export function cleanupMaterialExclusions(pattern: CellPattern): CellPattern {
   const valid = pattern.materialExclusions.filter((exclusion) => {
     if (!pattern.segments.some(({ id }) => id === exclusion.segmentId)) return false
@@ -128,11 +228,12 @@ export function cleanupMaterialExclusions(pattern: CellPattern): CellPattern {
   }) }
 }
 
-export const materialExclusionsDependingOn = (pattern: CellPattern, relation: { targetSegmentId: string; cutterSegmentId: string; relativeTransform: CellPattern['splitRelations'][number]['relativeTransform'] }) =>
+export const materialExclusionsDependingOn = (pattern: CellPattern, relation: SplitRelation) =>
   pattern.materialExclusions.filter((exclusion) => exclusion.segmentId === relation.targetSegmentId
-    && [exclusion.boundaryA, exclusion.boundaryB].some((boundary) => boundary.kind === 'split-boundary'
-      && boundary.cutterSegmentId === relation.cutterSegmentId
-      && relativeTransformKey(boundary.relativeTransform) === relativeTransformKey(relation.relativeTransform)))
+    && [exclusion.boundaryA, exclusion.boundaryB].some((boundary) => {
+      const supported = materialBoundaryRelation(pattern, exclusion.segmentId, boundary)
+      return supported !== null && splitRelationKey(supported) === splitRelationKey(relation)
+    }))
 
 /** Effective fragment同士の交差として、target側の内部交差だけを許可する。 */
 export function effectivePairCanSplit(pattern: CellPattern, target: SegmentInstanceRef, cutter: SegmentInstanceRef): boolean {
@@ -147,4 +248,7 @@ export function effectivePairCanSplit(pattern: CellPattern, target: SegmentInsta
 
 export const materialExclusionKey = (value: MaterialExclusion) => `${value.segmentId}\0${[boundaryKey(value.boundaryA), boundaryKey(value.boundaryB)].sort().join('\0')}`
 export const relationSupportsBoundary = (pattern: CellPattern, segmentId: string, boundary: MaterialBoundaryRef) => boundary.kind === 'segment-endpoint'
-  || pattern.splitRelations.some((relation) => relation.targetSegmentId === segmentId && splitRelationKey(relation) === splitRelationKey({ targetSegmentId: segmentId, cutterSegmentId: boundary.cutterSegmentId, relativeTransform: boundary.relativeTransform }))
+  || (() => {
+    const relation = materialBoundaryRelation(pattern, segmentId, boundary)
+    return relation !== null && pattern.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))
+  })()

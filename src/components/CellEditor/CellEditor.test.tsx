@@ -8,7 +8,7 @@ import { createSegmentEndpointAnchors, resolveSegmentEndpoint, type SegmentEndpo
 import type { CellPattern } from '../../pattern/cellPattern'
 import { deriveLogicalFragments, derivePatternGeometry, splitRelationKey } from '../../pattern/designGeometry'
 import { excludeMaterial, restoreMaterial } from '../../pattern/materialExclusion'
-import { addSplitRelation, removeSegment, removeSplitRelation } from '../../pattern/patternOperations'
+import { addSegment, addSplitRelation, removeSegment, removeSplitRelation } from '../../pattern/patternOperations'
 import type { Segment } from '../../pattern/segment'
 import { getIntersectionInteractionCandidates } from '../../pattern/splitCandidates'
 import { expandPattern } from '../../pattern/symmetry'
@@ -20,6 +20,7 @@ import { editorSelection, idleEditorInteraction, pendingEditorAnchor, reconcileE
 const target: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
 const cutter: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
 const colocatedCutter: Segment = { id: 'C', start: { kind: 'vertex', vertex: 'C' }, end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 1 } }
+const coincidentTarget: Segment = { id: 'coincident', start: target.start, end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 2 } }
 const relation = { targetSegmentId: 'A', cutterSegmentId: 'B', relativeTransform: { type: 'identity' } } as const
 const basePattern = (): CellPattern => ({ segments: [target, cutter], symmetry: { type: 'none' }, splitRelations: [], materialExclusions: [] })
 
@@ -44,7 +45,7 @@ function Harness({ initial = basePattern(), divisions = 4, onPatternChange }: {
         start: transition.command.startAnchor,
         end: transition.command.endAnchor,
       }
-      setPattern((current) => ({ ...current, segments: [...current.segments, segment] }))
+      setPattern((current) => addSegment(current, segment))
     }
   }
   return <CellEditor divisions={divisions} pattern={pattern} pendingAnchor={pendingEditorAnchor(interaction)} selection={editorSelection(interaction)}
@@ -141,16 +142,16 @@ describe('Canvas hit resolver', () => {
     expect(result.every(({ kind }) => kind === 'intersection')).toBe(true)
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION', regression: 31 }, '完全重複Segmentのlogical identityを統合しない', () => {
-    const pattern = { ...basePattern(), segments: [target, { ...target, id: 'duplicate' }] }
+  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION', regression: 31 }, '異なる論理Anchorから同じGeometryへ解決されるSegmentを候補として維持する', () => {
+    const pattern = { ...basePattern(), segments: [target, coincidentTarget] }
     const segments = expandPattern(pattern)
     const pointer = canvasPointToScreen(segments[0].start, mobileViewport)
     const result = resolveCanvasHitCandidates(pointer, { ...emptyHitContext(), segments }, mobileViewport)
     expect(result.filter(({ kind }) => kind === 'segment')).toHaveLength(2)
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-FRAGMENT-MATERIAL-SELECTION', regression: 31 }, '選択中Segment上では重複SegmentよりFragmentを優先する', () => {
-    const pattern = { ...basePattern(), segments: [target, { ...target, id: 'duplicate' }] }
+  contractTest({ contract: 'SPEC-EDITOR-FRAGMENT-MATERIAL-SELECTION', regression: 31 }, '選択中Segment上では同じGeometryの別SegmentよりFragmentを優先する', () => {
+    const pattern = { ...basePattern(), segments: [target, coincidentTarget] }
     const segments = expandPattern(pattern)
     const fragments = derivePatternGeometry(pattern).filter(({ instanceRef }) => instanceRef.sourceSegmentId === 'A')
     const midpoint = { x: (fragments[0].start.x + fragments[0].end.x) / 2, y: (fragments[0].start.y + fragments[0].end.y) / 2 }
@@ -236,8 +237,7 @@ describe('Cell Editor直接操作', () => {
   })
 
   contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '終点候補からAnchor以外を選ぶと作成を取り消して対象を選択する', async () => {
-    const duplicate: Segment = { ...target, id: 'duplicate' }
-    const pattern = { ...basePattern(), segments: [target, duplicate] }
+    const pattern = { ...basePattern(), segments: [target, coincidentTarget] }
     const user = userEvent.setup()
     render(<Harness initial={pattern} />)
 
@@ -369,32 +369,15 @@ describe('Cell Editor直接操作', () => {
     expect(screen.getByText('Canvasからオブジェクトを選択してください')).toBeTruthy()
   })
 
-  contractTest({ contract: 'SPEC-EDITOR-DIRECT-OBJECT-SELECTION' }, '完全重複Segment instanceをInspectorで個別に選択しFragment操作を妨げない', async () => {
-    const duplicate: Segment = { ...target, id: 'duplicate' }
-    const user = userEvent.setup()
-    render(<Harness initial={{ ...basePattern(), segments: [target, duplicate] }} />)
-    const duplicatePattern = { ...basePattern(), segments: [target, duplicate] }
-    pointerAtSegment(duplicatePattern, 'A')
-    await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
-    expect(screen.getByLabelText('Segmentインスペクター').textContent).toContain('Segment 1')
-    pointerAtSegment(duplicatePattern, 'A', 0.2)
-    expect(screen.getByLabelText('Fragmentインスペクター')).toBeTruthy()
-    pointerAtBackground()
-    pointerAtSegment(duplicatePattern, 'A')
-    await user.click(screen.getByRole('button', { name: 'Segment 2 / 元の位置' }))
-    expect(screen.getByLabelText('Segmentインスペクター').textContent).toContain('Segment 2')
-  })
-
   contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '背景とEscapeで曖昧候補状態を解除する', async () => {
-    const duplicate: Segment = { ...target, id: 'duplicate' }
     const user = userEvent.setup()
-    const duplicatePattern = { ...basePattern(), segments: [target, duplicate] }
-    render(<Harness initial={duplicatePattern} />)
-    pointerAtSegment(duplicatePattern, 'A')
+    const coincidentPattern = { ...basePattern(), segments: [target, coincidentTarget] }
+    render(<Harness initial={coincidentPattern} />)
+    pointerAtSegment(coincidentPattern, 'A')
     expect(screen.getByLabelText('選択対象インスペクター')).toBeTruthy()
     pointerAtBackground()
     expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
-    pointerAtSegment(duplicatePattern, 'A')
+    pointerAtSegment(coincidentPattern, 'A')
     await user.keyboard('{Escape}')
     expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
   })

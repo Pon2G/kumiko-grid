@@ -71,6 +71,13 @@ Cell Patternは複数の `Segment` から構成される。
 
 現在、Segment同士の交差やsplitによってsource Segment定義そのものを破壊的に変更しない。
 
+<!-- test-contract: SPEC-PATTERN-SEGMENT-FAMILY-CANONICALIZATION -->
+同じ2つのSegmentEndpointAnchorを結ぶsource Segmentは、始点・終点の格納順が逆でも同じSegment定義として扱い、Cell Patternへ重複保持しない。
+
+さらに、現在のSymmetryをsource Segmentの論理端点へ作用させたときに同じSegment定義orbitを生成するsource Segment同士は、同じSegment Familyとして扱う。Cell Patternは1つのSegment Familyにつきsource Segmentを1件だけ保持する。すでに存在するFamilyと同じFamilyになるSegmentを追加しようとした場合は、新しいsourceを追加せず既存sourceを維持する。
+
+Familyの同一性はSegmentEndpointAnchorの論理identityとSymmetry作用から判定する。異なるAnchor参照が偶然同じPointへ解決されることだけを理由に同じFamilyへ統合しない。
+
 ## 5. Cell Pattern
 
 Cell Patternは、ユーザーが定義した基本Segment、それに適用するSymmetry、基本Segment間のSplitRelation、および材の不存在を表すMaterialExclusionから構成する。
@@ -100,18 +107,20 @@ Cell Patternは、ユーザーが定義した基本Segment、それに適用す�
 基本Segmentを0°、120°、240°へ回転して配置する。
 
 <!-- test-contract: SPEC-SYMMETRY-EXPANSION -->
-1本の基本Segmentに対し、`none` は元の1本、`mirror` は元と鏡映の2本、`rotational` は0°、120°、240°の3本を描画用Segmentとして生成する。元のSegmentはユーザー入力として扱う。
+1本の基本Segmentに対してSymmetryの各transformを適用し、**論理Segment定義として異なるconcrete instanceだけ**を生成する。元のSegmentはユーザー入力として扱い、対称操作によるコピーは派生データとする。
+
+`none` は1 instanceとなる。`mirror` は通常2 instanceだが、鏡映後の論理端点pairが元と同じSegment定義になる場合は1 instanceだけとする。端点が入れ替わるだけの鏡映も同一定義に含む。現在の非退化source Segmentでは `rotational` の0° / 120° / 240°は3つの異なるinstanceになるが、展開処理はSymmetry種別ごとの本数を固定せず、同じ論理Segment定義へ解決されるtransformを一般に重複生成しない。
 
 ### 5.2 交点でのsplit
 
 <!-- test-contract: SPEC-PATTERN-SEGMENT-SPLIT -->
 splitはsource Segmentを破壊的に複数Segmentへ置換しない。Symmetry展開後の具体的なSegment instance pairによる交差関係は区別して扱うが、Cell Patternへ保持する `SplitRelation` はその1 pairそのものではなく、target source Segment、cutter source Segment、およびtarget instanceからcutter instanceへの相対transformで表した**対称軌道**とする。
 
-現在のSymmetryに対する相対transformは、`none` では `identity`、`mirror` では `identity / mirror`、`rotational` では `identity / rotation +1 / rotation +2` を扱う。同じ対称軌道に属するどの具体pairから操作しても同じ `SplitRelation` へ正規化し、同じrelationを重複保持しない。relationは交点座標、Segment parameter、候補表示用情報、操作時に選ばれた代表instance pairを保持しない。
+現在のSymmetryに対する相対transformは、`none` では `identity`、`mirror` では `identity / mirror`、`rotational` では `identity / rotation +1 / rotation +2` を扱う。relation orbitを展開するときは、各raw target / cutter transformをsourceごとのcanonical concrete Segment instanceへ正規化する。sourceの自己対称性によって複数relativeTransformが同じdirected concrete pair orbitを表す場合は、それらも同じSplitRelation semanticsとして1つのcanonical relationへ統合する。同じ対称軌道に属するどの具体pairから操作しても同じ `SplitRelation` へ正規化し、同じrelationを重複保持しない。relationは交点座標、Segment parameter、候補表示用情報、操作時に選ばれた代表instance pairを保持しない。
 
-relationは有向であり、対称軌道内のtarget側instanceだけを分割する。双方を分割するには逆向きのrelationも必要とする。逆向きrelationでは相対transformも逆向きとなり、rotationalの `+1` と `+2` は互いに逆、mirrorは自身が逆、identityは自身が逆となる。
+relationは有向であり、対称軌道内のtarget側instanceだけを分割する。双方を分割するには逆向きのrelationも必要とする。逆向きrelationはconcrete pair orbitのtarget / cutterを反転して再canonicalizeする。sourceの自己対称性によるcollapseがない通常例では、rotationalの `+1` と `+2` は互いに逆、mirrorは自身が逆、identityは自身が逆となる。
 
-relationから導出される対称軌道の**すべての具体pair**がsplit可能な場合だけ、そのrelationをCell Patternへ保持できる。split可能とは、交差が `cross` または `touch` であり、その交点がtarget instanceの内部に位置することをいう。有限長の `overlap` はsplitしない。同一のSegment instance自身との比較もsplit対象外とする。同一source Segment間でもnon-identityの相対transformによって異なるinstance同士を参照するrelationは許可するが、同一sourceの `identity` relationは許可しない。対称軌道の一部だけをrelationとして保持することはしない。
+relationから導出されるcanonical concrete pair orbitの**すべての具体pair**がsplit可能な場合だけ、そのrelationをCell Patternへ保持できる。split可能とは、交差が `cross` または `touch` であり、その交点がtarget instanceの内部に位置することをいう。有限長の `overlap` はsplitしない。同一のcanonical Segment instance自身との比較もsplit対象外とする。同一source Segment間でもcanonicalization後に異なるinstance同士を参照するrelationは許可するが、raw relativeTransformがnon-identityでも自己対称性によって同一instance自身へ潰れるrelationは許可しない。対称軌道の一部だけをrelationとして保持することはしない。
 
 <!-- test-contract: SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION -->
 有効なSplitRelationをSymmetry orbitへ展開した各concrete target/cutter pairからIntersectionAnchorを導出する。1つのSplitRelationから複数のIntersectionAnchorが得られ得る。逆向きSplitRelationが同じconcrete pairを参照する場合、IntersectionAnchor自体は同じものを共有し、どちらのSegment instance上のsplit境界として使われるかだけがrelationのtargetによって異なる。
@@ -130,14 +139,20 @@ SplitRelationを解除すると、そのrelationが提供していたtarget側�
 異なる論理境界が同じ座標へ解決されても、その境界identityを自動統合しない。その結果として論理上ゼロ長のFragmentが生じることは許容するが、長さ0の区間を実Geometryとして生成しない。
 
 <!-- test-contract: SPEC-PATTERN-SPLIT-SYMMETRY-CHANGE -->
-Cell Patternは現在の設計Geometry上で有効なSplitRelationだけを保持する。Symmetryを変更するときは、まず新しいSymmetryでも同じ意味を持つ相対transformだけを引き継ぎ候補とし、その後、新しいSymmetryから対称軌道を再展開してsplit可能性を再検証する。新しいSymmetryで表現できないrelation、または再検証後に有効なsplitを形成しないrelationは削除する。現在効いていないrelationを将来の復活用データとして保持しない。
+Cell Patternは現在の設計Geometry上で有効なSplitRelationだけを保持する。Symmetryを変更するときは、新しいSymmetry上でsource Segment Familyを先にcanonicalizeし、統合される旧sourceから代表sourceへの論理instance mappingを使って、引き継ぎ可能なSplitRelationを新しいsource identityへ移行する。
 
-`identity` relationは `none / mirror / rotational` の間で引き継ぎ候補となる。mirrorの `mirror` relationはmirror軸を変更しても意味上は引き継ぎ候補とし、新しい軸で具体pairを再展開・再検証する。mirrorとrotationalの間では、non-identity relationを別種類の相対transformへ自動変換しない。
+旧relationのrelativeTransform自体が新Symmetryで表現できることを引き継ぎの前提とする。`identity` relationは `none / mirror / rotational` の間で引き継ぎ候補となり、mirrorの `mirror` relationはmirror軸変更でも候補となる。mirrorとrotationalのnon-identity relativeTransformを別種類へ推測変換しない。
+
+source統合によりtarget / cutterの代表が変わる場合は、旧target identity instanceとrelativeTransformから得た旧cutter instanceを新Symmetry上のinstance mappingでそれぞれ写し、写像後のconcrete pairからrelativeTransformを再導出する。移行後に同じcanonical concrete pair orbitを表すrelationは1件へ正規化する。
+
+その後、新しいSymmetryとcanonical Segment Familyからrelation orbitを再展開してsplit可能性を再検証する。自己instanceを参照するrelation、新しいSymmetryで表現不能なrelation、またはorbit全体が有効なsplitを形成しないrelationは削除する。現在効いていないrelationや、統合前のsource Segmentを将来復活させるための履歴は保持しない。
 
 <!-- test-contract: SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP -->
-Segment削除やSymmetry変更などによって、あるSegment instanceの論理identityが現在のPatternから消滅した場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。SplitRelation解除によって、あるIntersectionAnchorを導出するrelationがなくなった場合も同様に消滅する。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
+Segment削除やSymmetry変更などで論理identityが変化するとき、Pattern状態遷移が明示的なlogical mappingを定義できる参照は、そのmappingを通して新しいcanonical identityへ移行してよい。Segment Family統合による旧source → representative sourceのinstance mappingはこの明示的なmappingに含む。
 
-一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。元の2つのSegment instanceが交差し続けていても、現在有効なSplitRelationから導出されなければ旧IntersectionAnchorを解決可能な論理Anchorとして扱わない。
+mappingを定義できずSegment instanceが消滅する場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。SplitRelation解除によって、あるIntersectionAnchorを導出するrelationがなくなった場合も同様に消滅する。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
+
+一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。元の2つのSegment instanceが交差し続けていても、現在有効なSplitRelationまたは明示的な状態遷移mappingから導出されなければ旧IntersectionAnchorを解決可能な論理Anchorとして扱わない。
 
 
 ### 5.3 Material Exclusion
@@ -152,8 +167,7 @@ type MaterialBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
   | {
       kind: 'split-boundary'
-      cutterSegmentId: SegmentId
-      relativeTransform: SplitRelativeTransform
+      cutter: SegmentInstanceRef
     }
 
 interface MaterialExclusion {
@@ -163,10 +177,12 @@ interface MaterialExclusion {
 }
 ```
 
-`split-boundary` は、`segmentId` をtarget source SegmentとするSplitRelation由来の境界をsource-relativeに参照する。保存上の `boundaryA / boundaryB` の順序はSegment上の先後を意味せず、現在のDesign Geometryへ解決したときに順序を求める。
+`split-boundary` は、`segmentId` のsource identity instanceをtargetとするconcrete pairのcutterを参照する。対応するcanonical SplitRelationもこのpairから導出できなければならない。source stabilizerがある場合、1つのcanonical SplitRelation orbitに同じidentity targetと異なるcanonical cutter instanceのpairが複数含まれ得るため、SplitRelationだけで境界を同一視しない。座標やSegment parameterではなくcanonical `SegmentInstanceRef` によって各IntersectionAnchorを区別する。保存上の `boundaryA / boundaryB` の順序はSegment上の先後を意味せず、現在のDesign Geometryへ解決したときに順序を求める。
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION-SYMMETRY -->
-MaterialExclusionはsource Segment単位の状態とし、そのsourceからSymmetry生成される全Segment instanceへ同じ論理区間として適用する。どのconcrete Segment instance上のFragmentから操作しても、同じ対称軌道に属するFragmentであれば同じMaterialExclusionへ正規化する。個々の対称コピーごとに材の有無を別設定しない。
+MaterialExclusionはsource Segment単位の状態とし、そのsourceからSymmetry生成される全Segment instanceへ同じ論理区間として適用する。どのconcrete Segment instance上のFragmentから操作しても、同じ対称軌道に属するFragmentであれば同じMaterialExclusionへ正規化する。source stabilizerが1つのconcrete Segment instanceを自身へ写し、その上の異なるFragmentを交換する場合も、それらを同じFragment orbitとして一括で除外・復元する。個々の対称コピーや同じorbitのFragmentごとに材の有無を別設定しない。
+
+Symmetry変更で複数sourceが1つのSegment Familyへ統合される場合、各旧sourceのMaterialExclusionをrepresentative sourceへlogical mappingで移行し、移行後の全exclusionをunionして通常の区間正規化を行う。sourceの向きがrepresentativeに対して反転するmappingでは `start / end` を入れ替える。split-boundaryのcutter transformは保存時のSymmetry文脈に属するため、旧algebraでsource identity targetに対するrelative memberへ戻し、新Symmetryで表現可能な場合だけ新algebraのabsolute transformへ変換する。そのtarget / cutter双方をinstance mappingへ通したconcrete pairを新source identity targetへ正規化し、移行後に対応するcanonical SplitRelationが残る境界だけを保持する。新Symmetryで表現不能なmemberを別transformやGeometry一致から推測しない。
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION-NORMALIZATION -->
 同じ材なし状態を複数の冗長な区間表現で保持しない。重複、包含、隣接するMaterialExclusionは、現在のDesign Geometry上で同じ材なし範囲を表す最大区間へ正規化する。
@@ -185,7 +201,9 @@ Pattern Previewや加工上の材GeometryはEffective Geometryを用いる。新
 一方、すでにCell Patternへ保持されているSplitRelationの有効性はDesign Geometryを基準に維持する。MaterialExclusionによって交点周辺の材がなくなったことを理由に既存SplitRelationを無効化しない。これにより、MaterialExclusion → SplitRelation消滅 → 境界消滅 → MaterialExclusion消滅という循環を作らない。
 
 <!-- test-contract: SPEC-PATTERN-MATERIAL-DEPENDENCY-CLEANUP -->
-MaterialExclusionの外側境界として参照しているSplitRelationが解除される、参照Segmentが削除される、またはSymmetry変更で境界をsource-relativeに解決できなくなった場合、そのMaterialExclusionは成立しないため依存関係に従って削除し、材を復元する。一度依存消失で削除されたMaterialExclusionは、後から同じ位置に交点やSplitRelationが再び成立しても自動復活させない。
+MaterialExclusionの外側境界として参照しているSplitRelationが解除される、参照Segmentが削除される、または状態遷移後に境界をsource-relativeに解決できなくなった場合、そのMaterialExclusionは成立しないため依存関係に従って削除し、材を復元する。
+
+Segment Family統合のように旧source / boundaryから新しいcanonical source / boundaryへのlogical mappingを定義できる場合は、Geometry一致による推測付け替えとは扱わず、そのmappingによってMaterialExclusionを移行する。mapping不能として削除されたMaterialExclusionは、後から同じ位置に交点やSplitRelationが再び成立しても自動復活させない。
 
 MaterialExclusionの正規化によって中間境界への参照が不要になっただけでは、その境界を成立させているSplitRelationを削除しない。SplitRelationはユーザーが明示的に作成したDesign Geometryの状態であり、MaterialExclusionの保存表現を最小化するためのgarbage collection対象にはしない。
 
@@ -226,7 +244,7 @@ Segment作成途中でない状態で、見えているSegmentをクリックま
 
 上位priorityのtap領域によって下位のSegmentまたはLogicalFragmentのGeometry全体が覆われ、Canvas上の別の位置から直接操作できない場合は、下位対象も曖昧候補としてInspectorへ提示する。別の位置に直接操作可能な領域が残る場合は上位対象を優先し、通常操作を不要に曖昧化しない。
 
-同じhit位置に完全重複する複数のSegment instanceが存在する場合、Geometry一致だけで1つへ統合せず、Inspectorへ各instanceを区別できる候補として提示する。Canvasの同じ場所への連続クリックやタップによる巡回は要求しない。選択中Segment上の通常区間ではLogicalFragment選択を優先し、重複Segmentの存在によってFragment操作を妨げない。
+有効なCell Patternでは、同じSegment Familyのsource重複や同一source内のSymmetry自己一致によって完全重複するSegment instanceを生成しない。したがって、それらをInspectorで選び分けることを通常UIの要件としない。一方、異なるIntersection candidate、AnchorとIntersection、または意味上異なる対象が同じ座標・tap範囲へ現れる曖昧性は引き続き候補集合として扱う。
 
 Segment作成途中とオブジェクト選択は同時に保持しない。1点目のAnchor選択はオブジェクト選択を解除し、Segment / Fragment / Intersection選択は作成途中のAnchorを解除する。2点目の候補が曖昧な場合は、候補選択中の一時状態が1点目のAnchorを保持し、InspectorでAnchorを選ぶとその2点からSegmentを作成する。Anchor以外を選ぶとSegment作成を取り消してその対象を選択する。Canvas内の対象物ではない場所をクリックまたはタップした場合、およびEscape操作では、候補が保持する操作contextを含むEditor interaction全体を解除する。Settings等のCell Editor外のUIを操作したことだけを理由にEditor選択を解除しない。選択解除時は候補選択とcutter highlightも解除する。
 

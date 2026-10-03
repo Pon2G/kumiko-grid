@@ -179,8 +179,12 @@ describe('IntersectionAnchorと論理Fragment', () => {
   })
 
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '別Segment上だけに境界が加わっても対象上で隣接する旧Fragmentを解決できる', () => {
-    const otherTarget: Segment = { ...target, id: 'D' }
-    const otherCutter: Segment = { ...cutterB, id: 'E' }
+    const otherTarget: Segment = { id: 'D', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'vertex', vertex: 'B' } }
+    const otherCutter: Segment = {
+      id: 'E',
+      start: { kind: 'vertex', vertex: 'C' },
+      end: { kind: 'edge-division', edge: 'AB', divisions: 4, index: 1 },
+    }
     const initial: CellPattern = {
       segments: [target, cutterB, otherTarget, otherCutter],
       materialExclusions: [],

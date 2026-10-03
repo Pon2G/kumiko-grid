@@ -12,6 +12,7 @@ import {
   symmetryTransformAlgebra,
   type RenderedSegment,
 } from './symmetry'
+import { canonicalizeInstanceRef } from './segmentFamily'
 
 export type FragmentBoundaryRef =
   | { kind: 'segment-endpoint'; endpoint: 'start' | 'end' }
@@ -45,8 +46,8 @@ export function normalizeRelativeTransform(symmetry: Symmetry, target: SegmentIn
 export const inverseRelativeTransform = inverseSymmetryRelativeTransform
 export const supportedRelativeTransforms = symmetryRelativeTransforms
 
-/** canonical relationを描画モデルに依存しない安定したinstance identity pair群へ展開する。 */
-export const expandSplitRelationOrbit = (symmetry: Symmetry, relation: SplitRelation): SegmentInstancePair[] | null => {
+/** canonicalization前のSymmetry作用だけを列挙する。concrete instance identityとして公開しない。 */
+const expandRawSplitRelationOrbit = (symmetry: Symmetry, relation: SplitRelation): SegmentInstancePair[] | null => {
   if (!supportedRelativeTransforms(symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
   const algebra = symmetryTransformAlgebra(symmetry)
   const relative = algebra.fromRelative(relation.relativeTransform)
@@ -62,13 +63,45 @@ export const expandSplitRelationOrbit = (symmetry: Symmetry, relation: SplitRela
   return pairs.every((pair) => pair !== null) ? pairs as SegmentInstancePair[] : null
 }
 
+/** source stabilizerを反映したcanonical concrete pair orbitへ展開する。 */
+export const expandSplitRelationOrbit = (pattern: Pick<CellPattern, 'segments' | 'symmetry'>, relation: SplitRelation): SegmentInstancePair[] | null => {
+  const pairs = expandRawSplitRelationOrbit(pattern.symmetry, relation)
+  if (!pairs) return null
+  const unique = new Map<string, SegmentInstancePair>()
+  for (const pair of pairs) {
+    const target = canonicalizeInstanceRef(pattern, pair.target)
+    const cutter = canonicalizeInstanceRef(pattern, pair.cutter)
+    if (!target || !cutter) return null
+    unique.set(`${instanceRefKey(target)}\0${instanceRefKey(cutter)}`, { target, cutter })
+  }
+  return [...unique.values()]
+}
+
+const pairOrbitKey = (pairs: SegmentInstancePair[]) => pairs
+  .map(({ target, cutter }) => `${instanceRefKey(target)}\0${instanceRefKey(cutter)}`).sort().join('\u0001')
+
+/** stabilizerで同値なraw relativeTransformを決定的な代表へ射影する。 */
+export function canonicalizeSplitRelation(pattern: Pick<CellPattern, 'segments' | 'symmetry'>, relation: SplitRelation): SplitRelation | null {
+  if (!pattern.segments.some(({ id }) => id === relation.targetSegmentId)
+    || !pattern.segments.some(({ id }) => id === relation.cutterSegmentId)) return null
+  const orbit = expandSplitRelationOrbit(pattern, relation)
+  if (!orbit) return null
+  const key = pairOrbitKey(orbit)
+  for (const relativeTransform of supportedRelativeTransforms(pattern.symmetry)) {
+    const candidate = { targetSegmentId: relation.targetSegmentId, cutterSegmentId: relation.cutterSegmentId, relativeTransform }
+    const candidateOrbit = expandSplitRelationOrbit(pattern, candidate)
+    if (candidateOrbit && pairOrbitKey(candidateOrbit) === key) return candidate
+  }
+  return null
+}
+
 /** identity orbitを、呼び出し側で一度だけ展開したSegment lookupから解決する。 */
 const resolveSplitRelationOrbit = (
-  symmetry: Symmetry,
+  pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
   relation: SplitRelation,
   segmentsByRef: ReadonlyMap<string, RenderedSegment>,
 ): Array<[RenderedSegment, RenderedSegment]> | null => {
-  const orbit = expandSplitRelationOrbit(symmetry, relation)
+  const orbit = expandSplitRelationOrbit(pattern, relation)
   if (!orbit) return null
   const pairs = orbit.map(({ target: targetRef, cutter: cutterRef }) => {
     const target = segmentsByRef.get(instanceRefKey(targetRef))
@@ -79,12 +112,12 @@ const resolveSplitRelationOrbit = (
 }
 
 const validatedOrbitFromInstances = (
-  symmetry: Symmetry,
+  pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
   relation: SplitRelation,
   segmentsByRef: ReadonlyMap<string, RenderedSegment>,
 ) => {
-  if (!supportedRelativeTransforms(symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
-  const pairs = resolveSplitRelationOrbit(symmetry, relation, segmentsByRef)
+  if (!supportedRelativeTransforms(pattern.symmetry).some((item) => relativeTransformKey(item) === relativeTransformKey(relation.relativeTransform))) return null
+  const pairs = resolveSplitRelationOrbit(pattern, relation, segmentsByRef)
   if (!pairs) return null
   const intersections = pairs.map(([target, cutter]) => {
     if (instanceRefKey(target.instanceRef) === instanceRefKey(cutter.instanceRef)) return null
@@ -96,7 +129,7 @@ const validatedOrbitFromInstances = (
 
 export const validateSplitRelationOrbit = (pattern: CellPattern, relation: SplitRelation) => {
   const instances = expandPattern(pattern)
-  return validatedOrbitFromInstances(pattern.symmetry, relation,
+  return validatedOrbitFromInstances(pattern, relation,
     new Map(instances.map((segment) => [instanceRefKey(segment.instanceRef), segment])))
 }
 
@@ -142,7 +175,7 @@ function deriveCurrentPatternContext(pattern: CellPattern): CurrentPatternContex
   const anchors: CurrentPatternContext['anchors'] = new Map()
   const boundaries = new Map<string, ResolvedSegmentSplitBoundary>()
   for (const relation of pattern.splitRelations) {
-    const orbit = validatedOrbitFromInstances(pattern.symmetry, relation, instancesByRef)
+    const orbit = validatedOrbitFromInstances(pattern, relation, instancesByRef)
     if (!orbit) continue
     orbit.pairs.forEach(([target, cutter], index) => {
       const intersection = orbit.intersections[index]

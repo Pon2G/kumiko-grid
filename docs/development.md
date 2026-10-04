@@ -5,10 +5,12 @@
 ## 1. 正本の使い分け
 
 - ユーザー向けの現在の仕様: `docs/spec.md`
-- 長寿命な技術設計: `docs/architecture.md`
+- 長寿命な技術設計の入口: `docs/architecture.md`（必要な領域の詳細正本へここから辿る）
 - 開発手順: `docs/development.md`
 - Codexが常時守る短いルール: `AGENTS.md`
 - 今後の作業項目、設計検討、調査、既知の拡張候補: GitHub Issues
+
+対象Issueは作業scopeの正本、`docs/spec.md` / Architecture正本は現在のsemantics / designの正本とする。Issueの記述だけで現在の正本を暗黙に上書きしない。Architecture detailは `docs/architecture.md` から影響領域だけを辿り、すべてのdetailを毎回読むことは要求しない。
 
 個別作業の進捗、予定、将来機能一覧をMarkdownへ重複して管理しない。
 
@@ -60,17 +62,20 @@ gh issue list --state all --label design-context --limit 100
 
 ## 4. 基本フロー
 
-1. GitHub Issueで作業内容を定義する。
-2. 変更領域を特定し、必要な `design-context` Issueを確認する。
-3. `main` の最新状態から作業branchを作る。
-4. ローカルまたはCodex Cloudで実装する。
-5. 必要に応じて仕様・アーキテクチャ文書を同じPRで更新する。
-6. `npm test` を実行する。
-7. `npm run build` を実行する。
-8. Pull Requestを作成する。
-9. diff、仕様との整合、既知の拡張への影響、CI結果を確認する。
-10. 原則としてsquash mergeする。
-11. `main` への反映と必要なデプロイを確認し、Issueをcloseする。
+1. GitHub Issueで今回の作業scopeを確認する。
+2. 変更対象に関係する `docs/spec.md` のcurrent behavior / domain semanticsを確認する。
+3. `docs/architecture.md` でArchitecture overviewと影響領域を確認し、必要なdetail正本だけを読む。
+4. 設計判断へ影響する場合は、関連する `design-context` Issueを確認する。
+5. `main` の最新状態から作業branchを作る。
+6. ローカルまたはCodex Cloudで実装する。
+7. 必要に応じて仕様・アーキテクチャ文書を同じPRで更新する。
+8. `npm run test:contracts` を実行する。
+9. `npm test` を実行する。
+10. `npm run build` を実行する。
+11. Pull Requestを作成する。
+12. diff、仕様との整合、既知の拡張への影響、CI結果を確認する。
+13. 原則としてsquash mergeする。
+14. `main` への反映と必要なデプロイを確認し、Issueをcloseする。
 
 1 Issueに対して1 Pull Requestを基本とする。ただし密接不可分な変更では無理に分割しない。
 
@@ -186,6 +191,7 @@ PRの作成・更新後は、GitHub上へ実際に反映されたことを確認
 merge前に少なくとも次を確認する。
 
 - レビュー対象のdiff
+- `npm run test:contracts`
 - `npm test`
 - `npm run build`
 - CI
@@ -197,7 +203,7 @@ merge前に少なくとも次を確認する。
 テストを追加・変更するときは、次の順に確認する。
 
 1. 検証する振る舞いを自然言語で説明する。
-2. `docs/spec.md` または `docs/architecture.md` に維持すべき契約があるか確認する。
+2. `docs/spec.md` または `docs/architecture.md` から辿れるArchitecture正本に維持すべき契約があるか確認する。
 3. なければ契約として維持すべきか判断し、自動testの直接根拠にする場合だけ正本へTest Contract ID付きで記載する。直接anchorにしない説明はmarkerなしで正本へ残す。
 4. 各test caseを `src/test/contractTest.ts` の `contractTest` で宣言し、正本のIDを指定する。
 5. Bug修正では `regression` に元Issue番号を指定する。

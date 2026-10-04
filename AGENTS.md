@@ -3,9 +3,11 @@
 このリポジトリで作業する際は、必要な内容だけを次の正本から確認する。
 
 - プロダクト仕様: `docs/spec.md`
-- 技術設計: `docs/architecture.md`
+- 技術設計の入口: `docs/architecture.md`（必要な領域の詳細正本へここから辿る）
 - Git / GitHub / Codex Cloudの開発手順: `docs/development.md`
-- 今後の作業項目・既知の拡張候補: GitHub Issues
+- 対象作業のscope・今後の作業項目・既知の拡張候補: GitHub Issues
+
+対象Issueは今回のscopeを定義し、`docs/spec.md` / `docs/architecture.md` は現在の仕様・設計を定義する。Issueの記述だけで正本を暗黙に上書きせず、差異がある場合は明示的に正本を更新する。Architecture detailは `docs/architecture.md` から影響領域だけを辿る。
 
 ## 言語
 
@@ -51,7 +53,7 @@
 変更内容に応じて正本を更新する。
 
 - ユーザー向けの現在の振る舞いやデータの意味が変わる: `docs/spec.md`
-- モジュール境界、座標系、データモデルなど長寿命な技術設計が変わる: `docs/architecture.md`
+- モジュール境界、座標系、データモデルなど長寿命な技術設計が変わる: `docs/architecture.md` を入口に、影響領域の正本を更新する
 - Git / PR / Codex Cloudの作業方法が変わる: `docs/development.md`
 - 今後実施する個別作業や既知の拡張候補が増える: GitHub Issue
 

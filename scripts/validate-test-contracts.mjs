@@ -8,9 +8,26 @@ const testFileConfig = JSON.parse(await readFile(path.join(root, 'test-files.jso
 const canonicalWrapper = path.join(root, 'src/test/contractTest.ts')
 const excludedDirectories = new Set(['.git', 'coverage', 'dist', 'node_modules'])
 const contractMarkerPattern = /<!--\s*test-contract:\s*([A-Z][A-Z0-9-]+)\s*-->/g
+const collectMarkdownFiles = async (directory) => {
+  const entries = await readdir(directory, { withFileTypes: true })
+  const nestedFiles = await Promise.all(entries.map(async (entry) => {
+    const target = path.join(directory, entry.name)
+    if (entry.isDirectory()) return collectMarkdownFiles(target)
+    return entry.isFile() && entry.name.endsWith('.md') ? [target] : []
+  }))
+  return nestedFiles.flat()
+}
+
+const architectureContractFiles = [
+  'docs/architecture.md',
+  ...(await collectMarkdownFiles(path.join(root, 'docs/architecture')))
+    .map((file) => path.relative(root, file).split(path.sep).join('/'))
+    .sort(),
+]
+
 const contractSources = [
-  { file: 'docs/spec.md', prefix: 'SPEC-' },
-  { file: 'docs/architecture.md', prefix: 'ARCH-' },
+  { files: ['docs/spec.md'], prefix: 'SPEC-' },
+  { files: architectureContractFiles, prefix: 'ARCH-' },
 ]
 const errors = []
 const referencedContracts = new Set()
@@ -50,17 +67,19 @@ const propertiesNamed = (object, name) =>
 
 const collectContracts = async () => {
   const contracts = new Map()
-  for (const { file, prefix } of contractSources) {
-    const content = await readFile(path.join(root, file), 'utf8')
-    for (const match of content.matchAll(contractMarkerPattern)) {
-      const id = match[1]
-      if (!id.startsWith(prefix)) {
-        errors.push(`${file}: Test Contract ID ${id} は ${prefix} で始める必要があります`)
-      }
-      if (contracts.has(id)) {
-        errors.push(`${file}: Test Contract ID ${id} が重複しています`)
-      } else {
-        contracts.set(id, file)
+  for (const { files, prefix } of contractSources) {
+    for (const file of files) {
+      const content = await readFile(path.join(root, file), 'utf8')
+      for (const match of content.matchAll(contractMarkerPattern)) {
+        const id = match[1]
+        if (!id.startsWith(prefix)) {
+          errors.push(`${file}: Test Contract ID ${id} は ${prefix} で始める必要があります`)
+        }
+        if (contracts.has(id)) {
+          errors.push(`${file}: Test Contract ID ${id} が重複しています`)
+        } else {
+          contracts.set(id, file)
+        }
       }
     }
   }

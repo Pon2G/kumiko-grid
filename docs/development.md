@@ -198,7 +198,7 @@ merge前に少なくとも次を確認する。
 
 1. 検証する振る舞いを自然言語で説明する。
 2. `docs/spec.md` または `docs/architecture.md` に維持すべき契約があるか確認する。
-3. なければ契約として維持すべきか判断し、必要な場合だけ正本へTest Contract ID付きで記載する。
+3. なければ契約として維持すべきか判断し、自動testの直接根拠にする場合だけ正本へTest Contract ID付きで記載する。直接anchorにしない説明はmarkerなしで正本へ残す。
 4. 各test caseを `src/test/contractTest.ts` の `contractTest` で宣言し、正本のIDを指定する。
 5. Bug修正では `regression` に元Issue番号を指定する。
 6. 契約を壊す最小限の入力と観測可能結果だけを検証する。
@@ -214,7 +214,7 @@ npm run build
 
 Vitestと `npm run test:contracts` は `test-files.json` の対象定義を共有する。テストファイルの配置やsuffixを変更するときはこの定義を更新し、片方の検証だけをすり抜ける対象を作らない。
 
-`npm run test:contracts` はTypeScript ASTを解析し、コメントや文字列を生のtest callと誤認せずに、Test Contract IDとtest caseの対応を検証する。Test Contractを要求するtest fileは `test-files.json` の範囲とし、生のVitest APIを禁止する検査は `node_modules`、`dist`、`coverage`、`.git` を除くrepository内の自前のTypeScriptソース全体へ適用する。`src/test/contractTest.ts` 以外ではVitestの `test` / `it` のimport・re-exportを禁止し、テストファイルが同ファイルの正規wrapperを直接importしていることも確認する。Vitestのnamespace importも、生のtest caseを隠せるため使用しない。
+`npm run test:contracts` はTypeScript ASTを解析し、コメントや文字列を生のtest callと誤認せずに、すべてのTest Contract IDが1件以上のtest caseから参照され、すべてのtest caseが存在するTest Contract IDを参照していることを検証する。Test Contractを要求するtest fileは `test-files.json` の範囲とし、生のVitest APIを禁止する検査は `node_modules`、`dist`、`coverage`、`.git` を除くrepository内の自前のTypeScriptソース全体へ適用する。`src/test/contractTest.ts` 以外ではVitestの `test` / `it` のimport・re-exportを禁止し、テストファイルが同ファイルの正規wrapperを直接importしていることも確認する。Vitestのnamespace importも、生のtest caseを隠せるため使用しない。
 
 テストを含むPull Requestでは、機械検証に加えて、assertionが指定した契約を検証していること、契約外の実装詳細を固定していないこと、Regression testが本来の契約を検証していることをレビューする。
 

@@ -157,7 +157,6 @@ mappingを定義できずSegment instanceが消滅する場合、そのinstance�
 
 ### 5.3 Material Exclusion
 
-<!-- test-contract: SPEC-PATTERN-MATERIAL-EXCLUSION -->
 MaterialExclusionは、Design Geometryから導出されるLogicalFragmentについて「その区間には材が存在しない」ことを表すCell Patternのドメイン状態とする。source SegmentやSplitRelationを破壊的に変更して材を消すのではなく、Design Geometry上の区間に材なし状態を重ねる。表示上のhidden stateとは扱わない。split境界がないSegment全体も `start-end` の1 LogicalFragmentとして扱われるため、Segment全体が材なしとなるMaterialExclusionも許可する。
 
 MaterialExclusionはconcreteなLogicalFragmentそのものや描画座標、Segment parameter、fragmentIndexを保存しない。選択されたconcrete Fragmentを、そのsource Segmentとsource-relativeな2つの境界へ正規化して保存する。概念上の境界参照は次のように扱う。

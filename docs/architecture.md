@@ -174,7 +174,6 @@ source Segmentを追加するPattern APIは、同一unordered Anchor pairと現�
 
 #### IntersectionAnchor
 
-<!-- test-contract: ARCH-PATTERN-INTERSECTION-ANCHOR-IDENTITY -->
 IntersectionAnchorは、Symmetry展開後の2つのconcrete Segment instanceが作る論理的な交点を表す。identityは順序を持たない2つの `SegmentInstanceRef` のcanonical pairとし、交点座標、Segment parameter、描画用IDを含めない。
 
 ```ts
@@ -199,7 +198,6 @@ IntersectionAnchorを `SplitRelation + logical transform` で表現しない。S
 
 #### Segment instance identity
 
-<!-- test-contract: ARCH-PATTERN-SEGMENT-INSTANCE-IDENTITY -->
 Symmetry展開後の各Segment instanceは、source Segment IDと論理transformからなる安定した `SegmentInstanceRef` で識別する。描画用文字列IDを論理identityや永続参照として利用しない。
 
 概念的には次のように表す。
@@ -388,7 +386,6 @@ Family統合で削除されたsource Segmentは、後からSymmetryを戻して�
 
 将来、Segment端点変更など設計Geometryを変更するPattern操作を追加する場合も、その操作は返却前にSegment Family、SplitRelation、MaterialExclusionの各invariantを回復する責務を持つ。
 
-<!-- test-contract: ARCH-PATTERN-LOGICAL-DEPENDENCY-CLEANUP -->
 状態遷移では、論理identityを維持できる写像が明示的に定義されている場合だけ依存参照を維持する。Segment Family canonicalizationが導出するsource / instance mappingは明示的なlogical mappingであり、SplitRelationやMaterialExclusionのsource-relative参照をcanonical identityへ移すために利用する。
 
 mappingを定義できずSegment instanceが消滅する場合、そのinstanceを参照するIntersectionAnchorも消滅し、さらにそのAnchorを必要とする下位の論理情報を依存関係に従って削除する。削除された依存情報は、後からGeometry上で同じ位置・形状の要素が再び現れても自動復活させない。
@@ -425,7 +422,6 @@ interface IntersectionInteractionCandidate {
 <!-- test-contract: ARCH-PATTERN-SPLIT-DERIVATION -->
 Pattern層は、有効なCellPatternからsplit境界、論理Fragment、Geometryをpureに導出する。Geometry導出はCellPattern、SplitRelation、IntersectionAnchorの論理identityを追加・削除・修復しない。
 
-<!-- test-contract: ARCH-PATTERN-FRAGMENT-BOUNDARY-DERIVATION -->
 Fragmentは1つのSegment instance上で現在隣接している2つの論理境界に挟まれた区間として導出する。Fragment自身に永続的な `fragmentIndex` や境界順序を持たせず、少なくとも「どのSegment instance上か」と「どの2つの論理境界の間か」を追跡できる構成とする。
 
 Fragment境界は、Segment instanceの端点またはそのinstanceをtargetとするSplitRelationから得られたIntersectionAnchorで表す。
@@ -624,7 +620,6 @@ Cell EditorのSVGは、pattern line、ghost、選択highlight、markerなどの�
 
 有効なCellPatternでは、同一Segment Familyのsource重複および同一sourceのstabilizerによる完全重複Segment instanceをPattern層でcanonicalizeするため、それらをCanvas候補として選び分けることを通常のUI契約としない。malformed / legacy / 状態遷移途中の入力を防御的に表示する場合でも、UI上の重複除去をPattern canonicalizationの代替にしない。
 
-<!-- test-contract: ARCH-EDITOR-INSPECTOR-BOUNDARY -->
 Cell Editor下部は候補一覧の所有者ではなく、現在のEditorSelectionを表示・操作するInspectorとする。Canvasは「どの論理対象を操作するか」を選ぶ主操作面、Inspectorは「選択対象が現在どの状態で、どの状態遷移を実行できるか」を明示する面として責務を分ける。
 
 Segmentのsource family削除、Intersectionのsplit追加・解除、Fragmentの材なし・材ありへの変更などCellPatternを変更する操作はInspectorからPattern層の状態遷移APIを呼ぶ。Symmetry生成instanceを選択した削除も、concrete instance単体ではなくsource Segment削除としてPattern層へ渡す。Canvas上の選択操作だけでCellPatternを暗黙変更しない。将来、操作手数を減らすショートカットを追加しても、同じPattern APIを利用し、この責務境界を迂回しない。
@@ -679,7 +674,9 @@ Effective GeometryはMaterialExclusionを反映した「実際に材が存在す
 
 ### 9.2 Test Contract ID
 
-自動テストの根拠となる段落の直前に、次の形式で一意なTest Contract IDを定義する。
+Test Contract IDは、Architecture上重要な文章すべてへ付けるラベルではなく、自動testが正本上の根拠を直接参照するためのanchorとする。長寿命な仕様・設計説明でも、自動testの直接anchorにしない文章は正本へ残したままmarkerを付けない。
+
+自動testの根拠となる段落の直前に、次の形式で一意なTest Contract IDを定義する。
 
 ```md
 <!-- test-contract: {SPECまたはARCH}-{意味のある名前} -->
@@ -687,9 +684,12 @@ Effective GeometryはMaterialExclusionを反映した「実際に材が存在す
 
 - `SPEC-*` は `docs/spec.md`、`ARCH-*` は `docs/architecture.md` にだけ定義する。
 - IDは連番ではなく、大文字英数字とハイフンによる意味のある安定した名前とする。
+- 1つのIDは、同じ理由で一緒に変更される長寿命な契約単位とする。説明の長さだけを理由に分割しない。
 - 見出しや文章の移動では変更せず、契約の廃止・分割・統合時にだけ見直す。
-- test caseは `contractTest` のmetadataに正本で定義済みのIDを文字列リテラルとして宣言する。
+- 定義したIDは1件以上のtest caseから直接参照する。test caseは `contractTest` のmetadataに正本で定義済みのIDを文字列リテラルとして宣言する。
 - Bug Issueに由来するRegression testは、契約に加えて正のIssue番号を `regression` に記録する。Issueは追加理由の履歴であり、契約の正本にはしない。
+
+同じstemを持つ `SPEC-*` / `ARCH-*` があっても、前者がdomain observable semantics、後者がrepresentation / invariant / state transition mechanismを表すなど責務が異なる場合は別契約として維持する。名前だけを理由に機械的に統合しない。
 
 ### 9.3 レイヤー別の責務
 
@@ -707,7 +707,7 @@ Test Contract IDから正本を確認し、次のいずれかとして扱う。
 
 ### 9.5 機械検証とレビューの境界
 
-Test Contract validationは、正本内のIDの一意性とprefix、全test caseのID宣言、参照先の存在、生のVitest Test APIの不使用、Regression Issue番号が正の整数であることを機械検出する。Unit TestとBuildもCIで実行する。
+Test Contract validationは、正本内のIDの一意性とprefix、各IDが1件以上のtest caseから参照されること、全test caseのID宣言と参照先の存在、生のVitest Test APIの不使用、Regression Issue番号が正の整数であることを機械検出する。Unit TestとBuildもCIで実行する。
 
 一方、assertionが契約を実際に検証しているか、境界条件が十分か、実装詳細を間接的に固定していないか、契約を置く正本が適切か、Regression testが本来の契約を表すか、不要な重複がないかは静的検査では判断せず、レビューで確認する。機械検証は良いテストを完全判定するものではなく、根拠を追跡できる構造を保証する。
 

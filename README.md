@@ -25,6 +25,7 @@ npm run dev
 検証:
 
 ```bash
+npm run test:contracts
 npm test
 npm run build
 ```

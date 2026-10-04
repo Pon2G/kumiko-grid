@@ -13,6 +13,7 @@ const contractSources = [
   { file: 'docs/architecture.md', prefix: 'ARCH-' },
 ]
 const errors = []
+const referencedContracts = new Set()
 
 const lineOf = (sourceFile, node) =>
   sourceFile.getLineAndCharacterOfPosition(node.getStart()).line + 1
@@ -123,8 +124,13 @@ const validateMetadata = (file, sourceFile, call, contracts) => {
     || !ts.isPropertyAssignment(contract)
     || !ts.isStringLiteral(contract.initializer)) {
     errors.push(`${relativeFile}:${line}: contractは文字列リテラルを直接指定してください`)
-  } else if (!contracts.has(contract.initializer.text)) {
-    errors.push(`${relativeFile}:${line}: Test Contract ID ${contract.initializer.text} は正本に存在しません`)
+  } else {
+    const contractId = contract.initializer.text
+    if (!contracts.has(contractId)) {
+      errors.push(`${relativeFile}:${line}: Test Contract ID ${contractId} は正本に存在しません`)
+    } else {
+      referencedContracts.add(contractId)
+    }
   }
 
   const regressionProperties = propertiesNamed(metadata, 'regression')
@@ -200,9 +206,15 @@ for (const file of repositorySources) {
   }
 }
 
+for (const [id, file] of contracts) {
+  if (!referencedContracts.has(id)) {
+    errors.push(`${file}: Test Contract ID ${id} はtest caseから参照されていません`)
+  }
+}
+
 if (errors.length > 0) {
   console.error(['Test Contract validationに失敗しました:', ...errors.map((error) => `- ${error}`)].join('\n'))
   process.exitCode = 1
 } else {
-  console.log(`${contracts.size}件のTest Contractと、すべてのtest caseの参照を確認しました。`)
+  console.log(`${contracts.size}件のTest Contractの相互参照と、すべてのtest caseの参照先を確認しました。`)
 }

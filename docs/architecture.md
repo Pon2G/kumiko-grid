@@ -190,12 +190,6 @@ IntersectionAnchorを `SplitRelation + logical transform` で表現しない。S
 
 #9でsplit境界として扱うIntersectionAnchorは、有効なSplitRelationをsymmetry orbitへ展開したconcrete target/cutter pairから導出する。IntersectionAnchor自体はSplitRelationの有向性を持たず、そのAnchorがどちらのSegment instanceを分割する境界になるかはSplitRelationのtargetから決まる。逆向きSplitRelationが共存する場合、同じIntersectionAnchorを双方のSegment instanceの境界として利用できる。
 
-#### IntersectionAnchorをSegment端点として利用する場合の依存制約
-
-将来IntersectionAnchorをsource Segmentの端点として許可する場合、Segment Geometryの解決依存を有向グラフとして扱い、循環を許可しない。
-
-例えばSegment Aの端点が `intersection(B, C)` を参照するなら、AはBとCのGeometry解決へ依存する。自己参照や `A → B → A` のような間接循環はGeometryを決定できないためdomain invariantとして拒否し、依存グラフをDAGに保つ。これはGeometry計算時に循環を推測して修復する責務ではなく、解決不能な論理モデルを作成しないためのPattern層の制約とする。
-
 ### CellPattern
 
 ユーザーが定義した基本Segment群、Symmetry、有効なSplitRelation、および正規化済みMaterialExclusionを持つ。

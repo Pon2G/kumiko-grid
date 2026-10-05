@@ -8,16 +8,18 @@ import {
 } from './intersectionAnchor'
 import { resolveSegment, type Segment } from './segment'
 import {
-  changeSymmetry,
   deriveIntersectionAnchors,
   deriveLogicalFragments,
   derivePatternGeometry,
   deriveSegmentSplitBoundaries,
-  removeSegment,
-  removeSplitRelation,
   resolveIntersectionAnchor,
   resolveLogicalFragment,
-} from './splitting'
+} from './designGeometry'
+import {
+  changeSymmetry,
+  removeSegment,
+  removeSplitRelation,
+} from './patternOperations'
 
 const ref = (sourceSegmentId: string): SegmentInstanceRef => ({ sourceSegmentId, transform: { type: 'identity' } })
 const target: Segment = {

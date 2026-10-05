@@ -3,14 +3,18 @@ import { contractTest } from '../test/contractTest'
 import type { Segment } from './segment'
 import type { CellPattern } from './cellPattern'
 import {
-  addSplitRelation,
   derivePatternGeometry,
   expandSplitRelationOrbit,
-  getIntersectionInteractionCandidates,
-  getSplitCandidates,
+} from './designGeometry'
+import {
+  addSplitRelation,
   removeSegment,
   removeSplitRelation,
-} from './splitting'
+} from './patternOperations'
+import {
+  getIntersectionInteractionCandidates,
+  getSplitCandidates,
+} from './splitCandidates'
 
 const target: Segment = {
   id: 'A',

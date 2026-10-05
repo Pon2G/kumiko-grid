@@ -1,7 +1,7 @@
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
 import {
   canonicalizeSplitRelation,
-  normalizeRelativeTransform,
+  deriveSplitRelationFromPair,
   relativeTransformKey,
   splitRelationKey,
   supportedRelativeTransforms,
@@ -62,12 +62,7 @@ function migratePair(
   const cutterRaw = algebra.compose(algebra.identity, relative)
   const cutter = cutterRaw && mapCanonicalInstance(next, cutterMapping, { sourceSegmentId: cutterId, transform: cutterRaw })
   if (!target || !cutter) return null
-  const migratedRelative = normalizeRelativeTransform(next.symmetry, target, cutter)
-  return migratedRelative ? canonicalizeSplitRelation(next, {
-    targetSegmentId: target.sourceSegmentId,
-    cutterSegmentId: cutter.sourceSegmentId,
-    relativeTransform: migratedRelative,
-  }) : null
+  return deriveSplitRelationFromPair(next, target, cutter)
 }
 
 function migrateBoundary(

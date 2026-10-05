@@ -95,6 +95,23 @@ export function canonicalizeSplitRelation(pattern: Pick<CellPattern, 'segments' 
   return null
 }
 
+/** concreteな有向instance pairから、それが属するcanonical relationを導出する。 */
+export function deriveSplitRelationFromPair(
+  pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
+  target: SegmentInstanceRef,
+  cutter: SegmentInstanceRef,
+): SplitRelation | null {
+  const canonicalTarget = canonicalizeInstanceRef(pattern, target)
+  const canonicalCutter = canonicalizeInstanceRef(pattern, cutter)
+  if (!canonicalTarget || !canonicalCutter) return null
+  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, canonicalTarget, canonicalCutter)
+  return relativeTransform ? canonicalizeSplitRelation(pattern, {
+    targetSegmentId: canonicalTarget.sourceSegmentId,
+    cutterSegmentId: canonicalCutter.sourceSegmentId,
+    relativeTransform,
+  }) : null
+}
+
 /** identity orbitを、呼び出し側で一度だけ展開したSegment lookupから解決する。 */
 const resolveSplitRelationOrbit = (
   pattern: Pick<CellPattern, 'segments' | 'symmetry'>,

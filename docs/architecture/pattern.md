@@ -194,6 +194,8 @@ raw relationをorbit展開するときは、各target / cutter raw transformをs
 
 この正規化により、同じorbit内のどのconcrete pairから操作しても同じSplitRelationになる。保存上のrelation identityはcanonicalize済みの `targetSegmentId / cutterSegmentId / relativeTransform` の組とし、操作時に選ばれた代表pairやraw transformを保存しない。同じcanonical concrete pair orbitを重複保持しない。
 
+concreteな有向target / cutter pairからrelation identityを導出するときは、Design Geometryが両instanceをcanonical concrete `SegmentInstanceRef` へ射影し、そのpairのrelative transformからcanonical orbit代表を返す。参照先が存在しない場合や現在のSymmetryでrelative transformを表現できない場合は導出不能とする。この導出はidentityだけを担当し、交差、orbit全体のsplit可否、Effective Geometry上での追加可否、CellPatternへの登録有無は各既存責務で別に検証する。MaterialExclusionのsource identity targetへのrebaseや、状態遷移でのsource mappingはこの導出へ含めない。
+
 relationは有向である。逆向きrelationはcanonical concrete pair orbitのtarget / cutterを反転したorbitとして扱う。raw relativeTransformはalgebra上のinverseから導出し、source stabilizerがある場合は反転後のpair orbitに対するcanonical relativeTransformへ再正規化する。stabilizerの影響がない現在の通常例ではrotationalの `+1` と `+2` は互いに逆、mirrorとidentityはそれぞれ自身が逆元となる。逆向きrelationは元relationとは別のrelationとして共存できる。
 
 ### SplitRelationとIntersectionAnchor

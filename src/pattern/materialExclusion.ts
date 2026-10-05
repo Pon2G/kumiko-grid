@@ -1,7 +1,7 @@
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation } from './cellPattern'
-import type { FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
-import { deriveLogicalFragments, derivePatternGeometry, deriveSplitRelationFromPair, splitRelationKey } from './designGeometry'
+import type { DesignGeometrySnapshot, FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
+import { deriveDesignGeometrySnapshot, deriveLogicalFragments, deriveSplitRelationFromPair, splitRelationKey } from './designGeometry'
 import { createIntersectionAnchor } from './intersectionAnchor'
 import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
 import { instanceRefKey, symmetryTransformAlgebra } from './symmetry'
@@ -63,9 +63,9 @@ interface BoundaryOrder {
 }
 
 /** sourceのidentity instanceを正準な区間順序として利用する。 */
-function sourceBoundaryOrder(pattern: CellPattern, segmentId: string): BoundaryOrder | null {
+function sourceBoundaryOrder(pattern: CellPattern, segmentId: string, logicalFragments = deriveLogicalFragments(pattern)): BoundaryOrder | null {
   const identity = identityRef(segmentId)
-  const fragments = deriveLogicalFragments(pattern).filter(({ segmentInstanceRef }) => instanceRefKey(segmentInstanceRef) === instanceRefKey(identity))
+  const fragments = logicalFragments.filter(({ segmentInstanceRef }) => instanceRefKey(segmentInstanceRef) === instanceRefKey(identity))
   if (fragments.length === 0) return null
   const ordered: MaterialBoundaryRef[] = []
   for (const fragment of fragments) {
@@ -196,9 +196,30 @@ export function isFragmentExcluded(pattern: CellPattern, fragment: LogicalFragme
     && (() => { const value = interval(item, current.order); return value !== null && value[0] <= range[0] && value[1] >= range[1] })()))
 }
 
+function fragmentIsExcludedInOrder(pattern: CellPattern, fragment: LogicalFragment, order: BoundaryOrder): boolean {
+  const ranges = fragmentOrbitRanges(pattern, fragment, order)
+  return ranges.length > 0 && ranges.every((range) => pattern.materialExclusions.some((item) =>
+    item.segmentId === fragment.segmentInstanceRef.sourceSegmentId
+    && (() => { const value = interval(item, order); return value !== null && value[0] <= range[0] && value[1] >= range[1] })()))
+}
+
 /** Design Geometryを残したまま、材が存在する区間だけを返す。 */
 export function deriveEffectiveGeometry(pattern: CellPattern): PatternFragment[] {
-  return derivePatternGeometry(pattern).filter(({ logicalFragment }) => !isFragmentExcluded(pattern, logicalFragment))
+  return deriveEffectiveGeometryFromSnapshot(pattern, deriveDesignGeometrySnapshot(pattern))
+}
+
+/** 同じ候補導出で得たDesign Geometryと論理Fragment順序を再利用する。 */
+export function deriveEffectiveGeometryFromSnapshot(pattern: CellPattern, design: DesignGeometrySnapshot): PatternFragment[] {
+  const orders = new Map<string, BoundaryOrder | null>()
+  const logicalFragments = design.logicalFragments.map(({ logicalFragment }) => logicalFragment)
+  const orderFor = (segmentId: string) => {
+    if (!orders.has(segmentId)) orders.set(segmentId, sourceBoundaryOrder(pattern, segmentId, logicalFragments))
+    return orders.get(segmentId) ?? null
+  }
+  return design.geometry.filter(({ logicalFragment }) => {
+    const order = orderFor(logicalFragment.segmentInstanceRef.sourceSegmentId)
+    return !order || !fragmentIsExcludedInOrder(pattern, logicalFragment, order)
+  })
 }
 
 /** 状態遷移後に解決不能となった境界を捨て、stabilizer orbitを含めて再正規化する。 */
@@ -223,11 +244,27 @@ export const materialExclusionsDependingOn = (pattern: CellPattern, relation: Sp
       return supported !== null && splitRelationKey(supported) === splitRelationKey(relation)
     }))
 
+export type EffectiveGeometryByInstance = ReadonlyMap<string, ReadonlyArray<PatternFragment>>
+
+export function indexEffectiveGeometry(geometry: ReadonlyArray<PatternFragment>): EffectiveGeometryByInstance {
+  const indexed = new Map<string, PatternFragment[]>()
+  for (const fragment of geometry) {
+    const key = instanceRefKey(fragment.instanceRef)
+    const current = indexed.get(key)
+    if (current) current.push(fragment)
+    else indexed.set(key, [fragment])
+  }
+  return indexed
+}
+
 /** Effective fragment同士の交差として、target側の内部交差だけを許可する。 */
-export function effectivePairCanSplit(pattern: CellPattern, target: SegmentInstanceRef, cutter: SegmentInstanceRef): boolean {
-  const geometry = deriveEffectiveGeometry(pattern)
-  const targets = geometry.filter((item) => instanceRefKey(item.instanceRef) === instanceRefKey(target))
-  const cutters = geometry.filter((item) => instanceRefKey(item.instanceRef) === instanceRefKey(cutter))
+export function effectivePairCanSplit(
+  geometry: EffectiveGeometryByInstance,
+  target: SegmentInstanceRef,
+  cutter: SegmentInstanceRef,
+): boolean {
+  const targets = geometry.get(instanceRefKey(target)) ?? []
+  const cutters = geometry.get(instanceRefKey(cutter)) ?? []
   return targets.some((targetFragment) => cutters.some((cutterFragment) => {
     const result = intersectSegments(targetFragment, cutterFragment)
     return (result.kind === 'cross' || result.kind === 'touch') && isInteriorParameter(targetFragment, result.firstT)

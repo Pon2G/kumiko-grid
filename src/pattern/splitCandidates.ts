@@ -1,17 +1,18 @@
-import { intersectSegments, pointsAreClose } from '../geometry/intersections'
+import { pointsAreClose } from '../geometry/intersections'
 import type { Point } from '../geometry/types'
 import type { CellPattern, SegmentInstanceRef, SplitRelation } from './cellPattern'
 import {
   expandSplitRelationOrbit,
   canonicalizeSplitRelation,
+  deriveDesignGeometrySnapshot,
   relativeTransformKey,
   splitRelationKey,
   supportedRelativeTransforms,
-  validateSplitRelationOrbit,
+  validateSplitRelationOrbitFromInstances,
 } from './designGeometry'
 import { createIntersectionAnchor, type IntersectionAnchor } from './intersectionAnchor'
-import { effectivePairCanSplit } from './materialExclusion'
-import { expandPattern, instanceRefKey } from './symmetry'
+import { deriveEffectiveGeometryFromSnapshot, effectivePairCanSplit, indexEffectiveGeometry } from './materialExclusion'
+import { instanceRefKey } from './symmetry'
 
 export interface SplitCandidate extends SplitRelation { points: Point[]; active: boolean }
 export interface IntersectionInteractionCandidate {
@@ -23,41 +24,51 @@ export interface IntersectionInteractionCandidate {
   active: boolean
 }
 
+type ValidatedOrbit = NonNullable<ReturnType<typeof validateSplitRelationOrbitFromInstances>>
+interface ValidatedSplitCandidate {
+  candidate: SplitCandidate
+  orbit: ValidatedOrbit
+}
+
 /** Design Geometry上の既存relationと、Effective Geometry上で追加可能なrelationを列挙する。 */
-export function getSplitCandidates(pattern: CellPattern, targetSegmentId: string): SplitCandidate[] {
-  const candidates = pattern.segments.flatMap(({ id: cutterSegmentId }) => supportedRelativeTransforms(pattern.symmetry).flatMap((relativeTransform) => {
+function deriveValidatedSplitCandidates(pattern: CellPattern, targetSegmentId: string): ValidatedSplitCandidate[] {
+  const design = deriveDesignGeometrySnapshot(pattern)
+  const effective = indexEffectiveGeometry(deriveEffectiveGeometryFromSnapshot(pattern, design))
+  const activeKeys = new Set(pattern.splitRelations.map(splitRelationKey))
+  const seen = new Set<string>()
+  return pattern.segments.flatMap(({ id: cutterSegmentId }) => supportedRelativeTransforms(pattern.symmetry).flatMap((relativeTransform) => {
     const relation = canonicalizeSplitRelation(pattern, { targetSegmentId, cutterSegmentId, relativeTransform })
     if (!relation) return []
-    const active = pattern.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))
-    const orbit = validateSplitRelationOrbit(pattern, relation)
+    const key = splitRelationKey(relation)
+    if (seen.has(key)) return []
+    seen.add(key)
+    const active = activeKeys.has(key)
+    const orbit = validateSplitRelationOrbitFromInstances(pattern, relation, design.instancesByRef)
     if (!orbit) return []
     if (!active) {
       const refs = expandSplitRelationOrbit(pattern, relation)
-      if (!refs?.every(({ target, cutter }) => effectivePairCanSplit(pattern, target, cutter))) return []
+      if (!refs?.every(({ target, cutter }) => effectivePairCanSplit(effective, target, cutter))) return []
     }
     const points: Point[] = []
     for (const intersection of orbit.intersections) if (!points.some((point) => pointsAreClose(point, intersection.point))) points.push(intersection.point)
-    return [{ ...relation, points, active }]
+    return [{ candidate: { ...relation, points, active }, orbit }]
   }))
-  return [...new Map(candidates.map((candidate) => [splitRelationKey(candidate), candidate])).values()]
+}
+
+export function getSplitCandidates(pattern: CellPattern, targetSegmentId: string): SplitCandidate[] {
+  return deriveValidatedSplitCandidates(pattern, targetSegmentId).map(({ candidate }) => candidate)
 }
 
 export function getIntersectionInteractionCandidates(pattern: CellPattern, target: SegmentInstanceRef): IntersectionInteractionCandidate[] {
-  const instances = new Map(expandPattern(pattern).map((segment) => [instanceRefKey(segment.instanceRef), segment]))
-  return getSplitCandidates(pattern, target.sourceSegmentId).flatMap((candidate) => {
+  return deriveValidatedSplitCandidates(pattern, target.sourceSegmentId).flatMap(({ candidate, orbit }) => {
     const targetKey = instanceRefKey(target)
-    return (expandSplitRelationOrbit(pattern, candidate) ?? [])
-      .filter((pair) => instanceRefKey(pair.target) === targetKey)
-      .flatMap((pair) => {
-        const targetSegment = instances.get(instanceRefKey(pair.target))
-        const cutterSegment = instances.get(instanceRefKey(pair.cutter))
-        if (!targetSegment || !cutterSegment) return []
-        const intersection = intersectSegments(targetSegment, cutterSegment)
-        if (intersection.kind !== 'cross' && intersection.kind !== 'touch') return []
+    return orbit.pairs.flatMap(([targetSegment, cutterSegment], index) => {
+        if (instanceRefKey(targetSegment.instanceRef) !== targetKey) return []
+        const intersection = orbit.intersections[index]
         return [{
-          target: pair.target,
-          cutter: pair.cutter,
-          anchor: createIntersectionAnchor(pair.target, pair.cutter),
+          target: targetSegment.instanceRef,
+          cutter: cutterSegment.instanceRef,
+          anchor: createIntersectionAnchor(targetSegment.instanceRef, cutterSegment.instanceRef),
           point: intersection.point,
           relation: { targetSegmentId: candidate.targetSegmentId, cutterSegmentId: candidate.cutterSegmentId,
             relativeTransform: candidate.relativeTransform.type === 'rotation'

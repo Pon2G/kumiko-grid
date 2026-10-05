@@ -1,7 +1,7 @@
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation } from './cellPattern'
 import type { FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
-import { canonicalizeSplitRelation, deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, splitRelationKey } from './designGeometry'
+import { deriveLogicalFragments, derivePatternGeometry, deriveSplitRelationFromPair, splitRelationKey } from './designGeometry'
 import { createIntersectionAnchor } from './intersectionAnchor'
 import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
 import { instanceRefKey, symmetryTransformAlgebra } from './symmetry'
@@ -28,13 +28,7 @@ export function normalizeConcreteSplitBoundary(
   const rebasedTarget = canonicalizeInstanceRef(pattern, { sourceSegmentId: target.sourceSegmentId, transform: rebasedTargetTransform })
   const rebasedCutter = canonicalizeInstanceRef(pattern, { sourceSegmentId: cutter.sourceSegmentId, transform: rebasedCutterTransform })
   if (!rebasedTarget || !rebasedCutter || instanceRefKey(rebasedTarget) !== instanceRefKey(identityRef(target.sourceSegmentId))) return null
-  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, rebasedTarget, rebasedCutter)
-  if (!relativeTransform) return null
-  const relation = canonicalizeSplitRelation(pattern, {
-    targetSegmentId: target.sourceSegmentId,
-    cutterSegmentId: cutter.sourceSegmentId,
-    relativeTransform,
-  })
+  const relation = deriveSplitRelationFromPair(pattern, rebasedTarget, rebasedCutter)
   return relation ? { kind: 'split-boundary', cutter: rebasedCutter } : null
 }
 
@@ -59,12 +53,7 @@ export function materialBoundaryRelation(
 ): SplitRelation | null {
   if (boundary.kind === 'segment-endpoint') return null
   const target = identityRef(segmentId)
-  const relativeTransform = normalizeRelativeTransform(pattern.symmetry, target, boundary.cutter)
-  return relativeTransform ? canonicalizeSplitRelation(pattern, {
-    targetSegmentId: segmentId,
-    cutterSegmentId: boundary.cutter.sourceSegmentId,
-    relativeTransform,
-  }) : null
+  return deriveSplitRelationFromPair(pattern, target, boundary.cutter)
 }
 
 interface BoundaryOrder {

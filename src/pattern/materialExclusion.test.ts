@@ -2,8 +2,10 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern } from './cellPattern'
 import type { Segment } from './segment'
+import { deriveIntersectionAnchors, deriveLogicalFragments } from './designGeometry'
 import { deriveEffectiveGeometry, excludeMaterial, isFragmentExcluded, materialBoundaryRelation, restoreMaterial } from './materialExclusion'
-import { addSplitRelation, changeSymmetry, deriveIntersectionAnchors, deriveLogicalFragments, getIntersectionInteractionCandidates, getSplitCandidates, removeSegment, removeSplitRelation } from './splitting'
+import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from './patternOperations'
+import { getIntersectionInteractionCandidates, getSplitCandidates } from './splitCandidates'
 
 const target: Segment = {
   id: 'A',

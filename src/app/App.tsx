@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
-import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation, splitRelationKey } from '../pattern/splitting'
+import { splitRelationKey } from '../pattern/designGeometry'
+import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from '../pattern/patternOperations'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {

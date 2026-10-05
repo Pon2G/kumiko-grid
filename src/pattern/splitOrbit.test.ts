@@ -3,15 +3,17 @@ import type { Segment } from './segment'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern, SegmentInstanceRef, SplitRelation } from './cellPattern'
 import {
-  addSplitRelation,
-  changeSymmetry,
   derivePatternGeometry,
   expandSplitRelationOrbit,
-  getSplitCandidates,
   inverseRelativeTransform,
   normalizeRelativeTransform,
+} from './designGeometry'
+import {
+  addSplitRelation,
+  changeSymmetry,
   removeSplitRelation,
-} from './splitting'
+} from './patternOperations'
+import { getSplitCandidates } from './splitCandidates'
 import { expandPattern, instanceRefKey } from './symmetry'
 
 const a: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }

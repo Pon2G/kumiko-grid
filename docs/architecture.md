@@ -51,7 +51,6 @@ src/
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
     patternOperations.ts    # Pattern状態遷移とinvariant回復
     splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
-    splitting.ts           # 上記moduleの公開互換entry point
   layout/
   components/
   app/
@@ -69,7 +68,7 @@ Anchorやsource Segmentの型はPatternの論理モデルに置き、Patternか�
 
 Pattern内部では、Symmetryの離散transformに関する列挙・合成・逆変換・相対化、logical Anchor作用、Geometry適用を `symmetry` の責務へ集約し、`segmentFamily`、`designGeometry`、`materialExclusion`、`patternOperations`、`splitCandidates` がSymmetry種別ごとの分岐を個別に持たない。`symmetry` はGeometry層のpureな回転・鏡映primitiveを利用してよいが、Geometry層へPatternのSymmetry型やlogical identityを持ち込まない。
 
-その上で依存方向は `symmetry` → `segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。公開互換entry pointからのre-exportを除き、この依存方向を逆転させたり循環させたりしない。
+その上で依存方向は `symmetry` → `segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 

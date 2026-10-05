@@ -1,11 +1,10 @@
-import { segmentEndpointAnchorKey } from './anchor'
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation } from './cellPattern'
 import type { FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
 import { canonicalizeSplitRelation, deriveLogicalFragments, derivePatternGeometry, normalizeRelativeTransform, splitRelationKey } from './designGeometry'
 import { createIntersectionAnchor } from './intersectionAnchor'
-import { canonicalizeInstanceRef } from './segmentFamily'
-import { instanceRefKey, symmetryTransformAlgebra, transformedSegmentDefinition } from './symmetry'
+import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
+import { instanceRefKey, symmetryTransformAlgebra } from './symmetry'
 
 const boundaryKey = (boundary: MaterialBoundaryRef): string => boundary.kind === 'segment-endpoint'
   ? `endpoint:${boundary.endpoint}`
@@ -96,11 +95,7 @@ function interval(exclusion: MaterialExclusion, order: BoundaryOrder): [number, 
   return a === undefined || b === undefined || a === b ? null : [Math.min(a, b), Math.max(a, b)]
 }
 
-function orderedDefinitionKey(value: { start: Parameters<typeof segmentEndpointAnchorKey>[0]; end: Parameters<typeof segmentEndpointAnchorKey>[0] }) {
-  return `${segmentEndpointAnchorKey(value.start)}\0${segmentEndpointAnchorKey(value.end)}`
-}
-
-/** Symmetry作用後の境界をcanonical targetへ移す。endpoint方向もlogical definitionで判定する。 */
+/** Symmetry作用後の境界をcanonical targetへ移す。 */
 function transformFragmentBoundary(
   pattern: CellPattern,
   fragment: LogicalFragment,
@@ -110,15 +105,19 @@ function transformFragmentBoundary(
   const algebra = symmetryTransformAlgebra(pattern.symmetry)
   const rawTargetTransform = algebra.compose(action, fragment.segmentInstanceRef.transform)
   if (!rawTargetTransform) return null
-  const target = canonicalizeInstanceRef(pattern, { sourceSegmentId: fragment.segmentInstanceRef.sourceSegmentId, transform: rawTargetTransform })
-  if (!target) return null
+  const canonicalTarget = canonicalizeInstanceRefWithDirection(pattern, {
+    sourceSegmentId: fragment.segmentInstanceRef.sourceSegmentId,
+    transform: rawTargetTransform,
+  })
+  if (!canonicalTarget) return null
+  const target = canonicalTarget.ref
   if (boundary.kind === 'segment-endpoint') {
-    const source = pattern.segments.find(({ id }) => id === fragment.segmentInstanceRef.sourceSegmentId)
-    const raw = source && transformedSegmentDefinition(pattern.symmetry, source, rawTargetTransform)
-    const canonical = source && transformedSegmentDefinition(pattern.symmetry, source, target.transform)
-    if (!raw || !canonical) return null
-    const reverse = orderedDefinitionKey(raw) !== orderedDefinitionKey(canonical)
-    return { target, boundary: { kind: 'segment-endpoint', endpoint: reverse ? boundary.endpoint === 'start' ? 'end' : 'start' : boundary.endpoint } }
+    return { target, boundary: {
+      kind: 'segment-endpoint',
+      endpoint: canonicalTarget.direction === 'reverse'
+        ? boundary.endpoint === 'start' ? 'end' : 'start'
+        : boundary.endpoint,
+    } }
   }
   const mapRef = (ref: SegmentInstanceRef) => {
     const transform = algebra.compose(action, ref.transform)

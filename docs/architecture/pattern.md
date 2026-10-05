@@ -156,6 +156,8 @@ interface SegmentInstanceBasisMapping {
 
 型名や具体的な格納形式は固定しない。`toTransform` は同一Symmetry内で有効なtransformであり、旧sourceのidentity Segment definitionが `toSourceSegmentId + toTransform` の論理Segment definitionに対応することを意味する。`direction` は旧sourceのorderedなstart / endが、そのtransformed representativeのstart / endと同順か逆順かを表す。MaterialExclusionのstart / endのようにSegment方向へ意味がある参照を移行するときだけ利用し、SegmentInstanceRefそのものへ方向フラグを混ぜない。
 
+raw instanceをsource stabilizerのcanonical concrete instanceへ射影するときも、canonical refとraw definitionからcanonical definitionへの端点方向をSegment Family / instance canonicalizationの同じ責務から取得する。basis mappingの `direction` は旧source definitionからtransformed representative definitionへの向きであり、raw → canonical mappingの方向とは写像元・写像先が異なる。両者は同じordered logical Anchor比較規則を利用するが、値を機械的に共有しない。
+
 旧sourceの任意のinstance transform `g` は、`compose(toTransform, g)` によって新source側のraw instance transformへ写す。sourceのstabilizerによって複数raw transformが同じconcrete instanceを表す場合は、さらにrepresentative source上のcanonical concrete transformへ射影する。SplitRelationの移行ではtarget / cutterそれぞれのinstanceをこの共通写像で移した後、写像後の2 concrete instanceからrelative transformを再計算する。rotationalのstep加減算やmirrorのXORをmigration側へ直接実装しない。
 
 instance mappingは**同一Symmetry文脈内のlogical mapping**とする。Symmetry変更では、まずnext Symmetryを採用した文脈でsource Family canonicalizationとmappingを構築し、そのmappingへ引き継ぎ可能な旧relation / boundaryを入力する。旧relativeTransformがnext Symmetryでそもそも表現不能な場合はmappingによる別種類への推測変換を行わない。

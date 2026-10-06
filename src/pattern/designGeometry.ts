@@ -33,6 +33,13 @@ export interface SegmentSplitBoundary {
 export interface PatternFragment extends RenderedSegment {
   logicalFragment: LogicalFragment
 }
+
+type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T
+  : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T
+
+export type ReadonlyPatternFragment = DeepReadonly<PatternFragment>
+export type ReadonlyResolvedLogicalFragment = DeepReadonly<ResolvedLogicalFragment>
 export const relativeTransformKey = (value: SplitRelativeTransform): string =>
   value.type === 'rotation' ? `rotation:${value.steps}` : value.type
 export const splitRelationKey = (value: SplitRelation): string =>
@@ -128,7 +135,7 @@ const resolveSplitRelationOrbit = (
   return pairs.every((pair) => pair !== null) ? pairs as Array<[RenderedSegment, RenderedSegment]> : null
 }
 
-const validatedOrbitFromInstances = (
+const validateSplitRelationOrbitFromInstances = (
   pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
   relation: SplitRelation,
   segmentsByRef: ReadonlyMap<string, RenderedSegment>,
@@ -146,7 +153,7 @@ const validatedOrbitFromInstances = (
 
 export const validateSplitRelationOrbit = (pattern: CellPattern, relation: SplitRelation) => {
   const instances = expandPattern(pattern)
-  return validatedOrbitFromInstances(pattern, relation,
+  return validateSplitRelationOrbitFromInstances(pattern, relation,
     new Map(instances.map((segment) => [instanceRefKey(segment.instanceRef), segment])))
 }
 
@@ -155,7 +162,7 @@ interface ResolvedSegmentSplitBoundary extends SegmentSplitBoundary {
   parameter: number
 }
 
-interface CurrentLogicalFragment {
+export interface ResolvedLogicalFragment {
   logicalFragment: LogicalFragment
   start: Point
   end: Point
@@ -165,8 +172,8 @@ interface CurrentPatternContext {
   instancesByRef: Map<string, RenderedSegment>
   anchors: Map<string, { anchor: IntersectionAnchor; resolved: ResolvedIntersectionAnchor }>
   boundaries: ResolvedSegmentSplitBoundary[]
-  logicalFragments: CurrentLogicalFragment[]
-  logicalFragmentsByKey: Map<string, CurrentLogicalFragment>
+  logicalFragments: ResolvedLogicalFragment[]
+  logicalFragmentsByKey: Map<string, ResolvedLogicalFragment>
 }
 
 interface ResolvedBoundary {
@@ -192,7 +199,7 @@ function deriveCurrentPatternContext(pattern: CellPattern): CurrentPatternContex
   const anchors: CurrentPatternContext['anchors'] = new Map()
   const boundaries = new Map<string, ResolvedSegmentSplitBoundary>()
   for (const relation of pattern.splitRelations) {
-    const orbit = validatedOrbitFromInstances(pattern, relation, instancesByRef)
+    const orbit = validateSplitRelationOrbitFromInstances(pattern, relation, instancesByRef)
     if (!orbit) continue
     orbit.pairs.forEach(([target, cutter], index) => {
       const intersection = orbit.intersections[index]
@@ -233,7 +240,7 @@ function deriveCurrentPatternContext(pattern: CellPattern): CurrentPatternContex
     })
   }
 
-  const logicalFragments = instances.flatMap((segment): CurrentLogicalFragment[] => {
+  const logicalFragments = instances.flatMap((segment): ResolvedLogicalFragment[] => {
     const ordered = [...(boundariesByInstance.get(instanceRefKey(segment.instanceRef)) ?? [])]
       .sort((a, b) => a.parameter - b.parameter || (a.tieBreaker < b.tieBreaker ? -1 : 1))
     return ordered.slice(1).map((boundaryB, index) => ({
@@ -274,6 +281,58 @@ export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] 
   return deriveCurrentPatternContext(pattern).logicalFragments.map(({ logicalFragment }) => logicalFragment)
 }
 
+interface DesignGeometrySnapshotState {
+  pattern: CellPattern
+  instancesByRef: ReadonlyMap<string, RenderedSegment>
+  logicalFragments: ReadonlyArray<ResolvedLogicalFragment>
+  geometry: ReadonlyArray<PatternFragment>
+}
+
+export class DesignGeometrySnapshot {
+  readonly #state: DesignGeometrySnapshotState
+
+  private constructor(state: DesignGeometrySnapshotState) {
+    this.#state = state
+  }
+
+  static derive(pattern: CellPattern): DesignGeometrySnapshot {
+    const context = deriveCurrentPatternContext(pattern)
+    const geometry = context.logicalFragments.flatMap((current, renderIndex) => {
+      const { logicalFragment, start, end } = current
+      const rendered = context.instancesByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
+      return rendered && !pointsAreClose(start, end)
+        ? [{ ...rendered, start, end, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }]
+        : []
+    })
+    return new DesignGeometrySnapshot({
+      pattern,
+      instancesByRef: context.instancesByRef,
+      logicalFragments: context.logicalFragments,
+      geometry,
+    })
+  }
+
+  get logicalFragments(): ReadonlyArray<ReadonlyResolvedLogicalFragment> { return this.#state.logicalFragments }
+  get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#state.geometry }
+
+  copyGeometry(): PatternFragment[] {
+    return copyPatternGeometry(this.#state.geometry)
+  }
+
+  validateSplitRelationOrbit(relation: SplitRelation): DeepReadonly<ReturnType<typeof validateSplitRelationOrbitFromInstances>> {
+    return validateSplitRelationOrbitFromInstances(this.#state.pattern, relation, this.#state.instancesByRef)
+  }
+}
+
+/** 1回の派生処理内で共有するDesign Geometry。CellPatternへは保存しない。 */
+export function deriveDesignGeometrySnapshot(pattern: CellPattern): DesignGeometrySnapshot {
+  return DesignGeometrySnapshot.derive(pattern)
+}
+
+/** relationの論理参照をsnapshotの生成元Patternに対して解決・検証する。 */
+export const validateSplitRelationOrbitFromSnapshot = (snapshot: DesignGeometrySnapshot, relation: SplitRelation) =>
+  snapshot.validateSplitRelationOrbit(relation)
+
 export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
   const current = deriveCurrentPatternContext(pattern).logicalFragmentsByKey.get(logicalFragmentKey(fragment))
   return current && !pointsAreClose(current.start, current.end) ? { start: current.start, end: current.end } : null
@@ -281,12 +340,32 @@ export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFr
 
 /** 描画用IDや配列順を論理identityにせず、解決可能なFragment Geometryだけを返す。 */
 export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
-  const context = deriveCurrentPatternContext(pattern)
-  return context.logicalFragments.flatMap((current, renderIndex) => {
-    const { logicalFragment, start, end } = current
-    const rendered = context.instancesByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
-    return rendered && !pointsAreClose(start, end)
-      ? [{ ...rendered, start, end, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }]
-      : []
-  })
+  return deriveDesignGeometrySnapshot(pattern).copyGeometry()
 }
+
+const cloneInstanceRef = (ref: SegmentInstanceRef): SegmentInstanceRef => ({
+  sourceSegmentId: ref.sourceSegmentId,
+  transform: { ...ref.transform },
+})
+
+const cloneFragmentBoundary = (boundary: DeepReadonly<FragmentBoundaryRef>): FragmentBoundaryRef => boundary.kind === 'segment-endpoint'
+  ? { kind: 'segment-endpoint', endpoint: boundary.endpoint }
+  : { kind: 'intersection', first: cloneInstanceRef(boundary.first), second: cloneInstanceRef(boundary.second) }
+
+const cloneLogicalFragment = (fragment: DeepReadonly<LogicalFragment>): LogicalFragment => ({
+  segmentInstanceRef: cloneInstanceRef(fragment.segmentInstanceRef),
+  boundaryA: cloneFragmentBoundary(fragment.boundaryA),
+  boundaryB: cloneFragmentBoundary(fragment.boundaryB),
+})
+
+const clonePatternFragment = (fragment: ReadonlyPatternFragment): PatternFragment => ({
+  ...fragment,
+  start: { ...fragment.start },
+  end: { ...fragment.end },
+  instanceRef: cloneInstanceRef(fragment.instanceRef),
+  logicalFragment: cloneLogicalFragment(fragment.logicalFragment),
+})
+
+/** 共有された読み取り専用viewから、既存API用の独立したmutable Geometryを返す。 */
+export const copyPatternGeometry = (geometry: ReadonlyArray<ReadonlyPatternFragment>): PatternFragment[] =>
+  geometry.map(clonePatternFragment)

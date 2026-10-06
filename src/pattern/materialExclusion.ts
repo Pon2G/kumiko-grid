@@ -210,33 +210,39 @@ export function deriveEffectiveGeometry(pattern: CellPattern): PatternFragment[]
   return [...createEffectiveGeometryQuery(deriveDesignGeometrySnapshot(pattern)).geometry]
 }
 
-const effectiveGeometryQueryBrand = Symbol('EffectiveGeometryQuery')
+export class EffectiveGeometryQuery {
+  readonly #geometry: ReadonlyArray<PatternFragment>
+  readonly #geometryByInstance: EffectiveGeometryByInstance
 
-export interface EffectiveGeometryQuery {
-  readonly [effectiveGeometryQueryBrand]: true
-  readonly geometry: ReadonlyArray<PatternFragment>
-  readonly canSplit: (target: SegmentInstanceRef, cutter: SegmentInstanceRef) => boolean
+  private constructor(geometry: ReadonlyArray<PatternFragment>) {
+    this.#geometry = geometry
+    this.#geometryByInstance = indexEffectiveGeometry(geometry)
+  }
+
+  static fromSnapshot(design: DesignGeometrySnapshot): EffectiveGeometryQuery {
+    const { pattern } = design
+    const orders = new Map<string, BoundaryOrder | null>()
+    const logicalFragments = design.logicalFragments.map(({ logicalFragment }) => logicalFragment)
+    const orderFor = (segmentId: string) => {
+      if (!orders.has(segmentId)) orders.set(segmentId, sourceBoundaryOrder(pattern, segmentId, logicalFragments))
+      return orders.get(segmentId) ?? null
+    }
+    return new EffectiveGeometryQuery(design.geometry.filter(({ logicalFragment }) => {
+      const order = orderFor(logicalFragment.segmentInstanceRef.sourceSegmentId)
+      return !order || !fragmentIsExcluded(pattern, logicalFragment, order)
+    }))
+  }
+
+  get geometry(): ReadonlyArray<PatternFragment> { return this.#geometry }
+
+  canSplit(target: SegmentInstanceRef, cutter: SegmentInstanceRef): boolean {
+    return effectivePairCanSplit(this.#geometryByInstance, target, cutter)
+  }
 }
 
 /** 生成元Patternに結び付いたsnapshotから、呼出し内で共有するEffective Geometry queryを構築する。 */
 export function createEffectiveGeometryQuery(design: DesignGeometrySnapshot): EffectiveGeometryQuery {
-  const { pattern } = design
-  const orders = new Map<string, BoundaryOrder | null>()
-  const logicalFragments = design.logicalFragments.map(({ logicalFragment }) => logicalFragment)
-  const orderFor = (segmentId: string) => {
-    if (!orders.has(segmentId)) orders.set(segmentId, sourceBoundaryOrder(pattern, segmentId, logicalFragments))
-    return orders.get(segmentId) ?? null
-  }
-  const geometry = design.geometry.filter(({ logicalFragment }) => {
-    const order = orderFor(logicalFragment.segmentInstanceRef.sourceSegmentId)
-    return !order || !fragmentIsExcluded(pattern, logicalFragment, order)
-  })
-  const indexed = indexEffectiveGeometry(geometry)
-  return {
-    [effectiveGeometryQueryBrand]: true,
-    geometry,
-    canSplit: (target, cutter) => effectivePairCanSplit(indexed, target, cutter),
-  }
+  return EffectiveGeometryQuery.fromSnapshot(design)
 }
 
 /** 状態遷移後に解決不能となった境界を捨て、stabilizer orbitを含めて再正規化する。 */

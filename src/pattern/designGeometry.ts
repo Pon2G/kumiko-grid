@@ -274,33 +274,49 @@ export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] 
   return deriveCurrentPatternContext(pattern).logicalFragments.map(({ logicalFragment }) => logicalFragment)
 }
 
-const designGeometrySnapshotBrand = Symbol('DesignGeometrySnapshot')
+interface DesignGeometrySnapshotState {
+  pattern: CellPattern
+  instancesByRef: ReadonlyMap<string, RenderedSegment>
+  logicalFragments: ReadonlyArray<ResolvedLogicalFragment>
+  geometry: ReadonlyArray<PatternFragment>
+}
 
-export interface DesignGeometrySnapshot {
-  readonly [designGeometrySnapshotBrand]: true
-  readonly pattern: CellPattern
-  readonly logicalFragments: ReadonlyArray<ResolvedLogicalFragment>
-  readonly geometry: ReadonlyArray<PatternFragment>
-  readonly validateSplitRelationOrbit: (relation: SplitRelation) => ReturnType<typeof validateSplitRelationOrbitFromInstances>
+export class DesignGeometrySnapshot {
+  readonly #state: DesignGeometrySnapshotState
+
+  private constructor(state: DesignGeometrySnapshotState) {
+    this.#state = state
+  }
+
+  static derive(pattern: CellPattern): DesignGeometrySnapshot {
+    const context = deriveCurrentPatternContext(pattern)
+    const geometry = context.logicalFragments.flatMap((current, renderIndex) => {
+      const { logicalFragment, start, end } = current
+      const rendered = context.instancesByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
+      return rendered && !pointsAreClose(start, end)
+        ? [{ ...rendered, start, end, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }]
+        : []
+    })
+    return new DesignGeometrySnapshot({
+      pattern,
+      instancesByRef: context.instancesByRef,
+      logicalFragments: context.logicalFragments,
+      geometry,
+    })
+  }
+
+  get pattern(): CellPattern { return this.#state.pattern }
+  get logicalFragments(): ReadonlyArray<ResolvedLogicalFragment> { return this.#state.logicalFragments }
+  get geometry(): ReadonlyArray<PatternFragment> { return this.#state.geometry }
+
+  validateSplitRelationOrbit(relation: SplitRelation) {
+    return validateSplitRelationOrbitFromInstances(this.#state.pattern, relation, this.#state.instancesByRef)
+  }
 }
 
 /** 1回の派生処理内で共有するDesign Geometry。CellPatternへは保存しない。 */
 export function deriveDesignGeometrySnapshot(pattern: CellPattern): DesignGeometrySnapshot {
-  const context = deriveCurrentPatternContext(pattern)
-  const geometry = context.logicalFragments.flatMap((current, renderIndex) => {
-    const { logicalFragment, start, end } = current
-    const rendered = context.instancesByRef.get(instanceRefKey(logicalFragment.segmentInstanceRef))
-    return rendered && !pointsAreClose(start, end)
-      ? [{ ...rendered, start, end, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }]
-      : []
-  })
-  return {
-    [designGeometrySnapshotBrand]: true,
-    pattern,
-    logicalFragments: context.logicalFragments,
-    geometry,
-    validateSplitRelationOrbit: (relation) => validateSplitRelationOrbitFromInstances(pattern, relation, context.instancesByRef),
-  }
+  return DesignGeometrySnapshot.derive(pattern)
 }
 
 /** relationの論理参照をsnapshotの生成元Patternに対して解決・検証する。 */

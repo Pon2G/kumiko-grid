@@ -33,6 +33,14 @@ export interface SegmentSplitBoundary {
 export interface PatternFragment extends RenderedSegment {
   logicalFragment: LogicalFragment
 }
+
+type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T
+  : T extends ReadonlyArray<infer Item> ? ReadonlyArray<DeepReadonly<Item>>
+    : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+      : T
+
+export type ReadonlyPatternFragment = DeepReadonly<PatternFragment>
+export type ReadonlyResolvedLogicalFragment = DeepReadonly<ResolvedLogicalFragment>
 export const relativeTransformKey = (value: SplitRelativeTransform): string =>
   value.type === 'rotation' ? `rotation:${value.steps}` : value.type
 export const splitRelationKey = (value: SplitRelation): string =>
@@ -305,11 +313,14 @@ export class DesignGeometrySnapshot {
     })
   }
 
-  get pattern(): CellPattern { return this.#state.pattern }
-  get logicalFragments(): ReadonlyArray<ResolvedLogicalFragment> { return this.#state.logicalFragments }
-  get geometry(): ReadonlyArray<PatternFragment> { return this.#state.geometry }
+  get logicalFragments(): ReadonlyArray<ReadonlyResolvedLogicalFragment> { return this.#state.logicalFragments }
+  get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#state.geometry }
 
-  validateSplitRelationOrbit(relation: SplitRelation) {
+  copyGeometry(): PatternFragment[] {
+    return copyPatternGeometry(this.#state.geometry)
+  }
+
+  validateSplitRelationOrbit(relation: SplitRelation): DeepReadonly<ReturnType<typeof validateSplitRelationOrbitFromInstances>> {
     return validateSplitRelationOrbitFromInstances(this.#state.pattern, relation, this.#state.instancesByRef)
   }
 }
@@ -330,5 +341,32 @@ export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFr
 
 /** 描画用IDや配列順を論理identityにせず、解決可能なFragment Geometryだけを返す。 */
 export function derivePatternGeometry(pattern: CellPattern): PatternFragment[] {
-  return [...deriveDesignGeometrySnapshot(pattern).geometry]
+  return deriveDesignGeometrySnapshot(pattern).copyGeometry()
 }
+
+const cloneInstanceRef = (ref: SegmentInstanceRef): SegmentInstanceRef => ({
+  sourceSegmentId: ref.sourceSegmentId,
+  transform: { ...ref.transform },
+})
+
+const cloneFragmentBoundary = (boundary: DeepReadonly<FragmentBoundaryRef>): FragmentBoundaryRef => boundary.kind === 'segment-endpoint'
+  ? { kind: 'segment-endpoint', endpoint: boundary.endpoint }
+  : { kind: 'intersection', first: cloneInstanceRef(boundary.first), second: cloneInstanceRef(boundary.second) }
+
+const cloneLogicalFragment = (fragment: DeepReadonly<LogicalFragment>): LogicalFragment => ({
+  segmentInstanceRef: cloneInstanceRef(fragment.segmentInstanceRef),
+  boundaryA: cloneFragmentBoundary(fragment.boundaryA),
+  boundaryB: cloneFragmentBoundary(fragment.boundaryB),
+})
+
+const clonePatternFragment = (fragment: ReadonlyPatternFragment): PatternFragment => ({
+  ...fragment,
+  start: { ...fragment.start },
+  end: { ...fragment.end },
+  instanceRef: cloneInstanceRef(fragment.instanceRef),
+  logicalFragment: cloneLogicalFragment(fragment.logicalFragment),
+})
+
+/** 共有された読み取り専用viewから、既存API用の独立したmutable Geometryを返す。 */
+export const copyPatternGeometry = (geometry: ReadonlyArray<ReadonlyPatternFragment>): PatternFragment[] =>
+  geometry.map(clonePatternFragment)

@@ -1,7 +1,7 @@
 import { intersectSegments, isInteriorParameter } from '../geometry/intersections'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation } from './cellPattern'
-import type { DesignGeometrySnapshot, FragmentBoundaryRef, LogicalFragment, PatternFragment } from './designGeometry'
-import { deriveDesignGeometrySnapshot, deriveLogicalFragments, deriveSplitRelationFromPair, splitRelationKey } from './designGeometry'
+import type { DesignGeometrySnapshot, FragmentBoundaryRef, LogicalFragment, PatternFragment, ReadonlyPatternFragment } from './designGeometry'
+import { copyPatternGeometry, deriveDesignGeometrySnapshot, deriveLogicalFragments, deriveSplitRelationFromPair, splitRelationKey, validateSplitRelationOrbitFromSnapshot } from './designGeometry'
 import { createIntersectionAnchor } from './intersectionAnchor'
 import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
 import { instanceRefKey, symmetryTransformAlgebra } from './symmetry'
@@ -207,42 +207,52 @@ function fragmentIsExcluded(
 
 /** Design Geometryを残したまま、材が存在する区間だけを返す。 */
 export function deriveEffectiveGeometry(pattern: CellPattern): PatternFragment[] {
-  return [...createEffectiveGeometryQuery(deriveDesignGeometrySnapshot(pattern)).geometry]
+  return createEffectiveGeometryQuery(pattern).copyGeometry()
 }
 
 export class EffectiveGeometryQuery {
-  readonly #geometry: ReadonlyArray<PatternFragment>
+  readonly #design: DesignGeometrySnapshot
+  readonly #geometry: ReadonlyArray<ReadonlyPatternFragment>
   readonly #geometryByInstance: EffectiveGeometryByInstance
 
-  private constructor(geometry: ReadonlyArray<PatternFragment>) {
+  private constructor(design: DesignGeometrySnapshot, geometry: ReadonlyArray<ReadonlyPatternFragment>) {
+    this.#design = design
     this.#geometry = geometry
     this.#geometryByInstance = indexEffectiveGeometry(geometry)
   }
 
-  static fromSnapshot(design: DesignGeometrySnapshot): EffectiveGeometryQuery {
-    const { pattern } = design
+  static derive(pattern: CellPattern): EffectiveGeometryQuery {
+    const design = deriveDesignGeometrySnapshot(pattern)
     const orders = new Map<string, BoundaryOrder | null>()
     const logicalFragments = design.logicalFragments.map(({ logicalFragment }) => logicalFragment)
     const orderFor = (segmentId: string) => {
       if (!orders.has(segmentId)) orders.set(segmentId, sourceBoundaryOrder(pattern, segmentId, logicalFragments))
       return orders.get(segmentId) ?? null
     }
-    return new EffectiveGeometryQuery(design.geometry.filter(({ logicalFragment }) => {
+    return new EffectiveGeometryQuery(design, design.geometry.filter(({ logicalFragment }) => {
       const order = orderFor(logicalFragment.segmentInstanceRef.sourceSegmentId)
       return !order || !fragmentIsExcluded(pattern, logicalFragment, order)
     }))
   }
 
-  get geometry(): ReadonlyArray<PatternFragment> { return this.#geometry }
+  get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#geometry }
+
+  copyGeometry(): PatternFragment[] {
+    return copyPatternGeometry(this.#geometry)
+  }
 
   canSplit(target: SegmentInstanceRef, cutter: SegmentInstanceRef): boolean {
     return effectivePairCanSplit(this.#geometryByInstance, target, cutter)
   }
+
+  validateSplitRelationOrbit(relation: SplitRelation) {
+    return validateSplitRelationOrbitFromSnapshot(this.#design, relation)
+  }
 }
 
-/** 生成元Patternに結び付いたsnapshotから、呼出し内で共有するEffective Geometry queryを構築する。 */
-export function createEffectiveGeometryQuery(design: DesignGeometrySnapshot): EffectiveGeometryQuery {
-  return EffectiveGeometryQuery.fromSnapshot(design)
+/** Design / Effective Geometryを同じ生成元へ結び付け、呼出し内で共有するqueryを構築する。 */
+export function createEffectiveGeometryQuery(pattern: CellPattern): EffectiveGeometryQuery {
+  return EffectiveGeometryQuery.derive(pattern)
 }
 
 /** 状態遷移後に解決不能となった境界を捨て、stabilizer orbitを含めて再正規化する。 */
@@ -267,10 +277,10 @@ export const materialExclusionsDependingOn = (pattern: CellPattern, relation: Sp
       return supported !== null && splitRelationKey(supported) === splitRelationKey(relation)
     }))
 
-type EffectiveGeometryByInstance = ReadonlyMap<string, ReadonlyArray<PatternFragment>>
+type EffectiveGeometryByInstance = ReadonlyMap<string, ReadonlyArray<ReadonlyPatternFragment>>
 
-function indexEffectiveGeometry(geometry: ReadonlyArray<PatternFragment>): EffectiveGeometryByInstance {
-  const indexed = new Map<string, PatternFragment[]>()
+function indexEffectiveGeometry(geometry: ReadonlyArray<ReadonlyPatternFragment>): EffectiveGeometryByInstance {
+  const indexed = new Map<string, ReadonlyPatternFragment[]>()
   for (const fragment of geometry) {
     const key = instanceRefKey(fragment.instanceRef)
     const current = indexed.get(key)

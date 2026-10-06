@@ -8,10 +8,10 @@ import {
   relativeTransformKey,
   splitRelationKey,
   supportedRelativeTransforms,
-  validateSplitRelationOrbitFromInstances,
+  validateSplitRelationOrbitFromSnapshot,
 } from './designGeometry'
 import { createIntersectionAnchor, type IntersectionAnchor } from './intersectionAnchor'
-import { deriveEffectiveGeometryFromSnapshot, effectivePairCanSplit, indexEffectiveGeometry } from './materialExclusion'
+import { createEffectiveGeometryQuery } from './materialExclusion'
 import { instanceRefKey } from './symmetry'
 
 export interface SplitCandidate extends SplitRelation { points: Point[]; active: boolean }
@@ -24,7 +24,7 @@ export interface IntersectionInteractionCandidate {
   active: boolean
 }
 
-type ValidatedOrbit = NonNullable<ReturnType<typeof validateSplitRelationOrbitFromInstances>>
+type ValidatedOrbit = NonNullable<ReturnType<typeof validateSplitRelationOrbitFromSnapshot>>
 interface ValidatedSplitCandidate {
   candidate: SplitCandidate
   orbit: ValidatedOrbit
@@ -33,7 +33,7 @@ interface ValidatedSplitCandidate {
 /** Design Geometry上の既存relationと、Effective Geometry上で追加可能なrelationを列挙する。 */
 function deriveValidatedSplitCandidates(pattern: CellPattern, targetSegmentId: string): ValidatedSplitCandidate[] {
   const design = deriveDesignGeometrySnapshot(pattern)
-  const effective = indexEffectiveGeometry(deriveEffectiveGeometryFromSnapshot(pattern, design))
+  const effective = createEffectiveGeometryQuery(design)
   const activeKeys = new Set(pattern.splitRelations.map(splitRelationKey))
   const seen = new Set<string>()
   return pattern.segments.flatMap(({ id: cutterSegmentId }) => supportedRelativeTransforms(pattern.symmetry).flatMap((relativeTransform) => {
@@ -43,11 +43,11 @@ function deriveValidatedSplitCandidates(pattern: CellPattern, targetSegmentId: s
     if (seen.has(key)) return []
     seen.add(key)
     const active = activeKeys.has(key)
-    const orbit = validateSplitRelationOrbitFromInstances(pattern, relation, design.instancesByRef)
+    const orbit = validateSplitRelationOrbitFromSnapshot(design, relation)
     if (!orbit) return []
     if (!active) {
       const refs = expandSplitRelationOrbit(pattern, relation)
-      if (!refs?.every(({ target, cutter }) => effectivePairCanSplit(effective, target, cutter))) return []
+      if (!refs?.every(({ target, cutter }) => effective.canSplit(target, cutter))) return []
     }
     const points: Point[] = []
     for (const intersection of orbit.intersections) if (!points.some((point) => pointsAreClose(point, intersection.point))) points.push(intersection.point)

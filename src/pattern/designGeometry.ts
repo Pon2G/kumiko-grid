@@ -128,7 +128,7 @@ const resolveSplitRelationOrbit = (
   return pairs.every((pair) => pair !== null) ? pairs as Array<[RenderedSegment, RenderedSegment]> : null
 }
 
-export const validateSplitRelationOrbitFromInstances = (
+const validateSplitRelationOrbitFromInstances = (
   pattern: Pick<CellPattern, 'segments' | 'symmetry'>,
   relation: SplitRelation,
   segmentsByRef: ReadonlyMap<string, RenderedSegment>,
@@ -274,10 +274,14 @@ export function deriveLogicalFragments(pattern: CellPattern): LogicalFragment[] 
   return deriveCurrentPatternContext(pattern).logicalFragments.map(({ logicalFragment }) => logicalFragment)
 }
 
+const designGeometrySnapshotBrand = Symbol('DesignGeometrySnapshot')
+
 export interface DesignGeometrySnapshot {
-  instancesByRef: ReadonlyMap<string, RenderedSegment>
-  logicalFragments: ReadonlyArray<ResolvedLogicalFragment>
-  geometry: ReadonlyArray<PatternFragment>
+  readonly [designGeometrySnapshotBrand]: true
+  readonly pattern: CellPattern
+  readonly logicalFragments: ReadonlyArray<ResolvedLogicalFragment>
+  readonly geometry: ReadonlyArray<PatternFragment>
+  readonly validateSplitRelationOrbit: (relation: SplitRelation) => ReturnType<typeof validateSplitRelationOrbitFromInstances>
 }
 
 /** 1回の派生処理内で共有するDesign Geometry。CellPatternへは保存しない。 */
@@ -290,8 +294,18 @@ export function deriveDesignGeometrySnapshot(pattern: CellPattern): DesignGeomet
       ? [{ ...rendered, start, end, id: `${rendered.id}-fragment-${renderIndex}`, logicalFragment }]
       : []
   })
-  return { instancesByRef: context.instancesByRef, logicalFragments: context.logicalFragments, geometry }
+  return {
+    [designGeometrySnapshotBrand]: true,
+    pattern,
+    logicalFragments: context.logicalFragments,
+    geometry,
+    validateSplitRelationOrbit: (relation) => validateSplitRelationOrbitFromInstances(pattern, relation, context.instancesByRef),
+  }
 }
+
+/** relationの論理参照をsnapshotの生成元Patternに対して解決・検証する。 */
+export const validateSplitRelationOrbitFromSnapshot = (snapshot: DesignGeometrySnapshot, relation: SplitRelation) =>
+  snapshot.validateSplitRelationOrbit(relation)
 
 export function resolveLogicalFragment(pattern: CellPattern, fragment: LogicalFragment): PointSegment | null {
   const current = deriveCurrentPatternContext(pattern).logicalFragmentsByKey.get(logicalFragmentKey(fragment))

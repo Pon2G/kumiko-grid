@@ -35,9 +35,8 @@ export interface PatternFragment extends RenderedSegment {
 }
 
 type DeepReadonly<T> = T extends (...args: never[]) => unknown ? T
-  : T extends ReadonlyArray<infer Item> ? ReadonlyArray<DeepReadonly<Item>>
-    : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
-      : T
+  : T extends object ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
+    : T
 
 export type ReadonlyPatternFragment = DeepReadonly<PatternFragment>
 export type ReadonlyResolvedLogicalFragment = DeepReadonly<ResolvedLogicalFragment>

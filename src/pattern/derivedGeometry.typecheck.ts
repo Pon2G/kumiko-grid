@@ -50,6 +50,12 @@ function verifyDerivedGeometryTypes(patternA: CellPattern, patternB: CellPattern
     effective.logicalFragment.segmentInstanceRef.transform = { type: 'identity' }
   }
   if (orbit) {
+    const target = orbit.pairs[0][0]
+    const cutter = orbit.pairs[0][1]
+    void target
+    void cutter
+    // @ts-expect-error pairはtarget / cutterの2要素タプル
+    orbit.pairs[0][2]
     // @ts-expect-error orbit pairが参照するSegment座標は読み取り専用
     orbit.pairs[0][0].start.x = 0
     // @ts-expect-error orbit intersectionの座標は読み取り専用

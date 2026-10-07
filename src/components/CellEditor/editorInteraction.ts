@@ -1,16 +1,15 @@
 import { segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
-import type { CellPattern, SegmentInstanceRef } from '../../pattern/cellPattern'
-import { deriveLogicalFragments, logicalFragmentKey, type LogicalFragment } from '../../pattern/designGeometry'
-import { getIntersectionInteractionCandidates, intersectionCandidateKey, type IntersectionInteractionCandidate } from '../../pattern/splitCandidates'
-import { expandPattern, instanceRefKey } from '../../pattern/symmetry'
-import { reconcileEditorSelection, type EditorSelection } from './editorSelection'
+import type { CellPattern } from '../../pattern/cellPattern'
+import { logicalFragmentKey } from '../../pattern/designGeometry'
+import { intersectionCandidateKey } from '../../pattern/splitCandidates'
+import { instanceRefKey } from '../../pattern/symmetry'
+import type { EditorSelection } from './editorSelection'
+import { reconcileLogicalTarget, type LogicalTarget } from './logicalTarget'
 
 type SelectedEditorObject = Exclude<EditorSelection, null>
 export type CanvasHitCandidate =
   | { kind: 'anchor'; anchor: SegmentEndpointAnchor }
-  | { kind: 'segment'; segment: SegmentInstanceRef }
-  | { kind: 'intersection'; candidate: IntersectionInteractionCandidate }
-  | { kind: 'fragment'; fragment: LogicalFragment }
+  | LogicalTarget
 
 export type ChoosingContext =
   | { kind: 'normal' }
@@ -105,22 +104,10 @@ function activateCandidate(interaction: EditorInteraction, candidate: CanvasHitC
   }
 }
 
-const reconcileCanvasHitCandidate = (pattern: CellPattern, value: CanvasHitCandidate): CanvasHitCandidate | null => {
-  if (value.kind === 'anchor') return value
-  if (value.kind === 'segment') return expandPattern(pattern)
-    .some(({ instanceRef }) => instanceRefKey(instanceRef) === instanceRefKey(value.segment)) ? value : null
-  if (value.kind === 'fragment') return deriveLogicalFragments(pattern)
-    .some((fragment) => logicalFragmentKey(fragment) === logicalFragmentKey(value.fragment)) ? value : null
-  const candidate = getIntersectionInteractionCandidates(pattern, value.candidate.target)
-    .find((item) => intersectionCandidateKey(item) === intersectionCandidateKey(value.candidate))
-  if (!candidate) return null
-  return candidate.active === value.candidate.active ? value : { kind: 'intersection', candidate }
-}
-
 export function reconcileEditorInteraction(pattern: CellPattern, interaction: EditorInteraction): EditorInteraction {
   if (interaction.kind === 'choosing-target') {
     const candidates = interaction.candidates.flatMap((candidate) => {
-      const current = reconcileCanvasHitCandidate(pattern, candidate)
+      const current = candidate.kind === 'anchor' ? candidate : reconcileLogicalTarget(pattern, candidate)
       return current ? [current] : []
     })
     if (candidates.length === 0) return idleEditorInteraction()
@@ -129,7 +116,7 @@ export function reconcileEditorInteraction(pattern: CellPattern, interaction: Ed
       ? interaction : { kind: 'choosing-target', candidates, context: interaction.context }
   }
   if (interaction.kind !== 'selected') return interaction
-  const selection = reconcileEditorSelection(pattern, interaction.selection)
+  const selection = reconcileLogicalTarget(pattern, interaction.selection)
   if (!selection) return idleEditorInteraction()
   return selection === interaction.selection ? interaction : { kind: 'selected', selection }
 }

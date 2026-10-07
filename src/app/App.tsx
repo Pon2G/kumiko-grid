@@ -6,13 +6,11 @@ import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSpli
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {
-  editorSelection,
   idleEditorInteraction,
-  pendingEditorAnchor,
   reconcileEditorInteraction,
   transitionEditorInteraction,
   type EditorInteraction,
-  type CanvasHitCandidate,
+  type EditorInteractionEvent,
 } from '../components/CellEditor/editorInteraction'
 import { PatternPreview } from '../components/PatternPreview/PatternPreview'
 import { Settings } from '../components/Settings/Settings'
@@ -31,8 +29,8 @@ export default function App() {
     setInteraction(idleEditorInteraction())
   }, [divisions])
 
-  const chooseCanvasTarget = (candidates: CanvasHitCandidate[]) => {
-    const transition = transitionEditorInteraction(interaction, candidates)
+  const handleInteraction = (event: EditorInteractionEvent) => {
+    const transition = transitionEditorInteraction(interaction, event)
     setInteraction(transition.interaction)
     if (transition.command?.kind === 'create-segment') {
       const segment: Segment = {
@@ -79,13 +77,10 @@ export default function App() {
           <CellEditor
             divisions={divisions}
             pattern={pattern}
-            pendingAnchor={pendingEditorAnchor(interaction)}
+            interaction={interaction}
             onDeleteSegment={deleteSegment}
             onToggleSplitRelation={toggleSplitRelation}
-            selection={editorSelection(interaction)}
-            choosingCandidates={interaction.kind === 'choosing-target' ? interaction.candidates : null}
-            onHitCandidates={chooseCanvasTarget}
-            onClearInteraction={() => setInteraction(idleEditorInteraction())}
+            onInteraction={handleInteraction}
             onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
             onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}
           />

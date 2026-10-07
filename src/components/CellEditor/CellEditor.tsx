@@ -6,18 +6,14 @@ import { derivePatternGeometry, logicalFragmentKey, type LogicalFragment } from 
 import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern/materialExclusion'
 import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
 import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import type { EditorSelection } from './editorSelection'
-import type { CanvasHitCandidate } from './editorInteraction'
+import { canvasHitCandidateKey, editorSelection, pendingEditorAnchor, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
 import { CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
   divisions: number
   pattern: CellPattern
-  pendingAnchor: SegmentEndpointAnchor | null
-  selection: EditorSelection
-  choosingCandidates: CanvasHitCandidate[] | null
-  onHitCandidates: (candidates: CanvasHitCandidate[]) => void
-  onClearInteraction: () => void
+  interaction: EditorInteraction
+  onInteraction: (event: EditorInteractionEvent) => void
   onDeleteSegment: (id: string) => void
   onToggleSplitRelation: (relation: SplitRelation) => void
   onExcludeMaterial: (fragment: LogicalFragment) => void
@@ -43,7 +39,10 @@ const boundaryLabel = (pattern: CellPattern, target: LogicalFragment['segmentIns
 }
 
 export function CellEditor(props: CellEditorProps) {
-  const { pattern, selection } = props
+  const { pattern, interaction } = props
+  const selection = editorSelection(interaction)
+  const pendingAnchor = pendingEditorAnchor(interaction)
+  const choosingCandidates = interaction.kind === 'choosing-target' ? interaction.candidates : null
   const anchors = createSegmentEndpointAnchors(props.divisions)
   const designFragments = derivePatternGeometry(pattern)
   const instances = expandPattern(pattern)
@@ -57,16 +56,16 @@ export function CellEditor(props: CellEditorProps) {
   const points = trianglePoints().map((point) => `${px(point.x)},${py(point.y)}`).join(' ')
 
   useEffect(() => {
-    const clear = (event: KeyboardEvent) => { if (event.key === 'Escape') props.onClearInteraction() }
+    const clear = (event: KeyboardEvent) => { if (event.key === 'Escape') props.onInteraction({ kind: 'clear' }) }
     globalThis.addEventListener('keydown', clear)
     return () => globalThis.removeEventListener('keydown', clear)
-  }, [props.onClearInteraction])
+  }, [props.onInteraction])
 
   const targetFragments = target ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey) : []
   const resolvePointer = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button > 0) return
     const bounds = event.currentTarget.getBoundingClientRect()
-    props.onHitCandidates(resolveCanvasHitCandidates(
+    props.onInteraction({ kind: 'canvas-hit', candidates: resolveCanvasHitCandidates(
       { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
       {
         anchors: anchors.map((anchor) => ({ anchor, point: resolveSegmentEndpoint(anchor) })),
@@ -75,12 +74,12 @@ export function CellEditor(props: CellEditorProps) {
         segments: instances,
       },
       { width: bounds.width, height: bounds.height, viewBoxHeight: TRIANGLE_HEIGHT * CELL_CANVAS_SCALE + CELL_CANVAS_PAD * 2 },
-    ))
+    ) })
   }
 
   return <section className="panel editor-panel" aria-labelledby="editor-title">
     <div className="panel-heading editor-heading"><div><span className="eyebrow">02 / セル</span><h2 id="editor-title">セルエディター</h2></div>
-      <span className="status-pill">{props.choosingCandidates ? props.pendingAnchor ? '終点候補を選択' : '選択対象を選択' : props.pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
+      <span className="status-pill">{choosingCandidates ? pendingAnchor ? '終点候補を選択' : '選択対象を選択' : pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
     <div className="editor-stage">
       <svg viewBox={`0 0 ${CELL_CANVAS_WIDTH} ${TRIANGLE_HEIGHT * CELL_CANVAS_SCALE + CELL_CANVAS_PAD * 2}`} aria-label="正三角形セルエディター"
         onPointerUp={resolvePointer}>
@@ -101,7 +100,7 @@ export function CellEditor(props: CellEditorProps) {
             cx={px(candidate.point.x)} cy={py(candidate.point.y)} r="9" />)}
           {anchors.map((anchor) => {
             const point = resolveSegmentEndpoint(anchor)
-            const selected = props.pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(props.pendingAnchor)
+            const selected = pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(pendingAnchor)
             return <circle key={`dot-${segmentEndpointAnchorKey(anchor)}`} className={`anchor-dot ${selected ? 'selected' : ''}`}
               cx={px(point.x)} cy={py(point.y)} r={anchor.kind === 'vertex' ? 7 : 5} />
           })}
@@ -129,7 +128,7 @@ export function CellEditor(props: CellEditorProps) {
           return <circle className="anchor-hit" key={segmentEndpointAnchorKey(anchor)} role="button"
             aria-label={anchorLabel(anchor)} tabIndex={0}
             cx={px(point.x)} cy={py(point.y)} r="11" vectorEffect="non-scaling-stroke"
-            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onHitCandidates([{ kind: 'anchor', anchor }]) }} />
+            onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onInteraction({ kind: 'activate-anchor', anchor }) }} />
         })}
         </g>
       </svg>
@@ -141,10 +140,12 @@ export function CellEditor(props: CellEditorProps) {
 }
 
 function Inspector(props: CellEditorProps) {
-  const { selection, pattern } = props
-  if (props.choosingCandidates) return <div className="object-inspector target-chooser" aria-label="選択対象インスペクター">
-    <strong>選択対象</strong><div className="target-choices">{props.choosingCandidates.map((candidate) =>
-      <button type="button" key={canvasHitCandidateKey(candidate)} onClick={() => props.onHitCandidates([candidate])}>
+  const { pattern, interaction } = props
+  const selection = editorSelection(interaction)
+  const choosingCandidates = interaction.kind === 'choosing-target' ? interaction.candidates : null
+  if (choosingCandidates) return <div className="object-inspector target-chooser" aria-label="選択対象インスペクター">
+    <strong>選択対象</strong><div className="target-choices">{choosingCandidates.map((candidate) =>
+      <button type="button" key={canvasHitCandidateKey(candidate)} onClick={() => props.onInteraction({ kind: 'confirm-candidate', candidate })}>
         {canvasHitCandidateLabel(pattern, candidate)}</button>)}</div></div>
   if (!selection) return <div className="object-inspector"><span>Canvasからオブジェクトを選択してください</span></div>
   if (selection.kind === 'segment') {
@@ -174,11 +175,6 @@ function Inspector(props: CellEditorProps) {
       {excluded ? '材を戻す' : '材なしにする'}</button></div>
 }
 
-const canvasHitCandidateKey = (candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
-  ? `anchor:${segmentEndpointAnchorKey(candidate.anchor)}`
-  : candidate.kind === 'segment' ? `segment:${instanceRefKey(candidate.segment)}`
-    : candidate.kind === 'intersection' ? `intersection:${intersectionCandidateKey(candidate.candidate)}`
-      : `fragment:${logicalFragmentKey(candidate.fragment)}`
 const canvasHitCandidateLabel = (pattern: CellPattern, candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
   ? `Anchor: ${anchorLabel(candidate.anchor)}`
   : candidate.kind === 'segment' ? instanceLabel(pattern, candidate.segment)

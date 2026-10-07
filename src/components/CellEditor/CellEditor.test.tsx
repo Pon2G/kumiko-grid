@@ -13,9 +13,10 @@ import type { Segment } from '../../pattern/segment'
 import { getIntersectionInteractionCandidates } from '../../pattern/splitCandidates'
 import { expandPattern } from '../../pattern/symmetry'
 import { TRIANGLE_HEIGHT } from '../../geometry/triangle'
+import App from '../../app/App'
 import { CellEditor } from './CellEditor'
 import { canvasPointToScreen, CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates, type CanvasHitContext } from './canvasHitResolver'
-import { editorSelection, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, transitionEditorInteraction, type CanvasHitCandidate, type EditorInteraction } from './editorInteraction'
+import { idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, transitionEditorInteraction, type CanvasHitCandidate, type EditorInteractionEvent, type EditorInteraction } from './editorInteraction'
 
 const target: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
 const cutter: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
@@ -36,8 +37,8 @@ function Harness({ initial = basePattern(), divisions = 4, onPatternChange }: {
     const next = reconcileEditorInteraction(pattern, interaction)
     if (next !== interaction) setInteraction(next)
   }, [pattern, interaction])
-  const choose = (candidates: CanvasHitCandidate[]) => {
-    const transition = transitionEditorInteraction(interaction, candidates)
+  const handleInteraction = (event: EditorInteractionEvent) => {
+    const transition = transitionEditorInteraction(interaction, event)
     setInteraction(transition.interaction)
     if (transition.command?.kind === 'create-segment') {
       const segment: Segment = {
@@ -48,9 +49,7 @@ function Harness({ initial = basePattern(), divisions = 4, onPatternChange }: {
       setPattern((current) => addSegment(current, segment))
     }
   }
-  return <CellEditor divisions={divisions} pattern={pattern} pendingAnchor={pendingEditorAnchor(interaction)} selection={editorSelection(interaction)}
-    choosingCandidates={interaction.kind === 'choosing-target' ? interaction.candidates : null} onHitCandidates={choose}
-    onClearInteraction={() => setInteraction(idleEditorInteraction())}
+  return <CellEditor divisions={divisions} pattern={pattern} interaction={interaction} onInteraction={handleInteraction}
     onDeleteSegment={(id) => setPattern((current) => removeSegment(current, id))}
     onToggleSplitRelation={(value) => setPattern((current) => current.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(value))
       ? removeSplitRelation(current, value) : addSplitRelation(current, value))}
@@ -203,6 +202,53 @@ describe('Canvas hit resolver', () => {
 })
 
 describe('Cell Editor直接操作', () => {
+  contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY' }, 'EnterとSpaceで候補一覧にないfocus済みAnchorからもSegmentを作成できる', async () => {
+    const pattern = { ...basePattern(), segments: [target, coincidentTarget] }
+    const onPatternChange = vi.fn()
+    const user = userEvent.setup()
+    render(<Harness initial={pattern} onPatternChange={onPatternChange} />)
+    const start = screen.getByRole('button', { name: '頂点B' })
+    start.focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByText('終点を選択')).toBeTruthy()
+
+    pointerAtSegment(pattern, 'A')
+    expect(screen.getByText('終点候補を選択')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Anchor: 頂点C' })).toBeNull()
+    screen.getByRole('button', { name: '頂点C' }).focus()
+    await user.keyboard(' ')
+    expect(onPatternChange.mock.lastCall?.[0].segments.at(-1)).toMatchObject({
+      start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'vertex', vertex: 'C' },
+    })
+    expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
+    expect(screen.getByText('描画できます')).toBeTruthy()
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, 'Inspectorで同じ開始Anchorを選び直すとSegment作成を取り消す', async () => {
+    const user = userEvent.setup()
+    const onPatternChange = vi.fn()
+    render(<Harness divisions={12} onPatternChange={onPatternChange} />)
+    screen.getByRole('button', { name: 'AB辺を12等分した1番目の点' }).focus()
+    await user.keyboard('{Enter}')
+    pointerAt(resolveSegmentEndpoint({ kind: 'edge-division', edge: 'AB', divisions: 24, index: 3 }))
+    expect(screen.getByText('終点候補を選択')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Anchor: AB辺を12等分した1番目の点' }))
+    expect(screen.getByText('描画できます')).toBeTruthy()
+    expect(onPatternChange.mock.lastCall?.[0].segments).toEqual(basePattern().segments)
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, 'Appで分割数を変えると作成途中のAnchorを解除する', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    pointerAt(resolveSegmentEndpoint({ kind: 'vertex', vertex: 'A' }))
+    expect(screen.getByText('終点を選択')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '分割数を増やす' }))
+    expect(screen.getByText('描画できます')).toBeTruthy()
+    pointerAt(resolveSegmentEndpoint({ kind: 'vertex', vertex: 'B' }))
+    expect(screen.getByText('終点を選択')).toBeTruthy()
+    expect(screen.getByText('種となる線分：0本')).toBeTruthy()
+  })
+
   contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 31 }, '分割数12の曖昧な開始Anchorと終点AnchorからSegmentを完成させる', async () => {
     const initial: CellPattern = { segments: [], symmetry: { type: 'none' }, splitRelations: [], materialExclusions: [] }
     const onPatternChange = vi.fn()
@@ -442,6 +488,47 @@ describe('Cell Editor直接操作', () => {
       expect(reconciled.candidates).toEqual([interaction.candidates[0]])
       expect(reconciled.context).toEqual({ kind: 'segment-endpoint', startAnchor })
       expect(pendingEditorAnchor(reconciled)).toEqual(startAnchor)
+    }
+  })
+})
+
+
+describe('Inspector候補確定', () => {
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '現在の候補とlogical identityが一致する場合は現在の派生値で確定する', () => {
+    const candidate = getIntersectionInteractionCandidates(basePattern(), { sourceSegmentId: 'A', transform: { type: 'identity' } })[0]
+    const interaction: EditorInteraction = {
+      kind: 'choosing-target', context: { kind: 'normal' },
+      candidates: [{ kind: 'intersection', candidate }],
+    }
+    const reconciled = reconcileEditorInteraction(addSplitRelation(basePattern(), candidate.relation), interaction)
+    const result = transitionEditorInteraction(reconciled, {
+      kind: 'confirm-candidate', candidate: { kind: 'intersection', candidate: structuredClone(candidate) },
+    })
+    expect(result.interaction).toMatchObject({ kind: 'selected', selection: { kind: 'intersection', candidate: { active: true } } })
+    expect(result.command).toBeUndefined()
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '消滅した候補の確定は同じGeometryの別identityへ付け替えず現在の候補とcontextを維持する', () => {
+    const oldCandidate: CanvasHitCandidate = { kind: 'segment', segment: { sourceSegmentId: target.id, transform: { type: 'identity' } } }
+    const otherCandidate: CanvasHitCandidate = { kind: 'segment', segment: { sourceSegmentId: coincidentTarget.id, transform: { type: 'identity' } } }
+    const interaction: EditorInteraction = {
+      kind: 'choosing-target', context: { kind: 'segment-endpoint', startAnchor: { kind: 'vertex', vertex: 'C' } },
+      candidates: [oldCandidate, otherCandidate],
+    }
+    const reconciled = reconcileEditorInteraction({ ...basePattern(), segments: [coincidentTarget] }, interaction)
+    const result = transitionEditorInteraction(reconciled, { kind: 'confirm-candidate', candidate: oldCandidate })
+    expect(result.interaction).toEqual({ ...interaction, candidates: [otherCandidate] })
+    expect(result.command).toBeUndefined()
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '候補一覧を閉じた後のInspector確定は新しいAnchor操作に影響しない', () => {
+    const candidate: CanvasHitCandidate = { kind: 'anchor', anchor: { kind: 'vertex', vertex: 'A' } }
+    const idle = idleEditorInteraction()
+    const creating: EditorInteraction = { kind: 'creating-segment', startAnchor: { kind: 'vertex', vertex: 'B' } }
+    for (const interaction of [idle, creating]) {
+      const result = transitionEditorInteraction(interaction, { kind: 'confirm-candidate', candidate })
+      expect(result.interaction).toEqual(interaction)
+      expect(result.command).toBeUndefined()
     }
   })
 })

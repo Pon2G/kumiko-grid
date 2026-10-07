@@ -34,6 +34,18 @@ export type EditorInteraction =
   | { kind: 'selected'; selection: SelectedEditorObject }
   | { kind: 'choosing-target'; candidates: CanvasHitCandidate[]; context: ChoosingContext }
 
+export type EditorInteractionEvent =
+  | { kind: 'canvas-hit'; candidates: CanvasHitCandidate[] }
+  | { kind: 'confirm-candidate'; candidate: CanvasHitCandidate }
+  | { kind: 'activate-anchor'; anchor: SegmentEndpointAnchor }
+  | { kind: 'clear' }
+
+export const canvasHitCandidateKey = (candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
+  ? `anchor:${segmentEndpointAnchorKey(candidate.anchor)}`
+  : candidate.kind === 'segment' ? `segment:${instanceRefKey(candidate.segment)}`
+    : candidate.kind === 'intersection' ? `intersection:${intersectionCandidateKey(candidate.candidate)}`
+      : `fragment:${logicalFragmentKey(candidate.fragment)}`
+
 export const idleEditorInteraction = (): EditorInteraction => ({ kind: 'idle' })
 
 export const editorSelection = (interaction: EditorInteraction): EditorSelection =>
@@ -49,27 +61,40 @@ const selectionForCandidate = (candidate: Exclude<CanvasHitCandidate, { kind: 'a
     : candidate.kind === 'intersection' ? { kind: 'intersection', candidate: candidate.candidate }
       : { kind: 'fragment', fragment: candidate.fragment }
 
-/** Canvas hitと現在のgesture contextから、UI状態とドメインへ渡すcommandを一意に決める。 */
+/** 操作の意味と現在のgesture contextから、UI状態とドメインへ渡すcommandを決める。 */
 export function transitionEditorInteraction(
   interaction: EditorInteraction,
-  candidates: CanvasHitCandidate[],
+  event: EditorInteractionEvent,
 ): EditorTransition {
-  if (candidates.length === 0) return { interaction: idleEditorInteraction() }
+  switch (event.kind) {
+    case 'clear':
+      return { interaction: idleEditorInteraction() }
+    case 'activate-anchor':
+      return activateCandidate(interaction, { kind: 'anchor', anchor: event.anchor })
+    case 'confirm-candidate': {
+      if (interaction.kind !== 'choosing-target') return { interaction }
+      const candidate = interaction.candidates.find((current) =>
+        canvasHitCandidateKey(current) === canvasHitCandidateKey(event.candidate))
+      return candidate ? activateCandidate(interaction, candidate) : { interaction }
+    }
+    case 'canvas-hit': {
+      const { candidates } = event
+      if (candidates.length === 0) return { interaction: idleEditorInteraction() }
+      if (candidates.length === 1) return activateCandidate(interaction, candidates[0])
+      const context: ChoosingContext = interaction.kind === 'creating-segment'
+        ? { kind: 'segment-endpoint', startAnchor: interaction.startAnchor }
+        : interaction.kind === 'choosing-target' ? interaction.context : { kind: 'normal' }
+      return { interaction: { kind: 'choosing-target', candidates, context } }
+    }
+  }
+}
 
-  const context: ChoosingContext = interaction.kind === 'creating-segment'
-    ? { kind: 'segment-endpoint', startAnchor: interaction.startAnchor }
-    : interaction.kind === 'choosing-target' ? interaction.context : { kind: 'normal' }
-
-  if (candidates.length > 1) return { interaction: { kind: 'choosing-target', candidates, context } }
-
-  const candidate = candidates[0]
+function activateCandidate(interaction: EditorInteraction, candidate: CanvasHitCandidate): EditorTransition {
   if (candidate.kind !== 'anchor') {
     return { interaction: { kind: 'selected', selection: selectionForCandidate(candidate) } }
   }
 
-  const startAnchor = interaction.kind === 'creating-segment' ? interaction.startAnchor
-    : interaction.kind === 'choosing-target' && interaction.context.kind === 'segment-endpoint'
-      ? interaction.context.startAnchor : null
+  const startAnchor = pendingEditorAnchor(interaction)
   if (!startAnchor) return { interaction: { kind: 'creating-segment', startAnchor: candidate.anchor } }
   if (segmentEndpointAnchorKey(startAnchor) === segmentEndpointAnchorKey(candidate.anchor)) {
     return { interaction: idleEditorInteraction() }

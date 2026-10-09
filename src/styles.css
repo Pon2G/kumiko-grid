@@ -89,6 +89,5 @@ footer { display: flex; justify-content: space-between; padding: 18px 4vw; borde
 .target-choices { width: 100%; margin: 0; justify-content: flex-start; }
 .target-chooser button { min-height: 44px; text-align: left; }
 .target-choices button[aria-pressed="true"] { outline: 2px solid #165b87; font-weight: 700; }
-.target-choices button[aria-pressed="true"]::before { content: '確認中 · '; }
 .candidate-actions { display: flex; gap: 12px; }
 .candidate-actions button:disabled { opacity: .45; }

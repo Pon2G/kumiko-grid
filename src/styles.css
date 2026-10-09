@@ -78,3 +78,17 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 footer { display: flex; justify-content: space-between; padding: 18px 4vw; border-top: 1px solid #cac9c1; color: #7b817d; font-family: 'DM Mono', monospace; font-size: 9px; text-transform: uppercase; }
 @media (min-width: 1000px) { .workspace { grid-template-columns: 1.2fr .8fr; align-items: start; }.preview-panel { position: sticky; top: 18px; }.preview-stage { height: 575px; } }
 @media (max-width: 720px) { .site-header { height: 78px; padding-inline: 18px; }.header-rule { display: none; }.version { margin-left: auto; } main { display: block; padding: 12px; }.settings { min-height: auto; margin-bottom: 12px; }.workspace { gap: 12px; }.panel-heading { padding: 18px; }.field, fieldset { margin: 20px; }.help-card { display: none; }.editor-stage { min-height: 330px; padding: 6px; }.legend { padding-inline: 18px; gap: 12px; }.preview-meta { display: none; }.preview-stage { height: 280px; } footer { padding-inline: 18px; } }
+
+.candidate-preview { pointer-events: none; }
+.candidate-preview-line { fill: none; stroke: #165b87; stroke-width: 9; stroke-dasharray: 12 5; stroke-linecap: butt; }
+.candidate-preview-line.cutter { stroke: #873a20; stroke-width: 6; stroke-dasharray: 3 5; }
+.candidate-preview-line.fragment { stroke-width: 12; }
+.candidate-preview-point { fill: none; stroke: #165b87; stroke-width: 4; }
+.target-chooser { flex-wrap: wrap; }
+.target-chooser > strong, .target-chooser > p { width: 100%; }
+.target-choices { width: 100%; margin: 0; justify-content: flex-start; }
+.target-chooser button { min-height: 44px; text-align: left; }
+.target-choices button[aria-pressed="true"] { outline: 2px solid #165b87; font-weight: 700; }
+.target-choices button[aria-pressed="true"]::before { content: '確認中 · '; }
+.candidate-actions { display: flex; gap: 12px; }
+.candidate-actions button:disabled { opacity: .45; }

@@ -532,3 +532,93 @@ describe('Inspector候補確定', () => {
     }
   })
 })
+
+
+describe('Pattern変更後の対象照合', () => {
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '選択と候補のIntersectionはsplit追加・解除へ追従し、更新後は安定する', () => {
+    const pattern = basePattern()
+    const candidate = getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0]
+    const selection = { kind: 'intersection', candidate } as const
+    const interactions: EditorInteraction[] = [
+      { kind: 'selected', selection },
+      { kind: 'choosing-target', candidates: [selection], context: { kind: 'segment-endpoint', startAnchor: { kind: 'vertex', vertex: 'C' } } },
+    ]
+    const splitPattern = addSplitRelation(pattern, candidate.relation)
+    for (const interaction of interactions) {
+      expect(reconcileEditorInteraction(structuredClone(pattern), interaction)).toBe(interaction)
+      const active = reconcileEditorInteraction(splitPattern, interaction)
+      expect(active).toMatchObject(interaction.kind === 'choosing-target'
+        ? { kind: 'choosing-target', candidates: [{ candidate: { active: true } }], context: interaction.context }
+        : { kind: 'selected', selection: { candidate: { active: true } } })
+      expect(reconcileEditorInteraction(splitPattern, active)).toBe(active)
+      const inactive = reconcileEditorInteraction(removeSplitRelation(splitPattern, candidate.relation), active)
+      expect(inactive).toEqual(interaction)
+      expect(reconcileEditorInteraction(pattern, inactive)).toBe(inactive)
+    }
+    expect(candidate.active).toBe(false)
+  })
+
+  contractTest({ contract: 'SPEC-EDITOR-FRAGMENT-MATERIAL-SELECTION' }, '選択と候補のFragmentは材なしでもDesign上の同じidentityを維持する', () => {
+    const pattern = addSplitRelation(basePattern(), relation)
+    const fragment = deriveLogicalFragments(pattern).find((item) => item.segmentInstanceRef.sourceSegmentId === target.id)!
+    const selection = { kind: 'fragment', fragment } as const
+    const interactions: EditorInteraction[] = [
+      { kind: 'selected', selection },
+      { kind: 'choosing-target', candidates: [selection], context: { kind: 'normal' } },
+    ]
+    const excluded = excludeMaterial(pattern, fragment)
+    expect(excluded.materialExclusions).toHaveLength(1)
+    for (const interaction of interactions) {
+      expect(reconcileEditorInteraction(structuredClone(pattern), interaction)).toBe(interaction)
+      expect(reconcileEditorInteraction(excluded, interaction)).toBe(interaction)
+      expect(reconcileEditorInteraction(restoreMaterial(excluded, fragment), interaction)).toBe(interaction)
+      expect(reconcileEditorInteraction(removeSplitRelation(pattern, relation), interaction).kind).toBe('idle')
+    }
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '選択と候補の対象が消滅すると同じGeometryの別identityへ付け替えず解除する', () => {
+    const pattern = addSplitRelation(basePattern(), relation)
+    const segment = { sourceSegmentId: target.id, transform: { type: 'identity' } } as const
+    const targets: Exclude<CanvasHitCandidate, { kind: 'anchor' }>[] = [
+      { kind: 'segment', segment },
+      { kind: 'intersection', candidate: getIntersectionInteractionCandidates(pattern, segment)[0] },
+      { kind: 'fragment', fragment: deriveLogicalFragments(pattern).find((item) => item.segmentInstanceRef.sourceSegmentId === target.id)! },
+    ]
+    const replacement = addSplitRelation({ ...basePattern(), segments: [coincidentTarget, cutter] }, {
+      ...relation, targetSegmentId: coincidentTarget.id,
+    })
+    expect(derivePatternGeometry(replacement).map(({ start, end }) => ({ start, end })))
+      .toEqual(derivePatternGeometry(pattern).map(({ start, end }) => ({ start, end })))
+    for (const selection of targets) {
+      const selected: EditorInteraction = { kind: 'selected', selection }
+      expect(reconcileEditorInteraction(structuredClone(pattern), selected)).toBe(selected)
+      expect(reconcileEditorInteraction(replacement, selected).kind).toBe('idle')
+    }
+    const choosing: EditorInteraction = {
+      kind: 'choosing-target', candidates: targets,
+      context: { kind: 'segment-endpoint', startAnchor: { kind: 'vertex', vertex: 'C' } },
+    }
+    expect(reconcileEditorInteraction(structuredClone(pattern), choosing)).toBe(choosing)
+    const cleared = reconcileEditorInteraction(replacement, choosing)
+    expect(cleared.kind).toBe('idle')
+    expect(pendingEditorAnchor(cleared)).toBeNull()
+    expect(reconcileEditorInteraction(replacement, cleared)).toBe(cleared)
+  })
+
+  contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE' }, '候補を途中から除去しても残った候補の順序とAnchor操作contextを保持する', () => {
+    const startAnchor = { kind: 'vertex', vertex: 'C' } as const
+    const anchor = { kind: 'anchor', anchor: { kind: 'vertex', vertex: 'B' } } as const
+    const segment = { kind: 'segment', segment: { sourceSegmentId: cutter.id, transform: { type: 'identity' } } } as const
+    const interaction: EditorInteraction = {
+      kind: 'choosing-target', context: { kind: 'segment-endpoint', startAnchor },
+      candidates: [anchor, { kind: 'segment', segment: { sourceSegmentId: target.id, transform: { type: 'identity' } } }, segment],
+    }
+    const pattern = removeSegment(basePattern(), target.id)
+    const reconciled = reconcileEditorInteraction(pattern, interaction)
+    expect(reconciled).toEqual({ ...interaction, candidates: [anchor, segment] })
+    expect(reconcileEditorInteraction(pattern, reconciled)).toBe(reconciled)
+    expect(transitionEditorInteraction(reconciled, { kind: 'confirm-candidate', candidate: anchor })).toEqual({
+      interaction: { kind: 'idle' }, command: { kind: 'create-segment', startAnchor, endAnchor: anchor.anchor },
+    })
+  })
+})

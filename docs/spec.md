@@ -247,6 +247,8 @@ Segment作成途中でない状態で、見えているSegmentをクリックま
 
 Segment作成途中とオブジェクト選択は同時に保持しない。1点目のAnchorの直接操作または明示確定はオブジェクト選択を解除し、Segment / Fragment / Intersectionの直接操作または明示確定は作成途中のAnchorを解除する。曖昧な終点候補のpreview・切替では開始Anchorを保持し、Anchorを明示確定すると、開始点と同じなら作成を取り消し、異なるならその2点からSegmentを作成する。開始点未指定なら確定したAnchorから作成を開始する。
 
+preview中の候補行はアウトラインと太字で識別し、候補ラベルへ「確認中」などの状態文言を追加しない。状態文言の追加によるボタン幅や折り返しの変化を避ける。
+
 <!-- test-contract: SPEC-EDITOR-CANDIDATE-PREVIEW -->
 Canvasの複数候補は自動確定せずInspectorへ表示する。候補行のタップはpreviewであり、候補集合とgesture contextを保持したままCanvasで対象を確認し、一覧から別候補へ直接切り替えられる。preview中の行を識別可能にし、独立した「選択」操作で現在のpreviewを確定する。previewがなければ確定できない。Segment / Fragment / Intersectionは通常のselectionへ、Anchorは既存のSegment作成操作へ進む。preview・切替だけではcommandを発行せずCellPatternを変更しない。削除・split・材操作のInspectorは確定後に提供する。一意なCanvas hitとfocus済みAnchorのkeyboard操作は直接操作を維持する。
 

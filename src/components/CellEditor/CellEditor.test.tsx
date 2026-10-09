@@ -16,7 +16,7 @@ import { TRIANGLE_HEIGHT } from '../../geometry/triangle'
 import App from '../../app/App'
 import { CellEditor } from './CellEditor'
 import { canvasPointToScreen, CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates, type CanvasHitContext } from './canvasHitResolver'
-import { canvasHitCandidateKey, previewEditorCandidate, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, transitionEditorInteraction, type CanvasHitCandidate, type EditorInteractionEvent, type EditorInteraction } from './editorInteraction'
+import { canvasHitCandidateKey, editorResolverTarget, previewEditorCandidate, idleEditorInteraction, pendingEditorAnchor, reconcileEditorInteraction, transitionEditorInteraction, type CanvasHitCandidate, type EditorInteractionEvent, type EditorInteraction } from './editorInteraction'
 
 const target: Segment = { id: 'A', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
 const cutter: Segment = { id: 'B', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } }
@@ -333,6 +333,14 @@ describe('Cell Editor直接操作', () => {
     await user.click(screen.getByRole('button', { name: 'Segment 1 / 元の位置' }))
     await user.click(screen.getByRole('button', { name: '選択' }))
     pointerAt(midpoint)
+    await user.click(screen.getByRole('button', { name: /Fragment:.*Segment 2.*Segment 3/ }))
+    for (const name of [/Fragment:.*Segment 2.*Segment 3/, /Anchor: AB辺を12等分した1番目の点/]) {
+      await user.click(screen.getByRole('button', { name }))
+      pointerAt(midpoint)
+      expect(screen.getByRole('button', { name: /Fragment:.*Segment 2.*Segment 3/ })).toBeTruthy()
+      expect(screen.queryByRole('img', { name: /のプレビュー/ })).toBeNull()
+      expect((screen.getByRole('button', { name: '選択' }) as HTMLButtonElement).disabled).toBe(true)
+    }
     await user.click(screen.getByRole('button', { name: /Fragment:.*Segment 2.*Segment 3/ }))
     const previewLine = screen.getByRole('img', { name: /Fragment:.*のプレビュー/ }).querySelector('line')!
     expect([previewLine.getAttribute('x1'), previewLine.getAttribute('y1'), previewLine.getAttribute('x2'), previewLine.getAttribute('y2')])
@@ -651,7 +659,7 @@ describe('Pattern変更後の対象照合', () => {
 })
 
 describe('候補previewと明示確定', () => {
-  contractTest({ contract: 'SPEC-EDITOR-CANDIDATE-PREVIEW' }, '同一点の交点を候補一覧で切り替えてCanvas確認し、確定後だけsplit操作できる', async () => {
+  contractTest({ contract: 'SPEC-EDITOR-CANDIDATE-PREVIEW', regression: 40 }, '同一点の交点をpreview・再タップしても候補を維持し、確定後だけsplit操作できる', async () => {
     const pattern = { ...basePattern(), segments: [target, cutter, colocatedCutter] }
     const onPatternChange = vi.fn()
     const user = userEvent.setup()
@@ -674,6 +682,14 @@ describe('候補previewと明示確定', () => {
     expect(lines.map((line) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')]))
       .toEqual(instances.map(({ start, end }) => [start.x, start.y, end.x, end.y].map((value) => String(CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE))))
     expect(onPatternChange).toHaveBeenCalledTimes(1)
+    // 再タップによる候補置換を繰り返しても、最初の操作基準を失わない。
+    for (const name of ['Intersection: Segment 2 / 元の位置', 'Intersection: Segment 3 / 元の位置']) {
+      pointerAt(getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
+      expect(screen.getAllByRole('button', { name: /^Intersection:/ })).toHaveLength(2)
+      expect(screen.queryByRole('img', { name: /のプレビュー/ })).toBeNull()
+      expect((screen.getByRole('button', { name: '選択' }) as HTMLButtonElement).disabled).toBe(true)
+      await user.click(screen.getByRole('button', { name }))
+    }
     await user.click(screen.getByRole('button', { name: '選択' }))
     expect(screen.queryByLabelText('選択対象インスペクター')).toBeNull()
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('cutter: Segment 3')
@@ -741,24 +757,56 @@ describe('候補previewと明示確定', () => {
   })
 })
 
-contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY' }, '候補のpreview切替はCanvasのhit対象や優先順位を変えない', () => {
+contractTest({ contract: 'ARCH-EDITOR-HIT-TEST-PRIORITY', regression: 40 }, '候補のpreview切替は選択開始時のCanvas hit対象や優先順位を変えない', () => {
   const pattern = basePattern()
   const candidates: CanvasHitCandidate[] = [
     { kind: 'segment', segment: { sourceSegmentId: target.id, transform: { type: 'identity' } } },
+    { kind: 'segment', segment: { sourceSegmentId: cutter.id, transform: { type: 'identity' } } },
     { kind: 'intersection', candidate: getIntersectionInteractionCandidates(pattern, { sourceSegmentId: target.id, transform: { type: 'identity' } })[0] },
   ]
   const onInteraction = vi.fn()
   const props = { divisions: 4, pattern, onInteraction, onDeleteSegment: vi.fn(), onToggleSplitRelation: vi.fn(), onExcludeMaterial: vi.fn(), onRestoreMaterial: vi.fn() }
-  const choosing = transitionEditorInteraction(idleEditorInteraction(), { kind: 'canvas-hit', candidates }).interaction
+  const selected = transitionEditorInteraction(idleEditorInteraction(), { kind: 'canvas-hit', candidates: [candidates[0]] }).interaction
+  const choosing = transitionEditorInteraction(selected, { kind: 'canvas-hit', candidates }).interaction
   const { rerender } = render(<CellEditor {...props} interaction={choosing} />)
   pointerAtSegment(pattern, target.id, 0.2)
   const initialHit = onInteraction.mock.lastCall?.[0]
-  expect(initialHit.candidates.map(({ kind }: CanvasHitCandidate) => kind)).toEqual(['segment'])
+  expect(initialHit.candidates.map(({ kind }: CanvasHitCandidate) => kind)).toEqual(['fragment'])
   for (const candidate of candidates) {
     const interaction = transitionEditorInteraction(choosing, { kind: 'preview-candidate', candidate }).interaction
     rerender(<CellEditor {...props} interaction={interaction} />)
     expect(screen.getByRole('img', { name: /のプレビュー/ })).toBeTruthy()
     pointerAtSegment(pattern, target.id, 0.2)
     expect(onInteraction.mock.lastCall?.[0]).toEqual(initialHit)
+  }
+})
+
+contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 40 }, '操作基準のtargetが消滅したら参照を解除し、同じGeometryや後の再出現へ付け替えない', () => {
+  const segment = { kind: 'segment', segment: { sourceSegmentId: target.id, transform: { type: 'identity' } } } as const
+  const anchor = { kind: 'anchor', anchor: { kind: 'vertex', vertex: 'B' } } as const
+  const otherAnchor = { kind: 'anchor', anchor: { kind: 'vertex', vertex: 'C' } } as const
+  const selected = transitionEditorInteraction(idleEditorInteraction(), { kind: 'canvas-hit', candidates: [segment] }).interaction
+  const choosing = transitionEditorInteraction(selected, { kind: 'canvas-hit', candidates: [anchor, otherAnchor] }).interaction
+  const previewed = transitionEditorInteraction(choosing, { kind: 'preview-candidate', candidate: anchor }).interaction
+  expect(editorResolverTarget(previewed)).toEqual(segment.segment)
+  expect(reconcileEditorInteraction(basePattern(), previewed)).toBe(previewed)
+
+  const replacement = { ...basePattern(), segments: [coincidentTarget, cutter] }
+  const reconciled = reconcileEditorInteraction(replacement, previewed)
+  expect(editorResolverTarget(reconciled)).toBeNull()
+  expect(previewEditorCandidate(reconciled)).toEqual(anchor)
+  expect(reconcileEditorInteraction(replacement, reconciled)).toBe(reconciled)
+  expect(editorResolverTarget(reconcileEditorInteraction(basePattern(), reconciled))).toBeNull()
+
+  // targetの消滅だけでは生存する候補の操作を取り消さない。
+  const confirmed = transitionEditorInteraction(reconciled, { kind: 'confirm-candidate' })
+  expect(pendingEditorAnchor(confirmed.interaction)).toEqual(anchor.anchor)
+  expect(confirmed.command).toBeUndefined()
+  for (const event of [{ kind: 'clear' }, { kind: 'confirm-candidate' }] as const) {
+    const ended = transitionEditorInteraction(previewed, event).interaction
+    expect(editorResolverTarget(ended)).toBeNull()
+    expect(previewEditorCandidate(ended)).toBeNull()
+    const next = transitionEditorInteraction(ended, { kind: 'canvas-hit', candidates: [anchor, otherAnchor] }).interaction
+    expect(editorResolverTarget(next)).toBeNull()
   }
 })

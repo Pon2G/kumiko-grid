@@ -6,7 +6,7 @@ import { derivePatternGeometry, logicalFragmentKey, type LogicalFragment } from 
 import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern/materialExclusion'
 import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
 import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import { canvasHitCandidateKey, editorSelection, pendingEditorAnchor, previewEditorCandidate, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
+import { canvasHitCandidateKey, editorResolverTarget, editorSelection, pendingEditorAnchor, previewEditorCandidate, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
 import { CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
@@ -51,7 +51,8 @@ export function CellEditor(props: CellEditorProps) {
     : selection?.kind === 'intersection' ? selection.candidate.target
       : selection?.kind === 'fragment' ? selection.fragment.segmentInstanceRef : null
   const targetKey = target ? instanceRefKey(target) : null
-  const candidates = target ? getIntersectionInteractionCandidates(pattern, target) : []
+  const resolverTarget = editorResolverTarget(interaction)
+  const candidates = resolverTarget ? getIntersectionInteractionCandidates(pattern, resolverTarget) : []
   const selectedCandidateKey = selection?.kind === 'intersection' ? intersectionCandidateKey(selection.candidate) : null
   const cutterKey = selection?.kind === 'intersection' ? instanceRefKey(selection.candidate.cutter) : null
   const points = trianglePoints().map((point) => `${px(point.x)},${py(point.y)}`).join(' ')
@@ -62,7 +63,8 @@ export function CellEditor(props: CellEditorProps) {
     return () => globalThis.removeEventListener('keydown', clear)
   }, [props.onInteraction])
 
-  const targetFragments = target ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey) : []
+  const targetFragments = resolverTarget
+    ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === instanceRefKey(resolverTarget)) : []
   const resolvePointer = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button > 0) return
     const bounds = event.currentTarget.getBoundingClientRect()

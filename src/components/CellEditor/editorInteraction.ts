@@ -1,9 +1,9 @@
 import { segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
-import type { CellPattern } from '../../pattern/cellPattern'
+import type { CellPattern, SegmentInstanceRef } from '../../pattern/cellPattern'
 import { logicalFragmentKey } from '../../pattern/designGeometry'
 import { intersectionCandidateKey } from '../../pattern/splitCandidates'
 import { instanceRefKey } from '../../pattern/symmetry'
-import type { EditorSelection } from './editorSelection'
+import { selectionTarget, type EditorSelection } from './editorSelection'
 import { reconcileLogicalTarget, type LogicalTarget } from './logicalTarget'
 
 type SelectedEditorObject = Exclude<EditorSelection, null>
@@ -13,6 +13,7 @@ export type CanvasHitCandidate =
 
 export type ChoosingContext =
   | { kind: 'normal' }
+  | { kind: 'target'; target: SegmentInstanceRef }
   | { kind: 'segment-endpoint'; startAnchor: SegmentEndpointAnchor }
 
 export type EditorCommand = {
@@ -31,11 +32,12 @@ export type EditorInteraction =
   | { kind: 'idle' }
   | { kind: 'creating-segment'; startAnchor: SegmentEndpointAnchor }
   | { kind: 'selected'; selection: SelectedEditorObject }
-  | { kind: 'choosing-target'; candidates: CanvasHitCandidate[]; context: ChoosingContext }
+  | { kind: 'choosing-target'; candidates: CanvasHitCandidate[]; context: ChoosingContext; previewKey: string | null }
 
 export type EditorInteractionEvent =
   | { kind: 'canvas-hit'; candidates: CanvasHitCandidate[] }
-  | { kind: 'confirm-candidate'; candidate: CanvasHitCandidate }
+  | { kind: 'preview-candidate'; candidate: CanvasHitCandidate }
+  | { kind: 'confirm-candidate' }
   | { kind: 'activate-anchor'; anchor: SegmentEndpointAnchor }
   | { kind: 'clear' }
 
@@ -49,6 +51,17 @@ export const idleEditorInteraction = (): EditorInteraction => ({ kind: 'idle' })
 
 export const editorSelection = (interaction: EditorInteraction): EditorSelection =>
   interaction.kind === 'selected' ? interaction.selection : null
+
+/** 候補選択中の操作基準を保持する。previewや過去selectionの復元には使わない。 */
+export const editorResolverTarget = (interaction: EditorInteraction): SegmentInstanceRef | null =>
+  interaction.kind === 'selected' ? selectionTarget(interaction.selection)
+    : interaction.kind === 'choosing-target' && interaction.context.kind === 'target'
+      ? interaction.context.target : null
+
+export const previewEditorCandidate = (interaction: EditorInteraction): CanvasHitCandidate | null =>
+  interaction.kind === 'choosing-target'
+    ? interaction.candidates.find((candidate) => canvasHitCandidateKey(candidate) === interaction.previewKey) ?? null
+    : null
 
 export const pendingEditorAnchor = (interaction: EditorInteraction): SegmentEndpointAnchor | null =>
   interaction.kind === 'creating-segment' ? interaction.startAnchor
@@ -70,20 +83,26 @@ export function transitionEditorInteraction(
       return { interaction: idleEditorInteraction() }
     case 'activate-anchor':
       return activateCandidate(interaction, { kind: 'anchor', anchor: event.anchor })
-    case 'confirm-candidate': {
+    case 'preview-candidate': {
       if (interaction.kind !== 'choosing-target') return { interaction }
       const candidate = interaction.candidates.find((current) =>
         canvasHitCandidateKey(current) === canvasHitCandidateKey(event.candidate))
+      return candidate ? { interaction: { ...interaction, previewKey: canvasHitCandidateKey(candidate) } } : { interaction }
+    }
+    case 'confirm-candidate': {
+      const candidate = previewEditorCandidate(interaction)
       return candidate ? activateCandidate(interaction, candidate) : { interaction }
     }
     case 'canvas-hit': {
       const { candidates } = event
       if (candidates.length === 0) return { interaction: idleEditorInteraction() }
       if (candidates.length === 1) return activateCandidate(interaction, candidates[0])
+      const target = editorResolverTarget(interaction)
       const context: ChoosingContext = interaction.kind === 'creating-segment'
         ? { kind: 'segment-endpoint', startAnchor: interaction.startAnchor }
-        : interaction.kind === 'choosing-target' ? interaction.context : { kind: 'normal' }
-      return { interaction: { kind: 'choosing-target', candidates, context } }
+        : interaction.kind === 'choosing-target' ? interaction.context
+          : target ? { kind: 'target', target } : { kind: 'normal' }
+      return { interaction: { kind: 'choosing-target', candidates, context, previewKey: null } }
     }
   }
 }
@@ -111,9 +130,14 @@ export function reconcileEditorInteraction(pattern: CellPattern, interaction: Ed
       return current ? [current] : []
     })
     if (candidates.length === 0) return idleEditorInteraction()
-    return candidates.length === interaction.candidates.length
+    const context = interaction.context.kind === 'target'
+      && !reconcileLogicalTarget(pattern, { kind: 'segment', segment: interaction.context.target })
+      ? { kind: 'normal' as const } : interaction.context
+    const previewKey = candidates.some((candidate) => canvasHitCandidateKey(candidate) === interaction.previewKey)
+      ? interaction.previewKey : null
+    return context === interaction.context && previewKey === interaction.previewKey && candidates.length === interaction.candidates.length
       && candidates.every((candidate, index) => candidate === interaction.candidates[index])
-      ? interaction : { kind: 'choosing-target', candidates, context: interaction.context }
+      ? interaction : { kind: 'choosing-target', candidates, context, previewKey }
   }
   if (interaction.kind !== 'selected') return interaction
   const selection = reconcileLogicalTarget(pattern, interaction.selection)

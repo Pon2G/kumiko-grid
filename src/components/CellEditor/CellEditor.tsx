@@ -6,7 +6,7 @@ import { derivePatternGeometry, logicalFragmentKey, type LogicalFragment } from 
 import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern/materialExclusion'
 import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
 import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import { canvasHitCandidateKey, editorSelection, pendingEditorAnchor, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
+import { canvasHitCandidateKey, editorResolverTarget, editorSelection, pendingEditorAnchor, previewEditorCandidate, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
 import { CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
@@ -41,6 +41,7 @@ const boundaryLabel = (pattern: CellPattern, target: LogicalFragment['segmentIns
 export function CellEditor(props: CellEditorProps) {
   const { pattern, interaction } = props
   const selection = editorSelection(interaction)
+  const preview = previewEditorCandidate(interaction)
   const pendingAnchor = pendingEditorAnchor(interaction)
   const choosingCandidates = interaction.kind === 'choosing-target' ? interaction.candidates : null
   const anchors = createSegmentEndpointAnchors(props.divisions)
@@ -50,7 +51,8 @@ export function CellEditor(props: CellEditorProps) {
     : selection?.kind === 'intersection' ? selection.candidate.target
       : selection?.kind === 'fragment' ? selection.fragment.segmentInstanceRef : null
   const targetKey = target ? instanceRefKey(target) : null
-  const candidates = target ? getIntersectionInteractionCandidates(pattern, target) : []
+  const resolverTarget = editorResolverTarget(interaction)
+  const candidates = resolverTarget ? getIntersectionInteractionCandidates(pattern, resolverTarget) : []
   const selectedCandidateKey = selection?.kind === 'intersection' ? intersectionCandidateKey(selection.candidate) : null
   const cutterKey = selection?.kind === 'intersection' ? instanceRefKey(selection.candidate.cutter) : null
   const points = trianglePoints().map((point) => `${px(point.x)},${py(point.y)}`).join(' ')
@@ -61,7 +63,8 @@ export function CellEditor(props: CellEditorProps) {
     return () => globalThis.removeEventListener('keydown', clear)
   }, [props.onInteraction])
 
-  const targetFragments = target ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === targetKey) : []
+  const targetFragments = resolverTarget
+    ? designFragments.filter((fragment) => instanceRefKey(fragment.instanceRef) === instanceRefKey(resolverTarget)) : []
   const resolvePointer = (event: PointerEvent<SVGSVGElement>) => {
     if (event.button > 0) return
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -105,6 +108,7 @@ export function CellEditor(props: CellEditorProps) {
               cx={px(point.x)} cy={py(point.y)} r={anchor.kind === 'vertex' ? 7 : 5} />
           })}
         </g>
+        {preview && <CandidatePreview pattern={pattern} candidate={preview} />}
         <g className="interaction-layer" data-canvas-layer="interaction">
         {instances.map((instance) => {
           const key = instanceRefKey(instance.instanceRef)
@@ -143,10 +147,17 @@ function Inspector(props: CellEditorProps) {
   const { pattern, interaction } = props
   const selection = editorSelection(interaction)
   const choosingCandidates = interaction.kind === 'choosing-target' ? interaction.candidates : null
+  const preview = previewEditorCandidate(interaction)
   if (choosingCandidates) return <div className="object-inspector target-chooser" aria-label="選択対象インスペクター">
     <strong>選択対象</strong><div className="target-choices">{choosingCandidates.map((candidate) =>
-      <button type="button" key={canvasHitCandidateKey(candidate)} onClick={() => props.onInteraction({ kind: 'confirm-candidate', candidate })}>
-        {canvasHitCandidateLabel(pattern, candidate)}</button>)}</div></div>
+      <button type="button" key={canvasHitCandidateKey(candidate)} aria-pressed={preview !== null && canvasHitCandidateKey(preview) === canvasHitCandidateKey(candidate)}
+        onClick={() => props.onInteraction({ kind: 'preview-candidate', candidate })}>
+        {canvasHitCandidateLabel(pattern, candidate)}</button>)}</div>
+      <p role="status">{preview ? 'プレビュー中：Canvasで対象を確認してください' : '候補をタップしてCanvasで確認してください'}</p>
+      <div className="candidate-actions">
+        <button type="button" disabled={!preview} onClick={() => props.onInteraction({ kind: 'confirm-candidate' })}>選択</button>
+        <button type="button" onClick={() => props.onInteraction({ kind: 'clear' })}>取消し</button>
+      </div></div>
   if (!selection) return <div className="object-inspector"><span>Canvasからオブジェクトを選択してください</span></div>
   if (selection.kind === 'segment') {
     const number = pattern.segments.findIndex(({ id }) => id === selection.segment.sourceSegmentId) + 1
@@ -180,3 +191,23 @@ const canvasHitCandidateLabel = (pattern: CellPattern, candidate: CanvasHitCandi
   : candidate.kind === 'segment' ? instanceLabel(pattern, candidate.segment)
     : candidate.kind === 'intersection' ? `Intersection: ${instanceLabel(pattern, candidate.candidate.cutter)}`
       : `Fragment: ${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryA)}–${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryB)}`
+
+/** 表示専用。preview対象をhit resolverの選択対象へ渡さない。 */
+function CandidatePreview({ pattern, candidate }: { pattern: CellPattern; candidate: CanvasHitCandidate }) {
+  const instances = expandPattern(pattern)
+  const line = (ref: Parameters<typeof instanceRefKey>[0], role: string) => instances
+    .filter(({ instanceRef }) => instanceRefKey(instanceRef) === instanceRefKey(ref))
+    .map((instance) => <line key={role} className={`candidate-preview-line ${role}`}
+      x1={px(instance.start.x)} y1={py(instance.start.y)} x2={px(instance.end.x)} y2={py(instance.end.y)} />)
+  const point = candidate.kind === 'anchor' ? resolveSegmentEndpoint(candidate.anchor)
+    : candidate.kind === 'intersection' ? candidate.candidate.point : null
+  return <g className="candidate-preview" role="img" aria-label={`${canvasHitCandidateLabel(pattern, candidate)}のプレビュー`}>
+    {candidate.kind === 'segment' && line(candidate.segment, 'target')}
+    {candidate.kind === 'intersection' && <>{line(candidate.candidate.target, 'target')}{line(candidate.candidate.cutter, 'cutter')}</>}
+    {candidate.kind === 'fragment' && derivePatternGeometry(pattern)
+      .filter(({ logicalFragment }) => logicalFragmentKey(logicalFragment) === logicalFragmentKey(candidate.fragment))
+      .map((fragment) => <line key={fragment.id} className="candidate-preview-line fragment"
+        x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}
+    {point && <rect className="candidate-preview-point" x={px(point.x) - 13} y={py(point.y) - 13} width="26" height="26" />}
+  </g>
+}

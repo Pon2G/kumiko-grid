@@ -1,3 +1,4 @@
+import { segmentEndpointAnchorKey } from './anchor'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
 import {
   canonicalizeSplitRelation,
@@ -14,6 +15,7 @@ import { segmentFamilyKey, symmetryTransformAlgebra, type SegmentInstanceBasisMa
 
 /** source Segment追加時点でdefinition / Family invariantを回復する唯一の公開操作。 */
 export function addSegment(pattern: CellPattern, segment: Segment): CellPattern {
+  if (segmentEndpointAnchorKey(segment.start) === segmentEndpointAnchorKey(segment.end)) return pattern
   const existingIds = new Set(pattern.segments.map(({ id }) => id))
   if (existingIds.has(segment.id)) return pattern
   const family = segmentFamilyKey(pattern.symmetry, segment)

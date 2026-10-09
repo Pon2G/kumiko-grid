@@ -24,6 +24,7 @@ Vertexは頂点名を、Edge Division Pointはedge、divisions、indexを論理�
 
 <!-- test-contract: ARCH-PATTERN-SEGMENT-IDENTITY -->
 source Segmentの論理identityは安定した `SegmentId` とする。始点・終点AnchorはSegmentの現在の定義であり、identityそのものにはしない。
+`addSegment` は既存のSegmentIdと重複する追加を拒否し、入力を変更せず元のPatternを返す。
 
 概念的には次のように表す。
 
@@ -37,7 +38,8 @@ interface Segment {
 
 端点2つをSegment identityとしない理由は、端点編集だけでSegment自体のidentityが失われ、SplitRelation等の参照が不要に連鎖して変化するためである。また、将来IntersectionAnchorを端点として許可した場合、IntersectionAnchorがSegmentInstanceRefを参照するため、端点構造からSegment identityを再帰的に定義するとidentity自体へ循環参照を持ち込み得る。安定したIDと現在の定義を分離し、端点pairはSegment definition / family equivalenceの判定には利用しても論理identityそのものにはしない。
 
-同一Anchorを始点・終点に持つ退化Segmentは基本入力として作成しない。
+<!-- test-contract: ARCH-PATTERN-SEGMENT-DISTINCT-ENDPOINTS -->
+同一Anchorを始点・終点に持つ退化Segmentは基本入力として作成しない。Pattern追加APIの `addSegment` でも、両端点のlogical Anchor identityが同一なら追加を拒否し、入力を変更せず元のPatternを返す。object参照が異なっていても、Vertexは頂点名、Edge Division Anchorはedge・divisions・indexが同じなら同一Anchorとする。この判定は座標一致、epsilon、最小長、分数の約分による同一視へ拡張しない。
 
 ### Segment definitionとSegment Family canonicalization
 

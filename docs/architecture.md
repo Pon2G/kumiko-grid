@@ -140,7 +140,7 @@ Anchor / Segment identity、Segment Family canonicalization、Segment instance /
 <!-- test-contract: ARCH-GEOMETRY-SEGMENT-INTERSECTION -->
 Geometry層は、正規化Cell Local Coordinate上の2つの非退化Segmentについて、UIに依存しないpure functionで交差関係を判定する。結果は、交差しない `none`、双方の内部で1点交差する `cross`、少なくとも一方の端点で1点を共有する `touch`、同一直線上で有限長の共通区間を持つ `overlap` を区別する。同一直線上で共有するのが1点だけの場合は `touch` とする。`cross` と `touch` は交点と双方のSegment parameter（始点を0、終点を1）を返す。
 
-浮動小数点の判定は完全一致に依存せず、共通epsilonを正規化Cell Local Coordinate上の距離許容誤差として用いる。外積やSegment parameterなど座標距離と異なるスケールの量を比較するときは、その量に対応する許容値へ変換する。epsilonはGeometry上の数値解像度であり、その範囲内の差異を独立した位置や境界として区別しない場合があるが、source Segmentの有効性を決める閾値にはしない。epsilonの具体値、変換式、交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
+浮動小数点の判定は完全一致に依存せず、共通epsilonを正規化Cell Local Coordinate上の距離許容誤差として用いる。外積やSegment parameterなど座標距離と異なるスケールの量を比較するときは、その量に対応する許容値へ変換する。epsilonはGeometry上の数値解像度であり、その範囲内の差異を独立した位置や境界として区別しない場合があるが、source Segmentの最小長やAnchor identityを決める閾値にはしない。Geometryのoverlap分類をPattern操作の入力制約に利用することとは区別する。epsilonの具体値、変換式、交差判定アルゴリズムは契約としない。基本Segmentは非退化であるという現在の不変条件を前提とする。
 
 <!-- test-contract: ARCH-GEOMETRY-SEGMENT-FRAGMENTATION -->
 Geometry層は、PointSegmentと複数のparameter位置からFragmentを生成するpure functionを提供する。Segment内部の位置だけをSegment上の順序で用い、始点・終点およびepsilon内で同一点とみなせる重複位置ではGeometry Fragmentを増やさず、ゼロ長PointSegmentを生成しない。有効なsplit境界が存在しない場合は、source Segmentと同じGeometryを1つのFragmentとして保持する。入力Segmentは変更しない。このGeometry上の重複除去は、同一点へ解決された複数の論理境界identityを統合することを意味しない。
@@ -252,7 +252,7 @@ Design Geometry / IntersectionAnchorは、source Segment、Symmetry、既存Spli
 
 Effective GeometryはMaterialExclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。
 
-派生Geometry上の一致はdomain semanticsに従って扱う。Segmentについては、論理Endpoint AnchorとSymmetry actionから同じFamily / concrete instanceと判定できる完全重複をPattern層でcanonicalizeする。一方、異なるIntersectionAnchor、Fragment境界、その他の論理対象をPoint / PointSegmentの座標一致だけで統合・削除・付け替えしない。意味上異なる部材や区間がGeometry上で重なる場合は、必要に応じてGeometry診断として扱い、座標一致をidentity規則へ昇格させない。
+派生Geometry上の一致はdomain semanticsに従って扱う。Segmentについては、論理Endpoint AnchorとSymmetry actionから同じFamily / concrete instanceと判定できる完全重複をPattern層でcanonicalizeする。一方、異なるIntersectionAnchor、Fragment境界、その他の論理対象をPoint / PointSegmentの座標一致だけで統合・削除・付け替えしない。異なるcanonical Segment instance間の有限長overlapは、Pattern追加・Symmetry変更で拒否する（詳細は[Pattern Architecture](architecture/pattern.md)）。この入力制約を座標一致によるidentity規則へ昇格させない。
 
 一方、ゼロ長区間のように実Geometryとして意味を持たない解決結果はGeometry化しない。また、SymmetryやLayoutから派生した同一Geometryの重複を描画・加工出力で正規化する必要がある場合も、元の論理identityを破壊しない境界で行う。
 

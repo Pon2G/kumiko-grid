@@ -2,6 +2,7 @@ import type { Symmetry } from '../../pattern/cellPattern'
 import type { MirrorAxis } from '../../geometry/transform'
 
 interface SettingsProps {
+  notice?: string
   divisions: number
   divisionsDisabled: boolean
   symmetry: Symmetry
@@ -9,7 +10,7 @@ interface SettingsProps {
   onSymmetryChange: (value: Symmetry) => void
 }
 
-export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
+export function Settings({ notice, divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
   const symmetryType = symmetry.type
   const changeDivisions = (value: number) => {
     if (Number.isInteger(value)) {
@@ -51,7 +52,8 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
               type="button"
               key={type}
               className={symmetryType === type ? 'active' : ''}
-              onClick={() => onSymmetryChange(type === 'mirror' ? { type, axis: 'A' } : { type })}
+              aria-pressed={symmetryType === type}
+              onClick={() => onSymmetryChange(type === 'mirror' ? { type, axis: symmetry.type === 'mirror' ? symmetry.axis : 'A' } : { type })}
             >
               {type === 'none' ? 'なし' : type === 'mirror' ? '鏡映' : '回転'}
             </button>
@@ -67,6 +69,7 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
               <button
                 type="button"
                 className={symmetry.axis === axis ? 'active' : ''}
+                aria-pressed={symmetry.axis === axis}
                 key={axis}
                 onClick={() => onSymmetryChange({ type: 'mirror', axis })}
               >
@@ -76,6 +79,8 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
           </div>
         </fieldset>
       )}
+
+      {notice && <p role="status" className="operation-notice">{notice}</p>}
 
       <div className="help-card">
         <strong>線分の描き方</strong>

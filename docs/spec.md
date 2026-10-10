@@ -78,6 +78,22 @@ Cell Patternは複数の `Segment` から構成される。
 
 Familyの同一性はSegmentEndpointAnchorの論理identityとSymmetry作用から判定する。異なるAnchor参照が偶然同じPointへ解決されることだけを理由に同じFamilyへ統合しない。
 
+### Segmentの重なり制約
+
+<!-- test-contract: SPEC-PATTERN-SEGMENT-OVERLAP -->
+source＋Symmetryから得られる異なるcanonical concrete Segment instanceに、同一直線上の有限長の共通区間がある状態を許可しない。包含の両方向、部分重複、異なるAnchor identityでGeometryが完全一致する非退化線分、新規source自身の異なるinstance間の重なりを拒否する。端点の格納順、辺名、Anchor種別、分割数に依存せず、既存Geometryの数値許容誤差に従って分類する。
+
+端点1点の接触、通常の点交差、同一直線上の離れた区間、重なりのない辺上Segmentは許可する。stabilizerで同じ論理instanceへ正規化されるraw transformは別instanceとして比較しない。logical canonicalizationとGeometry overlap拒否は別責務であり、Geometry一致によってAnchor、SegmentId、Familyを統合しない。
+
+検証対象はDesign側の線分全体とし、split後のFragment集合やEffective Geometryを使わない。重なり箇所または既存source全体が材なしでも追加を拒否する。材の除外・復元、split追加・解除は本制約を変化させない。
+
+<!-- test-contract: SPEC-PATTERN-OVERLAP-ATOMIC-OPERATIONS -->
+`addSegment` は現行の同一Anchor／ID／Family検証に加え、現在のSymmetryで展開した新規instanceと既存instanceの全組合せ、および新規instance同士の異なるpairを検証する。重なりがあれば追加全体を拒否し、元のPatternと追加候補を変更しない。既存sourceの代表選び直しや既存状態の修復は行わない。
+
+`changeSymmetry` は変更先でFamily正規化とmapping導出を行った後、正規化済みsource群を展開した異なるcanonical instanceの全pairを検証する。重なりが残れば変更全体を拒否し、元のSymmetry、Segment、SplitRelation、MaterialExclusionをすべて維持する。同一Familyへの収束は従来の正規化で解消し、重なりがなければ依存情報の移行・正規化を続ける。鏡映軸の変更も同じ規則に従う。
+
+これらはPattern操作の入力制約であり、importや既存malformed Patternの一括修復は保証しない。重なりの自動結合・延長・切詰め・source削除は行わない。
+
 ## 5. Cell Pattern
 
 Cell Patternは、ユーザーが定義した基本Segment、それに適用するSymmetry、基本Segment間のSplitRelation、および材の不存在を表すMaterialExclusionから構成する。
@@ -282,6 +298,9 @@ SplitRelation解除によって依存するMaterialExclusionが削除される�
 Inspectorの表示用ラベルや候補順をCell Patternの永続identityへ持ち込まない。
 
 スマートフォンでは端点Anchor、Intersection、Fragment、Segmentの各選択対象に十分なタップ領域を確保する。
+
+<!-- test-contract: SPEC-EDITOR-OVERLAP-REJECTION-NOTICE -->
+Segment追加拒否時はCell Editorの近くに「線分が重複するため追加できません」、Symmetry変更拒否時は設定の近くに「線分が重なるため対称変換を変更できません」と短く通知する。確認ダイアログや選択オプションは追加しない。設定表示は実際のPatternに一致させ、同じSymmetry設定を再選択しただけでは拒否通知を出さない。
 
 ## 7. Preview
 

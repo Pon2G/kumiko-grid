@@ -56,6 +56,16 @@ canonicalizationでは各旧sourceについて、representative source上のど�
 
 source Segmentを追加するPattern APIは、同一unordered Anchor pairと現在のSymmetry上のFamily重複を同じinvariantとして検証し、重複する新規sourceを追加しない。Symmetry変更も返却前に同じFamily invariantを回復する。React / Appが `segments` 配列へ直接appendしてこの検証を迂回しない。
 
+### Geometry overlapの検証境界
+
+logical Family / stabilizer canonicalizationとGeometry overlap拒否は別責務とする。Pattern操作は `expandPattern()` の論理定義に基づくcanonical instance展開を再利用し、解決済み線分のpairに対して `intersectSegments()` の `kind === 'overlap'` を入力制約へ利用する。独立した交差判定・epsilon・区間演算や、Geometryによるinstance重複除去は設けない。同じsourceでも異なるcanonical instanceは比較する。
+
+検証対象はsource＋SymmetryによるDesign側の線分全体であり、split FragmentやEffective Geometryは検証対象にしない。MaterialExclusionとSplitRelationの追加・解除・復元へ重複したoverlap検証を置かない。
+
+`addSegment` は同一Anchor／ID／Family拒否を維持し、新規instanceと既存instanceの全組合せと新規instance内の異なるpairを検証する。既存instance同士を修復せず、代表も選び直さない。`changeSymmetry` は変更先でFamily canonicalizationとmapping導出を済ませてから全pairを検証する。どちらもoverlap拒否はatomicとし、入力を変更せず元の `CellPattern` をそのまま返す。途中のFamily統合結果や依存情報の移行結果を返さない。既存の `CellPattern → CellPattern` APIを維持し、UIは返却結果から拒否を判別する。
+
+importや既存malformed Patternの一括修復は保証しない。Geometry交差分類の非退化入力前提を維持し、異なるAnchor identityが同一点へ解決される問題へ新たな退化Segment仕様や最小長制約を導入しない。将来IntersectionAnchorを端点へ許可するときは、端点Geometryの依存変化に伴う再検証をその機能の責務として検討する。
+
 ### IntersectionAnchor
 
 IntersectionAnchorは、Symmetry展開後の2つのconcrete Segment instanceが作る論理的な交点を表す。identityは順序を持たない2つの `SegmentInstanceRef` のcanonical pairとし、交点座標、Segment parameter、描画用IDを含めない。
@@ -252,6 +262,9 @@ current CellPattern + next Symmetry
 next Symmetry上でsource Segment Familyをcanonicalize
   ↓
 old source identity → representative concrete instance のbasis mappingを導出
+  ↓
+canonical source群をnext Symmetryで展開し全pairのoverlapを検証
+  （重なりが残れば元のCellPatternを返して全変更を拒否）
   ↓
 next Symmetryで表現可能な旧SplitRelationをmappingで移行
   ↓

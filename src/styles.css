@@ -91,3 +91,5 @@ footer { display: flex; justify-content: space-between; padding: 18px 4vw; borde
 .target-choices button[aria-pressed="true"] { outline: 2px solid #165b87; font-weight: 700; }
 .candidate-actions { display: flex; gap: 12px; }
 .candidate-actions button:disabled { opacity: .45; }
+
+.operation-notice { margin: 0.75rem; color: #9c392d; font-size: 0.875rem; }

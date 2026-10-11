@@ -1,3 +1,5 @@
+import { intersectSegments } from '../geometry/intersections'
+import type { PointSegment } from '../geometry/segment'
 import { segmentEndpointAnchorKey } from './anchor'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
 import {
@@ -11,7 +13,14 @@ import {
 import { cleanupMaterialExclusions, materialBoundaryRelation, normalizeConcreteSplitBoundary } from './materialExclusion'
 import { canonicalizeSegmentFamilies, mapCanonicalInstance } from './segmentFamily'
 import type { Segment } from './segment'
-import { segmentFamilyKey, symmetryTransformAlgebra, type SegmentInstanceBasisMapping } from './symmetry'
+import { expandPattern, segmentFamilyKey, symmetryTransformAlgebra, type SegmentInstanceBasisMapping } from './symmetry'
+
+/** canonical instanceの全線分を比較し、splitや材状態に依存しない入力制約を守る。 */
+function hasOverlap(instances: readonly PointSegment[], existing: readonly PointSegment[] = []): boolean {
+  return instances.some((instance, index) =>
+    existing.some((other) => intersectSegments(instance, other).kind === 'overlap')
+    || instances.slice(index + 1).some((other) => intersectSegments(instance, other).kind === 'overlap'))
+}
 
 /** source Segment追加時点でdefinition / Family invariantを回復する唯一の公開操作。 */
 export function addSegment(pattern: CellPattern, segment: Segment): CellPattern {
@@ -20,6 +29,7 @@ export function addSegment(pattern: CellPattern, segment: Segment): CellPattern 
   if (existingIds.has(segment.id)) return pattern
   const family = segmentFamilyKey(pattern.symmetry, segment)
   if (pattern.segments.some((existing) => segmentFamilyKey(pattern.symmetry, existing) === family)) return pattern
+  if (hasOverlap(expandPattern({ segments: [segment], symmetry: pattern.symmetry }), expandPattern(pattern))) return pattern
   return { ...pattern, segments: [...pattern.segments, segment] }
 }
 
@@ -115,6 +125,7 @@ function migrateExclusion(
 export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPattern {
   const families = canonicalizeSegmentFamilies(pattern.segments, symmetry)
   const base: CellPattern = { segments: families.segments, symmetry, splitRelations: [], materialExclusions: [] }
+  if (hasOverlap(expandPattern(base))) return pattern
   const compatible = (relative: SplitRelation['relativeTransform']) => supportedRelativeTransforms(symmetry)
     .some((item) => relativeTransformKey(item) === relativeTransformKey(relative))
   const migratedRelations = pattern.splitRelations.flatMap((relation) => {

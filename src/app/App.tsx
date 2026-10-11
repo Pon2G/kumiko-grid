@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Segment } from '../pattern/segment'
-import type { CellPattern, SplitRelation } from '../pattern/cellPattern'
+import type { CellPattern, SplitRelation, Symmetry } from '../pattern/cellPattern'
 import { splitRelationKey } from '../pattern/designGeometry'
 import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from '../pattern/patternOperations'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
@@ -23,6 +23,8 @@ export default function App() {
     splitRelations: [],
     materialExclusions: [],
   })
+  const [segmentNotice, setSegmentNotice] = useState<string>()
+  const [symmetryNotice, setSymmetryNotice] = useState<string>()
   const [interaction, setInteraction] = useState<EditorInteraction>(idleEditorInteraction)
 
   useEffect(() => {
@@ -30,6 +32,7 @@ export default function App() {
   }, [divisions])
 
   const handleInteraction = (event: EditorInteractionEvent) => {
+    setSegmentNotice(undefined)
     const transition = transitionEditorInteraction(interaction, event)
     setInteraction(transition.interaction)
     if (transition.command?.kind === 'create-segment') {
@@ -38,8 +41,19 @@ export default function App() {
         start: transition.command.startAnchor,
         end: transition.command.endAnchor,
       }
-      setPattern((current) => addSegment(current, segment))
+      const next = addSegment(pattern, segment)
+      setSegmentNotice(next === pattern ? '線分が重複するため追加できません' : undefined)
+      setPattern(next)
     }
+  }
+
+  const updateSymmetry = (symmetry: Symmetry) => {
+    setSymmetryNotice(undefined)
+    if (pattern.symmetry.type === symmetry.type
+      && (pattern.symmetry.type !== 'mirror' || symmetry.type !== 'mirror' || pattern.symmetry.axis === symmetry.axis)) return
+    const next = changeSymmetry(pattern, symmetry)
+    setSymmetryNotice(next === pattern ? '線分が重なるため対称変換を変更できません' : undefined)
+    setPattern(next)
   }
 
   const deleteSegment = (id: string) => {
@@ -71,10 +85,12 @@ export default function App() {
           divisionsDisabled={pattern.segments.length > 0}
           symmetry={pattern.symmetry}
           onDivisionsChange={setDivisions}
-          onSymmetryChange={(symmetry) => setPattern((current) => changeSymmetry(current, symmetry))}
+          onSymmetryChange={updateSymmetry}
+          notice={symmetryNotice}
         />
         <div className="workspace">
           <CellEditor
+            notice={segmentNotice}
             divisions={divisions}
             pattern={pattern}
             interaction={interaction}

@@ -10,6 +10,7 @@ import { canvasHitCandidateKey, editorResolverTarget, editorSelection, pendingEd
 import { CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
+  notice?: string
   divisions: number
   pattern: CellPattern
   interaction: EditorInteraction
@@ -83,6 +84,7 @@ export function CellEditor(props: CellEditorProps) {
   return <section className="panel editor-panel" aria-labelledby="editor-title">
     <div className="panel-heading editor-heading"><div><span className="eyebrow">02 / セル</span><h2 id="editor-title">セルエディター</h2></div>
       <span className="status-pill">{choosingCandidates ? pendingAnchor ? '終点候補を選択' : '選択対象を選択' : pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
+    {props.notice && <p role="status" className="operation-notice">{props.notice}</p>}
     <div className="editor-stage">
       <svg viewBox={`0 0 ${CELL_CANVAS_WIDTH} ${TRIANGLE_HEIGHT * CELL_CANVAS_SCALE + CELL_CANVAS_PAD * 2}`} aria-label="正三角形セルエディター"
         onPointerUp={resolvePointer}>

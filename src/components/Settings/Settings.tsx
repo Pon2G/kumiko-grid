@@ -1,7 +1,7 @@
 import type { Symmetry } from '../../pattern/cellPattern'
-import type { MirrorAxis } from '../../geometry/transform'
 
 interface SettingsProps {
+  notice?: string
   divisions: number
   divisionsDisabled: boolean
   symmetry: Symmetry
@@ -9,8 +9,7 @@ interface SettingsProps {
   onSymmetryChange: (value: Symmetry) => void
 }
 
-export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
-  const symmetryType = symmetry.type
+export function Settings({ notice, divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
   const changeDivisions = (value: number) => {
     if (Number.isInteger(value)) {
       onDivisionsChange(Math.min(12, Math.max(2, value)))
@@ -46,36 +45,27 @@ export function Settings({ divisions, divisionsDisabled, symmetry, onDivisionsCh
       <fieldset>
         <legend>対称変換</legend>
         <div className="segmented-control">
-          {(['none', 'mirror', 'rotational'] as const).map((type) => (
-            <button
+          {([
+            { label: 'なし', value: { type: 'none' } },
+            { label: '鏡映A', value: { type: 'mirror', axis: 'A' } },
+            { label: '鏡映B', value: { type: 'mirror', axis: 'B' } },
+            { label: '鏡映C', value: { type: 'mirror', axis: 'C' } },
+            { label: '回転', value: { type: 'rotational' } },
+          ] satisfies { label: string; value: Symmetry }[]).map(({ label, value }) => {
+            const selected = symmetry.type === value.type
+              && (symmetry.type !== 'mirror' || value.type !== 'mirror' || symmetry.axis === value.axis)
+            return <button
               type="button"
-              key={type}
-              className={symmetryType === type ? 'active' : ''}
-              onClick={() => onSymmetryChange(type === 'mirror' ? { type, axis: 'A' } : { type })}
-            >
-              {type === 'none' ? 'なし' : type === 'mirror' ? '鏡映' : '回転'}
-            </button>
-          ))}
+              key={label}
+              className={selected ? 'active' : ''}
+              aria-pressed={selected}
+              onClick={() => onSymmetryChange(value)}
+            >{label}</button>
+          })}
         </div>
       </fieldset>
 
-      {symmetry.type === 'mirror' && (
-        <fieldset>
-          <legend>鏡映軸</legend>
-          <div className="axis-control">
-            {(['A', 'B', 'C'] as MirrorAxis[]).map((axis) => (
-              <button
-                type="button"
-                className={symmetry.axis === axis ? 'active' : ''}
-                key={axis}
-                onClick={() => onSymmetryChange({ type: 'mirror', axis })}
-              >
-                {axis} → 対辺
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      )}
+      {notice && <p role="status" className="operation-notice">{notice}</p>}
 
       <div className="help-card">
         <strong>線分の描き方</strong>

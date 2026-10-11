@@ -31,9 +31,7 @@ main { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr)
 .field small { color: #6b6961; line-height: 1.5; }
 .segmented-control { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; border: 1px solid #c9c9c0; }
 .segmented-control button { min-height: 39px; padding: 5px; border: 0; background: transparent; font-size: 11px; }
-.segmented-control button.active, .axis-control button.active { color: white; background: #273a31; }
-.axis-control { display: grid; gap: 7px; }
-.axis-control button { padding: 10px; border: 1px solid #d0cfc6; background: transparent; font-size: 11px; text-align: left; }
+.segmented-control button.active { color: white; background: #273a31; }
 .help-card { margin: 36px 26px 26px; padding: 18px; border-left: 3px solid #bd4b31; background: #eeece4; }
 .help-card strong { font-family: Georgia, serif; font-size: 14px; }
 .help-card p { margin-top: 7px; color: #68706b; font-size: 11px; line-height: 1.6; }
@@ -91,3 +89,5 @@ footer { display: flex; justify-content: space-between; padding: 18px 4vw; borde
 .target-choices button[aria-pressed="true"] { outline: 2px solid #165b87; font-weight: 700; }
 .candidate-actions { display: flex; gap: 12px; }
 .candidate-actions button:disabled { opacity: .45; }
+
+.operation-notice { margin: 0.75rem; color: #9c392d; font-size: 0.875rem; }

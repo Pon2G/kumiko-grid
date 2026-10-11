@@ -35,7 +35,7 @@ describe('CellPatternの対称展開', () => {
       [{ type: 'rotational' }, 3],
     ]
     for (const [symmetry, count] of cases) {
-      const expanded = expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
+      const expanded = expandPattern({ segments: [seed], symmetry })
       expect(expanded).toHaveLength(count)
       expect(expanded.some(({ id }) => id === seed.id)).toBe(true)
     }
@@ -50,12 +50,12 @@ describe('CellPatternの対称展開', () => {
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-MIRROR' }, 'mirror Aは基本SegmentをAからCへのSegmentへ鏡映する', () => {
-    const expanded = expandPattern({ segments: [seed], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] })
+    const expanded = expandPattern({ segments: [seed], symmetry: { type: 'mirror', axis: 'A' } })
     expectSegment(expanded.filter(isSymmetryGeneratedSegment), canonicalTriangle.A, canonicalTriangle.C)
   })
 
   contractTest({ contract: 'SPEC-SYMMETRY-ROTATIONAL' }, 'rotationalは基本Segmentを120°と240°回転した位置へ配置する', () => {
-    const expanded = expandPattern({ segments: [seed], materialExclusions: [], symmetry: { type: 'rotational' }, splitRelations: [] })
+    const expanded = expandPattern({ segments: [seed], symmetry: { type: 'rotational' } })
     const derived = expanded.filter(isSymmetryGeneratedSegment)
     expectSegment(derived, canonicalTriangle.C, canonicalTriangle.A)
     expectSegment(derived, canonicalTriangle.B, canonicalTriangle.C)
@@ -135,7 +135,7 @@ describe('Symmetry transform algebra', () => {
     const symmetry = { type: 'rotational' } as const
     const algebra = symmetryTransformAlgebra(symmetry)
     const listed = instanceTransforms(symmetry)
-    const firstExpansion = expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
+    const firstExpansion = expandPattern({ segments: [seed], symmetry })
     const rotation1 = algebra.transforms.find((transform) => instanceTransformKey(transform) === 'rotation:1')!
     const identityInstance = firstExpansion.find(({ instanceRef }) => instanceTransformKey(instanceRef.transform) === 'identity')!
     const composed = algebra.compose(algebra.identity, rotation1)!
@@ -167,7 +167,7 @@ describe('Symmetry transform algebra', () => {
     expect(relatives).toContainEqual({ type: 'rotation', steps: 1 })
     expect(supportedRelativeTransforms(symmetry)).toContainEqual({ type: 'rotation', steps: 1 })
     expect(new Set(firstExpansion.map(({ instanceRef }) => instanceTransformKey(instanceRef.transform)))).toEqual(expectedKeys)
-    expect(new Set(expandPattern({ segments: [seed], symmetry, splitRelations: [], materialExclusions: [] })
+    expect(new Set(expandPattern({ segments: [seed], symmetry })
       .map(({ instanceRef }) => instanceTransformKey(instanceRef.transform)))).toEqual(expectedKeys)
   })
 

@@ -58,7 +58,7 @@ source Segmentを追加するPattern APIは、同一unordered Anchor pairと現�
 
 ### Geometry overlapの検証境界
 
-logical Family / stabilizer canonicalizationとGeometry overlap拒否は別責務とする。Pattern操作は `expandPattern()` の論理定義に基づくcanonical instance展開を再利用し、解決済み線分のpairに対して `intersectSegments()` の `kind === 'overlap'` を入力制約へ利用する。独立した交差判定・epsilon・区間演算や、Geometryによるinstance重複除去は設けない。同じsourceでも異なるcanonical instanceは比較する。
+logical Family / stabilizer canonicalizationとGeometry overlap拒否は別責務とする。Pattern操作は `expandPattern()` の論理定義に基づくcanonical instance展開を再利用し、解決済み線分のpairに対して `intersectSegments()` の `kind === 'overlap'` を入力制約へ利用する。独立した交差判定・epsilon・区間演算や、Geometryによるinstance重複除去は設けない。同じsourceでも異なるcanonical instanceは比較する。現在の `expandPattern()` はsource Segment群とSymmetryだけを展開入力の型として要求し、候補展開にもその情報だけを渡す。既存の依存情報を保持したままSegment群だけを候補へ差し替えた不整合なCellPatternは構築しない。将来の依存する端点の解決に必要となり得る完全なPattern文脈と、現在の展開入力は分けて扱う。
 
 検証対象はsource＋SymmetryによるDesign側の線分全体であり、split FragmentやEffective Geometryは検証対象にしない。MaterialExclusionとSplitRelationの追加・解除・復元へ重複したoverlap検証を置かない。
 

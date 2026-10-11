@@ -29,7 +29,7 @@ export function addSegment(pattern: CellPattern, segment: Segment): CellPattern 
   if (existingIds.has(segment.id)) return pattern
   const family = segmentFamilyKey(pattern.symmetry, segment)
   if (pattern.segments.some((existing) => segmentFamilyKey(pattern.symmetry, existing) === family)) return pattern
-  if (hasOverlap(expandPattern({ ...pattern, segments: [segment] }), expandPattern(pattern))) return pattern
+  if (hasOverlap(expandPattern({ segments: [segment], symmetry: pattern.symmetry }), expandPattern(pattern))) return pattern
   return { ...pattern, segments: [...pattern.segments, segment] }
 }
 

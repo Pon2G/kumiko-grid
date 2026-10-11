@@ -261,7 +261,7 @@ export function mapSegmentInstance(
 }
 
 /** source Segmentを、transform algebraと同じ列挙・Geometry適用規則で展開する。 */
-export function expandPattern(pattern: CellPattern): RenderedSegment[] {
+export function expandPattern(pattern: Pick<CellPattern, 'segments' | 'symmetry'>): RenderedSegment[] {
   const algebra = symmetryTransformAlgebra(pattern.symmetry)
   return pattern.segments.flatMap((segment) => {
     const source = resolveSegment(segment)

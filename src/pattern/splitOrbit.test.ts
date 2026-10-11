@@ -44,7 +44,7 @@ describe('相対変換によるsplit軌道', () => {
 
   contractTest({ contract: 'SPEC-SYMMETRY-EXPANSION' }, '自己対称なsourceの重複concrete instanceを生成しない', () => {
     const axisSegment: Segment = { id: 'axis', start: { kind: 'vertex', vertex: 'A' }, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } }
-    const instances = expandPattern({ segments: [axisSegment], materialExclusions: [], symmetry: { type: 'mirror', axis: 'A' }, splitRelations: [] })
+    const instances = expandPattern({ segments: [axisSegment], symmetry: { type: 'mirror', axis: 'A' } })
     expect(instances).toHaveLength(1)
     expect(instanceRefKey(instances[0].instanceRef)).toContain('identity')
   })

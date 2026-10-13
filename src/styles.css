@@ -81,6 +81,7 @@ footer { display: flex; justify-content: space-between; padding: 18px 4vw; borde
 .candidate-preview-line { fill: none; stroke: #165b87; stroke-width: 9; stroke-dasharray: 12 5; stroke-linecap: butt; }
 .candidate-preview-line.cutter { stroke: #873a20; stroke-width: 6; stroke-dasharray: 3 5; }
 .candidate-preview-line.fragment { stroke-width: 12; }
+.candidate-preview-line.material-ghost { stroke: #718179; stroke-width: 3; stroke-dasharray: 4 8; opacity: .65; }
 .candidate-preview-point { fill: none; stroke: #165b87; stroke-width: 4; }
 .target-chooser { flex-wrap: wrap; }
 .target-chooser > strong, .target-chooser > p { width: 100%; }

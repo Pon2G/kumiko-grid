@@ -141,7 +141,7 @@ contractTest({ contract: 'ARCH-PATTERN-ENDPOINT-CONTINUATION' }, '自己対称�
   const fragment = deriveLogicalFragments(initial).find(({ segmentInstanceRef, boundaryA }) => segmentInstanceRef.sourceSegmentId === 'T' && segmentInstanceRef.transform.type === 'identity' && boundaryA.kind === 'segment-endpoint')!
   const excluded = excludeMaterial(initial, fragment)
   const result = changed(changeSegmentEndpoint(excluded, 'T', 'end', v('C')))
-  expect(result.impact.expandedMaterial).toBe(true)
+  expect(result.impact.exclusionExpandedBySymmetry).toBe(true)
   expect(result.impact.lostExclusions).toBe(0)
   expect(deriveLogicalFragments(result.pattern).filter((item) => item.segmentInstanceRef.sourceSegmentId === 'T' && isFragmentExcluded(result.pattern, item))).toHaveLength(2)
 })

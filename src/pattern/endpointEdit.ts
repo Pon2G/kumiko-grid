@@ -4,14 +4,14 @@ import { canonicalizeSplitRelation, expandSplitRelationOrbit, splitRelationKey, 
 import { normalizeConcreteSplitBoundary, normalizeMigratedMaterial } from './materialExclusion'
 import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
 import { expandPattern, instanceRefKey, segmentFamilyKey, symmetryTransformAlgebra } from './symmetry'
-import { intersectSegments } from '../geometry/intersections'
+import { hasOverlap } from './segmentOverlap'
 
 export type EndpointRole = 'start' | 'end'
 export interface EndpointEditImpact {
   lostRelations: number
   lostBoundaries: number
   lostExclusions: number
-  expandedMaterial: boolean
+  exclusionExpandedBySymmetry: boolean
 }
 export type EndpointEditResult =
   | { kind: 'unchanged' }
@@ -37,7 +37,7 @@ export function changeSegmentEndpoint(pattern: CellPattern, sourceId: string, en
   const base = { segments: pattern.segments.map((item) => item.id === sourceId ? changed : item), symmetry: pattern.symmetry }
   const instances = expandPattern({ segments: [changed], symmetry: pattern.symmetry })
   const existing = expandPattern({ segments: others, symmetry: pattern.symmetry })
-  if (instances.some((instance, index) => [...existing, ...instances.slice(index + 1)].some((other) => intersectSegments(instance, other).kind === 'overlap'))) return { kind: 'rejected', reason: '線分が重なるため変更できません' }
+  if (hasOverlap(instances, existing)) return { kind: 'rejected', reason: '線分が重なるため変更できません' }
   const next: CellPattern = { ...base, splitRelations: [], materialExclusions: [] }
   let lostRelations = 0
   let lostBoundaries = 0
@@ -66,7 +66,7 @@ export function changeSegmentEndpoint(pattern: CellPattern, sourceId: string, en
     return boundaryA && boundaryB ? { ...item, boundaryA, boundaryB } : null
   })
   const material = normalizeMigratedMaterial(next, migrated)
-  return { kind: 'changed', pattern: material.pattern, impact: { lostRelations, lostBoundaries, lostExclusions: material.lostExclusions, expandedMaterial: material.expanded } }
+  return { kind: 'changed', pattern: material.pattern, impact: { lostRelations, lostBoundaries, lostExclusions: material.lostExclusions, exclusionExpandedBySymmetry: material.expanded } }
 }
 
 /** 表示instanceの移動先を既存algebraでsource座標へ戻す。canonical instanceだけを編集入口にする。 */
@@ -82,4 +82,4 @@ export function endpointSelectionAfterEdit(pattern: CellPattern, instance: Segme
   const mapping = canonicalizeInstanceRefWithDirection(pattern, instance)
   return mapping && { instance: mapping.ref, endpoint: mapping.direction === 'reverse' ? endpoint === 'start' ? 'end' as const : 'start' as const : endpoint }
 }
-export const endpointImpactNeedsConfirmation = (impact: EndpointEditImpact) => impact.lostRelations > 0 || impact.lostBoundaries > 0 || impact.lostExclusions > 0 || impact.expandedMaterial
+export const endpointImpactNeedsConfirmation = (impact: EndpointEditImpact) => impact.lostRelations > 0 || impact.lostBoundaries > 0 || impact.lostExclusions > 0 || impact.exclusionExpandedBySymmetry

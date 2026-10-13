@@ -209,7 +209,7 @@ export function CellEditor(props: CellEditorProps) {
           {props.previewPattern && derivePatternGeometry(props.previewPattern).map((fragment) => <line key={fragment.id} className={`candidate-preview-line target ${isFragmentExcluded(props.previewPattern!, fragment.logicalFragment) ? 'material-ghost' : ''}`}
             x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}
           {editing.candidates.map((anchor) => { const point = resolveSegmentEndpoint(anchor); return <rect key={segmentEndpointAnchorKey(anchor)} className="candidate-preview-point" x={px(point.x)-13} y={py(point.y)-13} width="26" height="26" /> })}
-          {selectedInstance && (movingPoint || editing.position) && (() => {
+          {!props.previewPattern && selectedInstance && (movingPoint || editing.position) && (() => {
             const fixed = selectedInstance[editing.context.endpoint === 'start' ? 'end' : 'start']
             const screen = movingPoint ? canvasPointToScreen(movingPoint, viewport) : editing.position!
             const moving = screenPointToCanvas(screen, viewport)
@@ -273,7 +273,7 @@ function Inspector(props: CellEditorProps & { covered: CanvasHitCandidate[] }) {
       {interaction.phase === 'confirming' && impact && <div className="impact-warning">
         {(impact.lostRelations > 0 || impact.lostBoundaries > 0) && <p>分割が一部解除されます</p>}
         {impact.lostExclusions > 0 && <p>材なし区間{impact.lostExclusions}件が解除されます</p>}
-        {impact.expandedMaterial && <p>対称性を保つため材なし区間が広がります</p>}
+        {impact.exclusionExpandedBySymmetry && <p>対称性を保つため材なし区間が広がります</p>}
       </div>}
       {interaction.phase === 'destination' && interaction.candidates.length > 0 && <>
         <div className="target-choices">{interaction.candidates.map((anchor) => <button type="button" key={segmentEndpointAnchorKey(anchor)} aria-pressed={interaction.previewKey === segmentEndpointAnchorKey(anchor)} onClick={() => props.onInteraction({ kind: 'preview-endpoint', anchor })}>{anchorLabel(anchor)}</button>)}</div>

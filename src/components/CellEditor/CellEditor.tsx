@@ -89,7 +89,7 @@ export function CellEditor(props: CellEditorProps) {
       props.onInteraction({ kind: 'clear' })
     }
     const clear = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel() }
-    const visibility = () => { if (document.hidden) cancel() }
+    const visibility = () => { if (editing && document.hidden) cancel() }
     const blur = () => { if (editing) cancel() }
     const multiPointer = (event: globalThis.PointerEvent) => {
       if (editing && event.isPrimary === false && event.target instanceof Node

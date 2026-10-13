@@ -141,3 +141,5 @@ export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPa
   })
   return cleanupMaterialExclusions({ ...withRelations, materialExclusions })
 }
+
+export { changeSegmentEndpoint } from './endpointEdit'

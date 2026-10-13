@@ -94,6 +94,11 @@ source＋Symmetryから得られる異なるcanonical concrete Segment instance�
 
 これらはPattern操作の入力制約であり、importや既存malformed Patternの一括修復は保証しない。重なりの自動結合・延長・切詰め・source削除は行わない。
 
+### Segment端点変更
+
+<!-- test-contract: SPEC-PATTERN-ENDPOINT-UPDATE -->
+source Segmentの端点変更は安定したSegmentId、反対側端点、他source定義、Symmetryを維持する。元のlogical Anchorへの変更はno-opとする。同一端点、他sourceとのFamily重複、Design側の有限長overlapをatomicに拒否し、入力と依存情報を変更しない。自己一致をcanonicalizeしてから候補instance同士と他source全instanceを比較し、編集前の自分自身は比較対象にしない。端点接触・点交差・重複しない辺上Segmentを許可する。不正なsource・端点selector・許可されないAnchorの境界入力は安全に拒否する。
+
 ## 5. Cell Pattern
 
 Cell Patternは、ユーザーが定義した基本Segment、それに適用するSymmetry、基本Segment間のSplitRelation、および材の不存在を表すMaterialExclusionから構成する。
@@ -251,7 +256,7 @@ Cell Editorでは、ユーザーが入力した基本Segmentと対称操作に�
 split / Material Exclusion編集の主操作面はCanvasとする。cutter Segment、relativeTransform、Fragment IDなどの内部表現を一覧から選ばせることを基本操作にしない。
 
 <!-- test-contract: SPEC-EDITOR-DIRECT-OBJECT-SELECTION -->
-Canvas上のSegmentEndpointAnchorは、Segment / Fragmentの選択状態にかかわらず常にsource Segment作成対象とする。Anchorのhit testを最優先し、1点目のAnchorを選択したときは現在のオブジェクト選択を解除してSegment作成途中状態へ入る。2点目のAnchorを選択するとsource Segmentを作成し、作成途中状態を解除する。
+通常のCanvas操作では、SegmentEndpointAnchorはSegment / Fragmentの選択状態にかかわらずsource Segment作成対象とする。専用端点ハンドルから始まる操作と端点編集contextでは、後述の端点編集規則を適用する。Anchorのhit testを最優先し、1点目のAnchorを選択したときは現在のオブジェクト選択を解除してSegment作成途中状態へ入る。2点目のAnchorを選択するとsource Segmentを作成し、作成途中状態を解除する。
 
 Segment作成途中でない状態で、見えているSegmentをクリックまたはタップすると、そのconcrete `SegmentInstanceRef` を選択する。Segment選択中は、選択中Segment上のIntersection markerをLogicalFragmentより優先してhit testし、Intersection以外の区間をクリックまたはタップするとそのLogicalFragmentを選択する。別Segmentを操作した場合は、そのSegment instanceへ選択を切り替える。
 
@@ -266,7 +271,7 @@ Segment作成途中とオブジェクト選択は同時に保持しない。1点
 preview中の候補行はアウトラインと太字で識別し、候補ラベルへ「確認中」などの状態文言を追加しない。状態文言の追加によるボタン幅や折り返しの変化を避ける。
 
 <!-- test-contract: SPEC-EDITOR-CANDIDATE-PREVIEW -->
-Canvasの複数候補は自動確定せずInspectorへ表示する。候補行のタップはpreviewであり、候補集合とgesture contextを保持したままCanvasで対象を確認し、一覧から別候補へ直接切り替えられる。preview中の行を識別可能にし、独立した「選択」操作で現在のpreviewを確定する。previewがなければ確定できない。Segment / Fragment / Intersectionは通常のselectionへ、Anchorは既存のSegment作成操作へ進む。preview・切替だけではcommandを発行せずCellPatternを変更しない。削除・split・材操作のInspectorは確定後に提供する。一意なCanvas hitとfocus済みAnchorのkeyboard操作は直接操作を維持する。
+Canvasの複数候補は自動確定せずInspectorへ表示する。候補行のタップはpreviewであり、候補集合とgesture contextを保持したままCanvasで対象を確認し、一覧から別候補へ直接切り替えられる。preview中の行を識別可能にし、独立した「選択」操作で現在のpreviewを確定する。previewがなければ確定できない。Segment / Fragment / Intersectionは通常のselectionへ、通常の候補操作のAnchorは既存のSegment作成操作へ進む。preview・切替だけではcommandを発行せずCellPatternを変更しない。削除・split・材操作のInspectorは確定後に提供する。一意なCanvas hitとfocus済みAnchorのkeyboard操作は直接操作を維持する。
 
 オブジェクト選択から候補一覧を開いた後も、選択開始時のSegmentを基準とする交点・FragmentをCanvasから操作できる。preview中に同じ交点や区間を再タップして曖昧な候補を取得した場合は、その候補一覧へ切り替えて旧previewを解除する。候補のpreview・切替はこの操作基準を変えない。取消しや確定で候補操作を終了すると操作基準の保持も終了し、以前のselectionを復元しない。Pattern変更で基準のSegment instanceが消滅した場合は参照を解除し、同じGeometryの別対象へ付け替えない。
 
@@ -301,6 +306,107 @@ Inspectorの表示用ラベルや候補順をCell Patternの永続identityへ持
 
 <!-- test-contract: SPEC-EDITOR-OVERLAP-REJECTION-NOTICE -->
 Segment追加拒否時はCell Editorの近くに「線分が重複するため追加できません」、Symmetry変更拒否時は設定の近くに「線分が重なるため対称変換を変更できません」と短く通知する。確認ダイアログや選択オプションは追加しない。対称変換は種類と必要なパラメータを合わせた完全な変更先（なし／鏡映A／鏡映B／鏡映C／回転）を直接選択する。非mirror状態でも各鏡映軸へ直接変更でき、中間状態や追加の確定操作、有効な軸の自動探索を設けない。設定表示は実際のPatternに一致させ、同じSymmetry設定を再選択しただけでは拒否通知を出さない。
+
+### 6.1 Segment端点編集
+
+#### 6.1.1 操作の基本
+
+<!-- test-contract: SPEC-EDITOR-ENDPOINT-HANDLES -->
+1. Canvasまたは既存の曖昧候補選択からSegment instanceを明示的に選択する。
+2. 選択したinstanceの両端に、通常のAnchorと形状を区別した端点ハンドルを表示する。
+3. ハンドルを直接ドラッグし、移動先Anchorと変更後の形状を確認する。
+4. 有効な移動先で離すと1回の端点変更として確定する。依存する編集情報が失われる等の影響がある場合だけ、確定前に確認する。
+
+長押しは要求しない。未選択のSegment、候補preview中のSegment、Fragment・Intersection選択中には端点ハンドルを出さない。Fragmentの分割境界をsource端点としてドラッグする機能は追加しない。材なしSegmentもDesign GeometryのghostからSegmentとして選択し、端点を編集できる。
+
+同じAnchorを共有する他source Segmentの端点は変更しない。同一sourceの対称展開全体は変更する。共有Anchor自体の座標変更や単一の生成instanceだけの変形とは扱わない。
+
+#### 6.1.2 ハンドルと既存タップ操作
+
+- 選択中Segmentのハンドル領域から始まる操作は端点編集の操作として扱い、背後のAnchorによる新規Segment作成へ落とさない。
+- 一意なハンドルを押して、移動距離の閾値未満で離した場合はSegment選択を維持する。Patternを変更せず、新規Segment作成も開始しない。
+- 閾値を越えた後に開始位置へ戻って離した場合も、通常タップに変換しない。
+- ハンドル以外の場所では既存のCanvas選択・AnchorによるSegment作成を維持する。
+- ハンドルと重なるAnchorから新しいSegmentを作る場合は、背景タップ・Escape・Inspectorの「選択解除」でSegment選択を解除してから操作する。
+- ハンドルは十分なscreen-spaceの操作領域を持ち、表示サイズとhit領域を区別してよい。shape・輪郭・選択表示を用い、色だけで区別しない。
+
+両端のhit領域が重なる短いSegmentでは、pointerdownから一意に端点を決められなければドラッグを開始しない。近さ・DOM順・sourceのstart優先で決めず、Inspectorの端点指定を案内する。選択状態は維持する。
+
+ハンドルの優先によって、短いFragmentや近接Intersection等の操作領域全体が覆われる場合も、操作不能にしない。既存hit resolverの「直接操作可能な領域が残るか」の考え方を利用し、その場合に限りInspectorへ「端点付近の対象を選択」を提示する。そこから覆われた論理対象を既存の候補preview・明示確定へ渡す。通常操作の一覧化やFragmentごとの常設操作ボタンにはしない。Anchorからの新規作成については前述の選択解除を使う。
+
+#### 6.1.3 ドラッグ以外の端点編集
+
+<!-- test-contract: SPEC-EDITOR-ENDPOINT-DESTINATION -->
+Segment Inspectorに「始点を変更」「終点を変更」を置く。選択instanceの描画方向に対応する端点を指し、選ぶとCanvasでその端点を強調し、「移動先の点を選択」状態へ進む。この入口はハンドルが近接する場合、マウス・キーボード操作、ドラッグが難しい場合に共通で使う。
+
+- 移動先Anchorのタップ、またはfocusしたAnchorのEnter / Spaceで指定できる。
+- 一意ならドラッグを離した場合と同じ検証・確定へ進む。
+- 曖昧なら候補preview・明示確定へ進む。
+- この状態でAnchorを指定しても新規Segmentを作らない。
+- Anchor以外のオブジェクトhitは変更先として受け付けない。背景・Escape・「取消し」は端点編集を取り消す。
+- ハンドル自体もfocus可能とし、Enter / Spaceで同じ移動先選択へ進めてよい。キーボード用に重なる通常Anchorを二重の操作対象として残さない。
+
+取消しでは、編集前の選択instanceが現在も存在する限りSegment選択へ戻る。通常の候補選択におけるclearは引き続きidleへ戻る。両者は異なる操作contextであり、既存の候補取消し仕様を全体的に変更しない。
+
+#### 6.1.4 移動先と曖昧性
+
+移動先は現在のEditorのdivision設定から得るVertex / Edge Division Anchorとする。自由座標・IntersectionAnchorは対象外。空間座標を永続化せず、Anchor参照を変更する。
+
+pointer位置からscreen-spaceのsnap領域に入るAnchorを求める。通常のAnchor hitと同じ座標変換・操作領域の考え方を使う。移動先の解決ではSegment / Fragment / Intersectionを候補に混ぜない。
+
+| 候補 | ドラッグ中 | 離した後 |
+| --- | --- | --- |
+| 0件 | 未確定のrubber-bandと移動先未指定を示す | 変更を取り消し、Segment選択へ戻る |
+| 1件・変更可能 | snap先と変更後Patternをpreview | 影響確認が不要なら確定 |
+| 1件・変更不可 | 禁止表示と短い理由。無効Patternは派生計算へ渡さない | 元のPatternを維持し、理由を通知 |
+| 複数件 | 候補点を示し、1件を勝手に確定しない | 端点編集contextを保ってInspectorで選択 |
+
+複数件では近いもの・変更可能なものだけへ自動で絞らない。無効候補も理由を示せるようにする。同じ座標の異なるAnchor identityは勝手に統合しない。pointerを移動して一意になるなら、その候補をpreviewする。snap領域外で無制限に最寄りAnchorへ吸着させない。
+
+離した後の候補行タップはpreviewだけとし、「選択」で移動先を決める。候補が1件へ減った場合にも未選択候補を自動確定しない。既存の候補UIを利用できるが、確定後のcommandは端点変更であり、新規作成のstartAnchor contextと混同しない。
+
+元のAnchorを指定した場合はno-opとしてSegment選択へ戻り、エラーや影響確認を出さない。反対側端点と同じlogical Anchorへの変更は拒否する。
+
+#### 6.1.5 previewと確定
+
+<!-- test-contract: SPEC-EDITOR-ENDPOINT-TRANSACTION -->
+previewの毎回の入力は編集開始時の同じPatternと変更先Anchorである。前回previewのPatternへ次の変更を積み重ねない。
+
+有効候補ではsource family全体と依存情報を更新した最終候補を表示する。Cell Editorでは元の選択instanceを薄く残し、操作中の線分・移動先を強調する。Pattern Previewにも候補のEffective Geometryを一時表示し、「端点変更プレビュー」と示す。これらは表示用の候補であり、Appの確定Patternは変更しない。
+
+無効候補や移動先なしでは確定Patternをそのまま表示し、Editorの補助線だけで指の位置・無効性を示す。自由座標の補助線をSegmentとしてPattern APIへ投入しない。
+
+候補が切り替わるたびに依存削除を含む評価を最初から行うため、一時的に交点を失った候補を通過しても、元へ戻れば依存情報は維持される。pointerの各pixel移動ではなく、候補Anchorや基準Patternが変わった時点で必要なdomain評価を行う。
+
+通常の有効な変更はpointerupまたは移動先明示選択で1回だけ確定する。pointerup時にも現在位置の候補を解決し、最後のpointermoveの古い候補をそのまま採用しない。
+
+#### 6.1.6 影響確認
+
+<!-- test-contract: SPEC-EDITOR-ENDPOINT-IMPACT -->
+次のいずれかが発生する場合に限り、候補を表示したままInspectorに影響と「変更する」「取消し」を提示する。
+
+- 既存SplitRelationを引き継げない、または既存の有向concrete split境界を引き継げない。
+- 既存MaterialExclusionの境界を引き継げず、その指定が解除される。
+- 自己対称性の変化に伴うstabilizer closureによって、写した材なし区間を超える区間も材なしになる。
+
+通常の端点移動に伴う交点座標・区間長の変化、境界順序の入れ替わり、意味を保ったcanonicalization / unionだけでは確認を出さない。確認は「分割が一部解除されます」「材なし区間N件が解除されます」「対称性を保つため材なし区間が広がります」等の利用者向けの短い説明とする。内部transformやrelation keyを判断材料にしない。
+
+分割の有向境界消失を無向IntersectionAnchorの存在だけで判定しない。逆向きのrelationが残っても、target側の分割は失われ得る。件数は単純な配列長の差から求めない。unionで2区間が1区間へ正規化されても、維持された指定を「1件解除」と報告しない。
+
+「取消し」は確定Patternを変更しない。「変更する」は現在の基準が一致することを確認して、同じPattern層の操作を再評価・確定する。確認中のCanvas入力は背景も含めて無視し、通常のCanvas作成・選択を発火させない。取消しボタンまたはEscapeで編集を終了できる。
+
+#### 6.1.7 中断と競合
+
+- Escape、pointercancel、確定前の予期しないcapture喪失、window blur、非表示化、複数pointerによる中断は未確定編集を取り消す。
+- 正常なpointerup後のcapture解放通知で確定を再実行したり、確定済み変更を巻き戻したりしない。
+- 編集中・候補選択中・影響確認中に確定Patternまたはdivision設定が変わったら、その編集を失効させる。古い候補を新しいPatternへ自動適用しない。
+- 外部の変更自体は巻き戻さない。選択維持は現在の論理identityで照合し、消滅していればidleへ戻す。
+- pointer captureや選択抑止はハンドルから始まった操作に限定する。ハンドル以外からのページスクロールを奪わない。ハンドルはpointerdown前からtouch-actionを設定できる実DOM領域を持たせる。
+- touch / mouse / penをPointer Eventsで扱い、primary buttonだけを受け付ける。二重のmouse/touch処理系を作らない。
+- dragに属するpointerup / clickが通常のCanvas hitやAnchor作成として再処理されないよう、gesture単位で消費する。次の独立したタップまで無条件に無視する方式にしない。
+
+開始閾値、snap半径、線幅等の具体値は調整可能な実装パラメータであり、長押し時間や画素数そのものをTest Contractにしない。
+
 
 ## 7. Preview
 

@@ -3,13 +3,13 @@ import { transformCellPoint, triangularGrid } from '../../layout/triangularGrid'
 import type { CellPattern } from '../../pattern/cellPattern'
 import { deriveEffectiveGeometry } from '../../pattern/materialExclusion'
 
-interface PatternPreviewProps { pattern: CellPattern }
+interface PatternPreviewProps { pattern: CellPattern; endpointPreview?: boolean }
 
 const SIDE = 128
 const ROWS = 4
 const COLUMNS = 9
 
-export function PatternPreview({ pattern }: PatternPreviewProps) {
+export function PatternPreview({ pattern, endpointPreview }: PatternPreviewProps) {
   const placements = triangularGrid.generate({ rows: ROWS, columns: COLUMNS, side: SIDE })
   const segments = deriveEffectiveGeometry(pattern)
   const width = (COLUMNS + 1) * SIDE * 0.5
@@ -21,6 +21,7 @@ export function PatternPreview({ pattern }: PatternPreviewProps) {
         <div><span className="eyebrow">03 / 敷き詰め</span><h2 id="preview-title">文様プレビュー</h2></div>
         <span className="preview-meta">三角形グリッド · {ROWS} × {COLUMNS}</span>
       </div>
+      {endpointPreview && <p role="status" className="operation-notice">端点変更プレビュー</p>}
       <div className="preview-stage">
         <svg viewBox={`0 0 ${width} ${height}`} aria-label="三角形グリッドプレビュー">
           {placements.map((placement) => {

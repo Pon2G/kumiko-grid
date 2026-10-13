@@ -40,6 +40,12 @@ export const canvasPointToScreen = (point: Point, viewport: CanvasHitViewport): 
   }
 }
 
+/** 補助線のscreen位置だけをSVG viewBoxへ戻す。自由座標をPattern入力にはしない。 */
+export const screenPointToCanvas = (point: Point, viewport: CanvasHitViewport): Point => {
+  const transform = screenTransform(viewport)
+  return { x: (point.x-transform.offsetX)/transform.scale, y: (point.y-transform.offsetY)/transform.scale }
+}
+
 const distance = (left: Point, right: Point) => Math.hypot(left.x - right.x, left.y - right.y)
 
 const distanceToSegment = (point: Point, start: Point, end: Point): number => {
@@ -131,4 +137,45 @@ export function resolveCanvasHitCandidates(
 
   return hitSegments(context.segments)
     .map(({ instanceRef: segment }) => ({ kind: 'segment' as const, segment }))
+}
+
+/** 端点移動先にはAnchorだけを使い、近さによる候補の削減を行わない。 */
+export const resolveEndpointAnchors = (pointer: Point, anchors: CanvasHitContext['anchors'], viewport: CanvasHitViewport) =>
+  anchors.filter(({ point }) => distance(pointer, canvasPointToScreen(point, viewport)) <= CELL_CANVAS_TAP_RADIUS).map(({ anchor }) => anchor)
+
+export const resolveEndpointHandles = (pointer: Point, handles: Array<{ endpoint: 'start' | 'end'; point: Point }>, viewport: CanvasHitViewport) =>
+  handles.filter(({ point }) => distance(pointer, canvasPointToScreen(point, viewport)) <= CELL_CANVAS_TAP_RADIUS).map(({ endpoint }) => endpoint)
+
+/** ハンドルの追加で直接操作域をすべて失う対象だけを代替入口へ渡す。 */
+export function endpointCoveredTargets(context: CanvasHitContext, handles: Point[], viewport: CanvasHitViewport): CanvasHitCandidate[] {
+  const points = handles.map((point) => canvasPointToScreen(point, viewport))
+  const coveredPoint = (point: Point) => {
+    const center = canvasPointToScreen(point, viewport)
+    const radius = CELL_CANVAS_TAP_RADIUS
+    if (points.some((handle) => distance(handle, center) === 0)) return true
+    const arcs: Array<[number, number]> = []
+    for (const handle of points) {
+      const d = distance(handle, center)
+      if (d > radius * 2) continue
+      const angle = (Math.atan2(handle.y-center.y, handle.x-center.x) + Math.PI*2) % (Math.PI*2)
+      const half = Math.acos(d / (2*radius))
+      const a = angle-half, b = angle+half
+      if (a < 0) arcs.push([0,b], [a+Math.PI*2,Math.PI*2])
+      else if (b > Math.PI*2) arcs.push([a,Math.PI*2], [0,b-Math.PI*2])
+      else arcs.push([a,b])
+    }
+    let until = 0
+    for (const [a,b] of arcs.sort((left,right) => left[0]-right[0])) {
+      if (a > until) return false
+      until = Math.max(until,b)
+    }
+    return until >= Math.PI*2
+  }
+  return [
+    ...context.intersections.filter(({ point }) => coveredPoint(point)).map((candidate) => ({ kind: 'intersection' as const, candidate })),
+    ...context.fragments.filter((fragment) => !hasExclusiveHitRegion(canvasPointToScreen(fragment.start, viewport), canvasPointToScreen(fragment.end, viewport), points, CELL_CANVAS_TAP_RADIUS))
+      .map(({ logicalFragment: fragment }) => ({ kind: 'fragment' as const, fragment })),
+    ...context.segments.filter((segment) => !hasExclusiveHitRegion(canvasPointToScreen(segment.start, viewport), canvasPointToScreen(segment.end, viewport), points, CELL_CANVAS_TAP_RADIUS))
+      .map(({ instanceRef: segment }) => ({ kind: 'segment' as const, segment })),
+  ]
 }

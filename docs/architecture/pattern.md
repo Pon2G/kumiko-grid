@@ -285,7 +285,7 @@ relation移行では、旧target sourceのidentity instanceをtarget、旧relati
 
 Family統合で削除されたsource Segmentは、後からSymmetryを戻しても自動復活させない。CellPatternにhidden source履歴を保持せず、Undo / Redo等の編集履歴はこのcanonical modelとは別責務とする。
 
-将来、Segment端点変更など設計Geometryを変更するPattern操作を追加する場合も、その操作は返却前にSegment Family、SplitRelation、MaterialExclusionの各invariantを回復する責務を持つ。
+Segment端点変更を含め、設計Geometryを変更するPattern操作は返却前にSegment Family、SplitRelation、MaterialExclusionの各invariantを回復する責務を持つ。
 
 状態遷移では、論理identityを維持できる写像が明示的に定義されている場合だけ依存参照を維持する。Segment Family canonicalizationが導出するsource / instance mappingは明示的なlogical mappingであり、SplitRelationやMaterialExclusionのsource-relative参照をcanonical identityへ移すために利用する。
 
@@ -447,3 +447,71 @@ Effective Geometry
 Pattern Preview、将来の加工出力、および新規split候補の交差判定にはEffective Geometryを利用する。一方、既存SplitRelationのinvariant、MaterialExclusion境界の解決、Editorで材を復元するためのLogicalFragment選択にはDesign Geometryを利用する。
 
 この二層を分けることで、exclusionで材が消えたためsplit境界が消滅し、その結果exclusion自身が成立しなくなる循環を避ける。
+
+## Segment端点変更
+
+### 更新の単位とAPI
+
+<!-- test-contract: ARCH-PATTERN-ENDPOINT-CONTINUATION -->
+
+操作の意味は「指定source SegmentIdのstartまたはendを、指定SegmentEndpointAnchorへ変更する」である。SegmentId、反対側端点、他source定義、Symmetryは維持する。sourceのstart / endを並べ直したり、代表sourceを選び直したりしない。
+
+Pattern層は、この変更をatomicに評価するpureな公開操作を持つ。返却結果は少なくとも `unchanged`、`rejected`（理由）、`changed`（新Patternと影響）を区別する。既存のaddSegment / changeSymmetryまで新しい結果型へ一括変更しない。
+
+previewと確定はこの同じ操作を利用する。UIは返却された候補Patternを永続配列単位で組み替えず、確定時だけ完成したPattern全体を採用する。低水準のsetterや、任意の候補Patternを検証なしで適用する公開APIを増やさない。
+
+拒否・no-opでは入力Patternと依存情報を変更しない。存在しないsource、無効なendpoint selector、現在許可していないAnchor種別等をtyped APIの通常入力として扱わない。境界で受け得る不正要求は安全に拒否する。汎用import validatorや既存malformed Patternの修復は対象外。
+
+### 入力制約
+
+次の順に候補定義を検証し、拒否時は依存情報の変更結果を返さない。
+
+1. sourceの存在と変更対象端点を確認する。同じlogical Anchorへの要求はno-op。
+2. start / endのlogical Anchor identityが同一になる変更を拒否する。
+3. 編集対象を除いた他sourceとのFamily重複を拒否する。Family統合、他source削除、ID入れ替えによる救済は行わない。
+4. 候補sourceのcanonical instance同士、および候補instanceと他sourceの全instanceとの有限長overlapを拒否する。
+5. 制約を満たした場合だけ、次節の依存情報更新へ進む。
+
+overlapには#68と同じexpandPattern / intersectSegmentsを利用し、Design側の線分全体を比較する。編集前の自分自身のinstanceを比較対象へ残さない。stabilizerによる論理的自己一致をcanonicalizeした後に比較する。材なし状態を理由に重なりを許可しない。
+
+端点接触・通常の点交差・離れた同一直線上区間・重複しない辺上Segmentは許可する。退化判定を新たなepsilon・最小長・Anchor分数の約分へ拡張しない。現EditorはSegmentがある間division設定を固定しているため、通常の操作候補は同じdivision設定に属する。この前提を緩める機能や異なるAnchor identityが同座標へ解決される退化入力の一般対策は端点編集の責務には含めない。
+
+### SplitRelationの継続規則
+
+端点変更はsourceの定義変更であり、Family代表の交換とは異なる。旧定義と新定義のGeometry一致を要求するbasis mappingを、変形のmappingとして使わない。
+
+既存の各SplitRelationについて、source IDと保存済みのrelativeTransformを継続の基準とする。同じSymmetry上で、target identity instanceとそのrelativeTransformに対応するcutter instanceを新定義へ解決し、新しいcanonical relationへ正規化する。そのorbit全体を新しいDesign Geometryで検証し、有効なら保持し、無効なら削除する。重複するcanonical relationは1件へ正規化する。
+
+この規則は編集対象がtargetでもcutterでも同じである。他sourceをtargetとするrelationも必要に応じて変わる。Effective Geometry上の新規候補を再取得してrelationを作り直さない。材なしになった交点でもDesign Geometryとして有効な既存relationは維持する。新しく交差した相手とのsplitを自動追加しない。
+
+自己対称性が変わる場合も、旧relationの保存済みrelativeTransformを1つの継続要求として扱う。旧stabilizerのため同値だった全raw relativeTransformを列挙して、複数の新relationへ増殖させない。逆に自己一致で同値になるrelationはcanonicalizeする。この継続規則は明示的に採用する仕様であり、移動前と後でconcreteな分割境界の集合が完全に一致するとは限らない。
+
+例えばmirrorでtargetが自己一致し、identityとmirrorのrelativeが同一orbitだった場合、保存済みcanonical relativeがidentityなら、自己一致が解けた後もidentity orbitを継続する。以前target identity上にあったmirror cutterの境界は、継続後のそのtarget上に存在しなければ失われる。別relativeのsplitを補って保存しない。失われる境界と依存する材なし指定は影響確認の対象になる。
+
+1つのorbitの一部だけを残す部分relationは作らない。移動によって分割が解除された後に元のAnchorへ戻しても、解除済みrelationを自動復活させない。未確定previewから元へ戻す場合は、編集開始Patternからの再評価なので失われない。
+
+### MaterialExclusionの継続規則
+
+1. source IDとsourceのstart / end roleを維持する。endpoint boundaryは同じroleへ追従し、元の絶対座標や長さ・割合へ固定しない。
+2. split-boundaryは、旧source identity targetと保存されたcutter transformを同じsource ID・同じSymmetryの新定義へ写し、既存のconcrete boundary正規化を利用する。
+3. 移行後の対応する有向relationと具体的境界が存在する場合だけ境界を保持する。relation keyの存在や無向Anchorの存在だけで通さない。
+4. 両境界を保持でき、既存の区間規則で有効なMaterialExclusionを新Design Geometry上で正規化する。変更後のtarget stabilizerに対しても区間集合を閉じる。
+5. 解決不能な境界に依存するexclusionは丸ごと解除する。近い交点への付け替え、残る側だけへの切詰め、パラメータ比による代替は行わない。
+
+境界の前後関係が逆転しても、同じ論理境界pairの間として解釈する。座標が一致した異なる論理境界を統合しない。ゼロ長LogicalFragmentの扱いは既存規則を維持し、Geometryとしての長さゼロを理由に論理identityを新しく削除する処理を追加しない。両境界が同じlogical boundaryへ収束し有効区間でなくなった場合は解除する。
+
+全体材なしのstart-end指定も端点移動に追従する。既存の区間unionとstabilizer closureを利用し、解除される旧指定の追跡と、union後の配列長を区別する。closureにより写した有効区間のunionを超えて材なしになる場合は、[端点編集の影響確認](../spec.md#616-影響確認)の対象とする。通常の変形で同じ区間の長さが変わるだけなら確認不要。
+
+他sourceの材なし区間でも、編集Segmentをcutterとして境界参照していれば同じ移行・確認の対象になる。依存解除した指定のhidden履歴は保存せず、後から同じ交点が現れても復活させない。
+
+### 影響の計算
+
+影響はPattern層の候補構築と同時に導出し、UIで分割・材の意味を再実装しない。
+
+- 各旧relationから継続先relationを追跡し、存在・orbit validityを確認する。canonical keyの変化だけを削除と数えない。
+- 各旧有向concrete pairのsource ID・保存されていたcanonical transformを新定義でcanonicalizeし、継続先relationのorbitにその有向pairがあるか照合する。ない境界は失われる。これは喪失検出であり、旧pair群から新relationを追加するアルゴリズムには使わない。
+- 新しいstabilizerにより複数pairが同一の有効境界へ写るだけなら、対応は保たれている。新定義で交点が移動したこと自体は喪失ではない。
+- 各旧exclusionが有効な境界pairへ移行できたかを追跡する。正規化で吸収されても解除と数えない。
+- 材なしの拡大は、新Design Geometry上で移行した有効区間のunionと、そのstabilizer closureとの差で判定する。旧座標の線分差分では判定しない。既存の区間演算責務を利用し、UIに別の区間演算を作らない。
+
+候補は常に有効なCellPatternとして返す。segmentsだけを変更して旧依存配列を残した不整合なPatternを、UIや一般のGeometry導出APIへ公開しない。検証用には必要なsegments / symmetryの狭い入力を使い、relation再構成→boundary移行→材正規化の順で完成させる。

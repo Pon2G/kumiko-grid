@@ -310,3 +310,24 @@ export const relationSupportsBoundary = (pattern: CellPattern, segmentId: string
     const relation = materialBoundaryRelation(pattern, segmentId, boundary)
     return relation !== null && pattern.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))
   })()
+
+/** 移行された旧指定を個別に追跡し、unionとstabilizer closureを喪失判定から分離する。 */
+export function normalizeMigratedMaterial(pattern: CellPattern, migrated: Array<MaterialExclusion | null>) {
+  const valid = migrated.filter((item): item is MaterialExclusion => {
+    if (!item) return false
+    const order = sourceBoundaryOrder(pattern, item.segmentId)
+    return order !== null && interval(item, order) !== null
+  })
+  const expanded = [...new Set(valid.map(({ segmentId }) => segmentId))].some((segmentId) => {
+    const order = sourceBoundaryOrder(pattern, segmentId)!
+    const ranges = valid.filter((item) => item.segmentId === segmentId).map((item) => interval(item, order)!)
+    const covered = new Set<number>()
+    for (const [a, b] of ranges) for (let i = a; i < b; i++) covered.add(i)
+    return closeRangesUnderSymmetry(pattern, order, ranges).some(([a, b]) => {
+      for (let i = a; i < b; i++) if (!covered.has(i)) return true
+      return false
+    })
+  })
+  return { pattern: cleanupMaterialExclusions({ ...pattern, materialExclusions: valid }),
+    lostExclusions: migrated.length - valid.length, expanded }
+}

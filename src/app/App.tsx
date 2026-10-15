@@ -1,12 +1,15 @@
-import { useEffect, useState } from 'react'
+import { segmentEndpointAnchorKey } from '../pattern/anchor'
+import { sourceEndpointDestination, endpointSelectionAfterEdit, endpointImpactNeedsConfirmation } from '../pattern/endpointEdit'
+import { useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation, Symmetry } from '../pattern/cellPattern'
 import { splitRelationKey } from '../pattern/designGeometry'
-import { addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from '../pattern/patternOperations'
+import { changeSegmentEndpoint, addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from '../pattern/patternOperations'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {
   idleEditorInteraction,
+  cancelEndpoint, endpointPreviewAnchor,
   reconcileEditorInteraction,
   transitionEditorInteraction,
   type EditorInteraction,
@@ -17,7 +20,7 @@ import { Settings } from '../components/Settings/Settings'
 
 export default function App() {
   const [divisions, setDivisions] = useState(4)
-  const [pattern, setPattern] = useState<CellPattern>({
+  const [pattern, rawSetPattern] = useState<CellPattern>({
     segments: [],
     symmetry: { type: 'rotational' },
     splitRelations: [],
@@ -25,16 +28,57 @@ export default function App() {
   })
   const [segmentNotice, setSegmentNotice] = useState<string>()
   const [symmetryNotice, setSymmetryNotice] = useState<string>()
-  const [interaction, setInteraction] = useState<EditorInteraction>(idleEditorInteraction)
+  const [interaction, rawSetInteraction] = useState<EditorInteraction>(idleEditorInteraction)
+
+  const patternRef = useRef(pattern)
+  const interactionRef = useRef(interaction)
+  const setPattern = (value: SetStateAction<CellPattern>) => {
+    const next = typeof value === 'function' ? value(patternRef.current) : value
+    patternRef.current = next
+    rawSetPattern(next)
+  }
+  const setInteraction = (value: EditorInteraction) => { interactionRef.current = value; rawSetInteraction(value) }
+  const editing = interaction.kind === 'editing-endpoint' && interaction.context.base === pattern && interaction.context.divisions === divisions ? interaction : null
+  const previewAnchor = editing && endpointPreviewAnchor(editing)
+  const previewAnchorKey = previewAnchor ? segmentEndpointAnchorKey(previewAnchor) : null
+  const endpointEvaluation = useMemo(() => {
+    if (!editing || !previewAnchor) return null
+    const anchor = sourceEndpointDestination(editing.context.base, editing.context.instance, previewAnchor)
+    return anchor ? changeSegmentEndpoint(editing.context.base, editing.context.instance.sourceSegmentId, editing.context.endpoint, anchor) : null
+  }, [editing?.context, previewAnchorKey])
+  const previewPattern = endpointEvaluation?.kind === 'changed' ? endpointEvaluation.pattern : null
 
   useEffect(() => {
-    setInteraction(idleEditorInteraction())
+    const current = interactionRef.current
+    setInteraction(current.kind === 'editing-endpoint' ? cancelEndpoint(patternRef.current, current) : idleEditorInteraction())
   }, [divisions])
 
   const handleInteraction = (event: EditorInteractionEvent) => {
     setSegmentNotice(undefined)
-    const transition = transitionEditorInteraction(interaction, event)
+    const transition = transitionEditorInteraction(interactionRef.current, event, { pattern: patternRef.current, divisions })
     setInteraction(transition.interaction)
+    if (transition.command?.kind === 'edit-endpoint') {
+      const { context, anchor: destination, approved } = transition.command
+      const current = patternRef.current
+      if (context.base !== current || context.divisions !== divisions) {
+        if (transition.interaction.kind === 'editing-endpoint') setInteraction(cancelEndpoint(current, transition.interaction))
+        return
+      }
+      const anchor = sourceEndpointDestination(current, context.instance, destination)
+      const result = anchor ? changeSegmentEndpoint(current, context.instance.sourceSegmentId, context.endpoint, anchor) : { kind: 'rejected' as const, reason: '端点の指定が無効です' }
+      if (result.kind === 'changed' && endpointImpactNeedsConfirmation(result.impact) && !approved && transition.interaction.kind === 'editing-endpoint') {
+        setInteraction({ ...transition.interaction, phase: 'confirming', pointer: undefined, position: undefined })
+        return
+      }
+      if (result.kind === 'changed') {
+        const mapping = endpointSelectionAfterEdit(result.pattern, context.instance, context.endpoint)
+        setPattern(result.pattern)
+        setInteraction(mapping ? { kind: 'selected', selection: { kind: 'segment', segment: mapping.instance } } : idleEditorInteraction())
+      } else {
+        setSegmentNotice(result.kind === 'rejected' ? result.reason : undefined)
+        if (transition.interaction.kind === 'editing-endpoint') setInteraction(cancelEndpoint(current, transition.interaction))
+      }
+    }
     if (transition.command?.kind === 'create-segment') {
       const segment: Segment = {
         id: globalThis.crypto.randomUUID(),
@@ -90,6 +134,8 @@ export default function App() {
         />
         <div className="workspace">
           <CellEditor
+            endpointEvaluation={endpointEvaluation}
+            previewPattern={previewPattern}
             notice={segmentNotice}
             divisions={divisions}
             pattern={pattern}
@@ -100,7 +146,7 @@ export default function App() {
             onExcludeMaterial={(fragment) => setPattern((current) => excludeMaterial(current, fragment))}
             onRestoreMaterial={(fragment) => setPattern((current) => restoreMaterial(current, fragment))}
           />
-          <PatternPreview pattern={pattern} />
+          <PatternPreview pattern={previewPattern ?? pattern} endpointPreview={previewPattern !== null} />
         </div>
       </main>
       <footer><span>正規化座標による幾何学設計</span><span>△ ▽ △ ▽ △</span></footer>

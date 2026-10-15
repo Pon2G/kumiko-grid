@@ -1,5 +1,4 @@
-import { intersectSegments } from '../geometry/intersections'
-import type { PointSegment } from '../geometry/segment'
+import { hasOverlap } from './segmentOverlap'
 import { segmentEndpointAnchorKey } from './anchor'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
 import {
@@ -14,13 +13,6 @@ import { cleanupMaterialExclusions, materialBoundaryRelation, normalizeConcreteS
 import { canonicalizeSegmentFamilies, mapCanonicalInstance } from './segmentFamily'
 import type { Segment } from './segment'
 import { expandPattern, segmentFamilyKey, symmetryTransformAlgebra, type SegmentInstanceBasisMapping } from './symmetry'
-
-/** canonical instanceの全線分を比較し、splitや材状態に依存しない入力制約を守る。 */
-function hasOverlap(instances: readonly PointSegment[], existing: readonly PointSegment[] = []): boolean {
-  return instances.some((instance, index) =>
-    existing.some((other) => intersectSegments(instance, other).kind === 'overlap')
-    || instances.slice(index + 1).some((other) => intersectSegments(instance, other).kind === 'overlap'))
-}
 
 /** source Segment追加時点でdefinition / Family invariantを回復する唯一の公開操作。 */
 export function addSegment(pattern: CellPattern, segment: Segment): CellPattern {
@@ -141,3 +133,5 @@ export function changeSymmetry(pattern: CellPattern, symmetry: Symmetry): CellPa
   })
   return cleanupMaterialExclusions({ ...withRelations, materialExclusions })
 }
+
+export { changeSegmentEndpoint } from './endpointEdit'

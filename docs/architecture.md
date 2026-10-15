@@ -50,6 +50,7 @@ src/
     designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
     patternOperations.ts    # Pattern状態遷移とinvariant回復
+    endpointEdit.ts         # atomicな端点変更、継続影響、instance入力mapping
     splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
   layout/
   components/
@@ -174,7 +175,7 @@ Layout固有の配置規則をCell Patternのモデルへ持ち込まない。
 
 ## 7. UIとの境界
 
-Reactはdivision数、Segment作成途中のAnchor、Canvas上の現在選択、一意にhit testできなかった候補集合など一時的な操作状態を所有してよい。一方、CellPatternのSymmetry、SplitRelation、MaterialExclusionを変更するときの正規化・依存削除・不変条件回復はPattern層のドメイン操作へ委譲する。Reactから永続配列を便宜的に直接差し替えて不変条件を迂回しない。SegmentEndpointAnchorはオブジェクト選択中もSegment作成操作として利用可能にし、1点目のAnchor選択時はEditorSelectionを解除してSegment作成途中状態へ移る。
+Reactはdivision数、Segment作成途中のAnchor、Canvas上の現在選択、一意にhit testできなかった候補集合など一時的な操作状態を所有してよい。一方、CellPatternのSymmetry、SplitRelation、MaterialExclusionを変更するときの正規化・依存削除・不変条件回復はPattern層のドメイン操作へ委譲する。Reactから永続配列を便宜的に直接差し替えて不変条件を迂回しない。専用端点ハンドルと端点編集contextを除き、SegmentEndpointAnchorはオブジェクト選択中もSegment作成操作として利用可能にし、1点目のAnchor選択時はEditorSelectionを解除してSegment作成途中状態へ移る。
 
 <!-- test-contract: ARCH-EDITOR-SELECTION-STATE -->
 Cell Editorの選択状態は、永続モデルとは分離した一時状態として少なくとも次の意味を表せる構成とする。
@@ -204,11 +205,11 @@ clear（Inspector取消し・背景・Escape）は候補・preview・gesture con
 interactionの遷移判断はeditorInteractionが担当し、CellEditor / Inspectorは表示と操作の通知を担当する。Appはstate保持と、遷移が返すdomain commandの実行を担当する。遷移処理はpureに保ち、UUID生成・React state更新・Pattern変更を持ち込まない。Segment削除・split・材操作など既存のPattern操作まで同じcommand体系へ統合することは要求しない。
 
 <!-- test-contract: ARCH-EDITOR-HIT-TEST-PRIORITY -->
-Canvasの通常hit testではSegmentEndpointAnchor、選択中target上のIntersection marker、選択中SegmentのFragment、その他Segment、Canvas背景の優先関係を利用してよい。Anchorは現在のEditorSelectionにかかわらずSegment作成対象とする。ただし、この優先関係は曖昧なlogical candidateを必ず1対象へ潰す規則ではない。同一点、完全重複、十分なtap area同士の競合などCanvas上で安定して選び分けられない場合は、logical identityを失わない候補集合をInspectorへ渡す。
+Canvasの通常hit testではSegmentEndpointAnchor、選択中target上のIntersection marker、選択中SegmentのFragment、その他Segment、Canvas背景の優先関係を利用してよい。専用端点ハンドルと端点編集context以外ではAnchorは現在のEditorSelectionにかかわらずSegment作成対象とする。ただし、この優先関係は曖昧なlogical candidateを必ず1対象へ潰す規則ではない。同一点、完全重複、十分なtap area同士の競合などCanvas上で安定して選び分けられない場合は、logical identityを失わない候補集合をInspectorへ渡す。
 
 priorityによって下位のlogical targetがCanvas上の全操作位置から到達不能になってはならない。line targetのGeometry全体が上位point targetのscreen-space hit areaに覆われる場合は、そのline targetも曖昧候補としてInspectorへ渡す。一方、上位hit area外に直接操作可能な領域が残るline targetは通常のpriorityに従い、上位target操作のたびに候補へ混ぜない。到達可能性の具体的な計算法は長寿命なArchitecture contractとしない。
 
-pointer / tapのlogical hit resolutionはCanvas surfaceの1つの入口へ集約する。resolverはpointer位置、現在のAnchor・Intersection・選択中Fragment・Segment instance、およびviewBoxから実画面への変換を受け取り、screen-spaceのtap半径内にある候補を導出する。個別SVG要素のDOM hit testや描画順をlogical targetの決定に利用しない。keyboard操作はfocusされたAnchorが明示済みなので、そのAnchorを直接操作してよい。
+pointer / tapのlogical hit resolutionはCanvas surfaceの1つの入口へ集約する。resolverはpointer位置、現在のAnchor・Intersection・選択中Fragment・Segment instance、およびviewBoxから実画面への変換を受け取り、screen-spaceのtap半径内にある候補を導出する。個別SVG要素のDOM hit testや描画順をlogical targetの決定に利用しない。端点ハンドルも同じscreen-space基準で一意性を解決する。keyboard操作はfocusされたAnchorが明示済みなので、そのAnchorを直接操作してよい。
 
 Cell EditorのSVGは、pattern line、ghost、選択highlight、candidate preview、markerなどの表示Geometryと、pointer位置からlogical candidateを判定する責務を分離する。表示Geometryはpointer eventを受けない。preview用の描画対象とhit resolverへ渡す操作対象は分け、previewを確定済みselectionとして扱わない。候補切替だけでhit対象や優先順位を変えない。previewのGeometry解決には既存のPattern APIを利用する。具体的なDOM構造やmarker形状、透明stroke幅は長寿命な契約にせず、縮小表示時にもresolverが実画面上で十分なtap areaを判定することを契約とする。同一点や近接するAnchorとIntersectionをCanvas上の精密な狙い分けで解決してはならない。
 
@@ -235,6 +236,43 @@ SplitRelation解除により依存MaterialExclusionが連動削除される場�
 - canonical SplitRelation候補とIntersection interaction candidateの導出
 - Cell配置
 - その他の幾何計算
+
+### Segment端点編集の境界
+
+<!-- test-contract: ARCH-EDITOR-ENDPOINT-INSTANCE-MAPPING -->
+選択しているcanonical instanceのtransformをg、表示上の移動先Anchorをaとすると、source端点へ設定する値は `applyToAnchor(inverse(g), a)` で得る。
+
+- 現在のRenderedSegmentのstart / endはsourceの順序を保ってtransformされているため、ハンドルはそのsource endpoint roleを明示的に持つ。左右上下や距離からroleを推測しない。
+- 逆変換・Anchorへの作用は既存symmetry algebraを利用する。Reactやendpoint更新処理へmirror軸・rotation stepsのcase表を追加しない。
+- 指定instanceが現Patternに存在し、開始時に選択したinstance・端点であることを確認する。候補previewから編集対象を決めない。
+- 更新後に選択instanceが自己一致へ収束した場合は、同じsourceとraw transformを新定義でcanonicalizeし、その明示的mapping先を選択する。Geometryが近いinstanceの検索で代用しない。
+- ハンドルのroleを写す際はraw→canonical mappingのdirectionを使う。basis mappingのdirectionと混同しない。source定義自体のstart / endは交換しない。
+
+通常の外部Pattern変更に対する既存reconcileを、消えた選択を自動canonicalizeして別対象へ付け替える仕様に変えない。今回の端点編集成功時だけ、操作結果に基づく明示的な選択移行を行う。
+
+
+既存の排他的EditorInteractionを拡張する。独立したisDragging、selectedEndpoint、pendingConfirmation等の組合せで矛盾状態を作らない。
+
+概念上、次の状態を区別する。型名と分割方法は実装の自由とする。
+
+| 状態 | 必要なcontext | 終了先 |
+| --- | --- | --- |
+| Segment選択 | concrete instance | 既存選択操作、端点操作 |
+| ハンドル押下中 | instance、source endpoint、pointer、開始位置、開始Patternの識別 | 閾値未満なら選択維持、越えたらdrag |
+| 端点drag中 | 同じ編集context、pointer位置・移動先候補 | 取消し、候補選択、影響確認、確定 |
+| 移動先指定中 | 同じ編集context、Anchor候補とpreview identity | 取消し、影響確認、確定 |
+| 影響確認中 | 同じ編集context、変更要求、影響 | 取消し、再評価して確定 |
+
+移動先指定中の単一Anchor入力と曖昧候補選択は同じ端点編集contextに属する。通常のchoosing-targetと部品を共有してよいが、通常作成のstartAnchor、候補preview中の対象、編集対象を取り違えない。
+
+CellEditorはDOM座標・pointer capture等を扱う薄いadapterと表示を担当する。screen-space hit判定はpure helperに置き、意味のあるinteraction遷移はeditorInteraction側に置く。Pattern APIの評価・確定とstate所有はAppが担当する。pureなinteraction遷移へUUID生成、React setter、DOM、Patternの配列変更を持ち込まない。
+
+開始Patternの識別はAppのimmutableなPattern参照、または一時revisionで行えばよい。永続スキーマにrevisionを追加しない。編集中はlive Patternの複製を独立した第二の正本として保持しない。必要な基準への参照・候補・派生表示は一時情報として扱い、previewごとにreferenceが変わることを「外部Pattern変更」と誤判定しない。
+
+UIからの確定要求はsource endpointと移動先Anchor、および編集contextの検証に必要な情報を持つ。任意のnextPatternをevent payloadとして送り込み、検証を迂回できる境界にしない。Appは開始基準の一致を確認してPattern操作を評価し、成功した完成Patternを一度だけ採用する。
+
+将来のUndo / Redoでは、この成功時の1回のPattern置換を1操作として記録できるようにする。Undo / Redoや汎用transaction / gesture frameworkはこの端点編集の責務に含めない。
+
 
 ## 8. 派生Geometry
 

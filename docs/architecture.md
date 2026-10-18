@@ -44,12 +44,16 @@ src/
   pattern/
     anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
-    symmetry.ts            # logical Anchorを含むSymmetry transform algebra、派生Segment展開
+    transformAlgebra.ts    # Symmetry algebraとraw logical作用
+    sourceGeometry.ts      # DAG順のsource解決、logical canonicalization、instance展開
+    symmetry.ts            # 既存呼出し元向けの再export
     segmentFamily.ts       # Segment Family canonicalization、instance basis mapping
     intersectionAnchor.ts  # concrete instance pairのcanonical identity
     designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
     patternOperations.ts    # Pattern状態遷移とinvariant回復
+    endpointDependencies.ts # 端点依存の継続と全体検証
+    endpointCandidates.ts   # Effective基準の新規端点候補
     endpointEdit.ts         # atomicな端点変更、継続影響、instance入力mapping
     splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
   layout/
@@ -69,7 +73,7 @@ Anchorやsource Segmentの型はPatternの論理モデルに置き、Patternか�
 
 Pattern内部では、Symmetryの離散transformに関する列挙・合成・逆変換・相対化、logical Anchor作用、Geometry適用を `symmetry` の責務へ集約し、`segmentFamily`、`designGeometry`、`materialExclusion`、`patternOperations`、`splitCandidates` がSymmetry種別ごとの分岐を個別に持たない。`symmetry` はGeometry層のpureな回転・鏡映primitiveを利用してよいが、Geometry層へPatternのSymmetry型やlogical identityを持ち込まない。
 
-その上で依存方向は `symmetry` → `segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。この依存方向を逆転させたり循環させたりしない。
+その上で依存方向は `instanceKey / anchor` → `transformAlgebra` → `sourceGeometry / segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / endpointEdit / endpointCandidates / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 
@@ -286,7 +290,7 @@ UIからの確定要求はsource endpointと移動先Anchor、および編集con
 
 交点座標とSegment parameterは保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。IntersectionAnchorは座標そのものではなくconcrete SegmentInstanceRef pairを参照する論理identityであり、Geometry上の交点とは区別する。Layout層はsplitの意味論や交差計算を扱わない。
 
-Design Geometry / IntersectionAnchorは、source Segment、Symmetry、既存SplitRelationから解決する設計上の論理境界である。MaterialExclusionの境界解決とEditor上のLogicalFragment選択はDesign Geometryを利用し、exclusion自身を適用した結果によってDesign IntersectionAnchorを自動消滅させない。
+Design Geometryのsplit境界はsource Segment、Symmetry、既存SplitRelationから解決する。一般の交点端点はsource定義とSymmetryだけから解決し、split境界の存在条件と分離する。MaterialExclusionの境界解決とEditor上のLogicalFragment選択はDesign Geometryを利用し、exclusion自身を適用した結果によってDesign IntersectionAnchorを自動消滅させない。
 
 Effective GeometryはMaterialExclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。
 

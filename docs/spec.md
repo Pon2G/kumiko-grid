@@ -33,7 +33,7 @@ Anchorは、Cell Pattern内の論理的な点を表す参照であり、座標�
 - Edge Division Point
 - IntersectionAnchor
 
-source Segmentをユーザーが新規作成するときの端点として現在選択できるのはVertexとEdge Division Pointだけとする。IntersectionAnchorをsource Segmentの端点として利用する機能は現在の操作には含めない。
+source Segmentの新規作成・端点変更ではVertex、Edge Division Point、IntersectionAnchorを指定できる。交点端点の選択・追従・喪失は[交点端点](#交点端点)に従う。
 
 ### 3.1 Vertex
 
@@ -67,7 +67,7 @@ Geometry上で同じ座標に複数の異なるIntersectionAnchorが存在して
 
 Cell Patternは複数の `Segment` から構成される。
 
-最低限、Segmentは安定したIDと始点・終点のAnchor参照を持つ。現在ユーザーが作成するsource Segmentの端点はVertexまたはEdge Division Pointとする。
+最低限、Segmentは安定したIDと始点・終点のAnchor参照を持つ。source Segmentの端点はVertex、Edge Division PointまたはIntersectionAnchorとする。
 
 現在、Segment同士の交差やsplitによってsource Segment定義そのものを破壊的に変更しない。
 
@@ -97,7 +97,7 @@ source＋Symmetryから得られる異なるcanonical concrete Segment instance�
 ### Segment端点変更
 
 <!-- test-contract: SPEC-PATTERN-ENDPOINT-UPDATE -->
-source Segmentの端点変更は安定したSegmentId、反対側端点、他source定義、Symmetryを維持する。元のlogical Anchorへの変更はno-opとする。同一端点、他sourceとのFamily重複、Design側の有限長overlapをatomicに拒否し、入力と依存情報を変更しない。自己一致をcanonicalizeしてから候補instance同士と他source全instanceを比較し、編集前の自分自身は比較対象にしない。端点接触・点交差・重複しない辺上Segmentを許可する。不正なsource・端点selector・許可されないAnchorの境界入力は安全に拒否する。
+source Segmentの端点変更は安定したSegmentId、反対側端点、他sourceの安定IDと論理参照、Symmetryを維持する。参照喪失時の連鎖削除は交点端点の規則に従う。元のlogical Anchorへの変更はno-opとする。同一端点、他sourceとのFamily重複、Design側の有限長overlapをatomicに拒否し、入力と依存情報を変更しない。自己一致をcanonicalizeしてから候補instance同士と他source全instanceを比較し、編集前の自分自身は比較対象にしない。端点接触・点交差・重複しない辺上Segmentを許可する。不正なsource・端点selector・許可されないAnchorの境界入力は安全に拒否する。
 
 ## 5. Cell Pattern
 
@@ -146,7 +146,7 @@ relationから導出されるcanonical concrete pair orbitの**すべての具�
 <!-- test-contract: SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION -->
 有効なSplitRelationをSymmetry orbitへ展開した各concrete target/cutter pairからIntersectionAnchorを導出する。1つのSplitRelationから複数のIntersectionAnchorが得られ得る。逆向きSplitRelationが同じconcrete pairを参照する場合、IntersectionAnchor自体は同じものを共有し、どちらのSegment instance上のsplit境界として使われるかだけがrelationのtargetによって異なる。
 
-IntersectionAnchorをSplitRelationとは独立した一覧として二重管理しない。IntersectionAnchorは、現在有効なSplitRelation orbitのconcrete pairから少なくとも1件導出される間だけ現在の論理状態に存在する。同じIntersectionAnchorを逆向きrelationなど複数のrelationが支えてよく、そのうち1件を解除しても別relationから導出される間はAnchor自体が残る。どのrelationからも導出されなくなれば消滅する。交点座標とSegment parameterはIntersectionAnchorをGeometryへ解決した結果であり、Anchorのidentityではない。
+IntersectionAnchorをSplitRelationとは独立した一覧として二重管理しない。split由来のAnchor集合には、現在有効なSplitRelation orbitのconcrete pairから少なくとも1件導出されるAnchorだけを含める。一般の交点端点の存在はsplitに依存しない。同じIntersectionAnchorを逆向きrelationなど複数のrelationが支えてよく、そのうち1件を解除しても別relationから導出される間はAnchor自体が残る。どのrelationからも導出されなくなればsplit由来の集合から除く。交点座標とSegment parameterはIntersectionAnchorをGeometryへ解決した結果であり、Anchorのidentityではない。
 
 <!-- test-contract: SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES -->
 split後のFragmentは、1つのSegment instance上で現在隣接している2つの論理境界に挟まれた区間として導出する。論理境界にはSegment instanceの端点と、そのinstanceをtargetとするSplitRelationから導出されたIntersectionAnchorを用いる。
@@ -171,9 +171,9 @@ source統合によりtarget / cutterの代表が変わる場合は、旧target i
 <!-- test-contract: SPEC-PATTERN-LOGICAL-DEPENDENCY-CLEANUP -->
 Segment削除やSymmetry変更などで論理identityが変化するとき、Pattern状態遷移が明示的なlogical mappingを定義できる参照は、そのmappingを通して新しいcanonical identityへ移行してよい。Segment Family統合による旧source → representative sourceのinstance mappingはこの明示的なmappingに含む。
 
-mappingを定義できずSegment instanceが消滅する場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。SplitRelation解除によって、あるIntersectionAnchorを導出するrelationがなくなった場合も同様に消滅する。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
+mappingを定義できずSegment instanceが消滅する場合、そのinstanceを参照していたIntersectionAnchorも現在の論理状態から消滅する。SplitRelation解除によって失われるのは対応する有向split境界であり、端点参照は消滅しない。論理的な参照先が失われた下位データを保持し続けず、依存関係に従って整合的に除去する。
 
-一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。元の2つのSegment instanceが交差し続けていても、現在有効なSplitRelationまたは明示的な状態遷移mappingから導出されなければ旧IntersectionAnchorを解決可能な論理Anchorとして扱わない。
+一度消滅した論理参照を、後からGeometry上で同じ位置・形状の要素が現れたことだけを理由に自動で別identityへ付け替えたり復活させたりしない。元の2つのSegment instanceが交差し続けていても、有向SplitRelationのない境界を材指定やFragmentの境界として扱わない。一般の交点端点はDesign線分のpairから解決する。
 
 
 ### 5.3 Material Exclusion
@@ -350,9 +350,9 @@ Segment Inspectorに「始点を変更」「終点を変更」を置く。選択
 
 #### 6.1.4 移動先と曖昧性
 
-移動先は現在のEditorのdivision設定から得るVertex / Edge Division Anchorとする。自由座標・IntersectionAnchorは対象外。空間座標を永続化せず、Anchor参照を変更する。
+移動先は現在のEditorのdivision設定から得るVertex / Edge Division Anchorと、Effective Geometryに材がある交点Anchorとする。自由座標は対象外。空間座標を永続化せず、Anchor参照を変更する。
 
-pointer位置からscreen-spaceのsnap領域に入るAnchorを求める。通常のAnchor hitと同じ座標変換・操作領域の考え方を使う。移動先の解決ではSegment / Fragment / Intersectionを候補に混ぜない。
+pointer位置からscreen-spaceのsnap領域に入るAnchorを求める。通常のAnchor hitと同じ座標変換・操作領域の考え方を使う。移動先の解決ではSegment / Fragment / 分割操作用の有向Intersection candidateを候補に混ぜない。
 
 | 候補 | ドラッグ中 | 離した後 |
 | --- | --- | --- |
@@ -385,6 +385,7 @@ previewの毎回の入力は編集開始時の同じPatternと変更先Anchorで
 <!-- test-contract: SPEC-EDITOR-ENDPOINT-IMPACT -->
 次のいずれかが発生する場合に限り、候補を表示したままInspectorに影響と「変更する」「取消し」を提示する。
 
+- 端点参照喪失によって依存sourceが連鎖削除される。
 - 既存SplitRelationを引き継げない、または既存の有向concrete split境界を引き継げない。
 - 既存MaterialExclusionの境界を引き継げず、その指定が解除される。
 - 自己対称性の変化に伴うstabilizer closureによって、写した材なし区間を超える区間も材なしになる。
@@ -440,3 +441,81 @@ PCではSettings、Cell Editor、Pattern Previewを同時に確認しやすい�
 現在存在しない機能、追加する可能性がある機能、実装するか未定のアイデアはGitHub Issueへ記録する。
 
 将来候補の存在が現在のアーキテクチャ判断へ影響する場合でも、候補一覧をこの文書へ複製せず、`design-context` ラベル付きIssueと `docs/architecture.md` の設計原則で扱う。
+
+## 交点端点
+
+<!-- test-contract: SPEC-ANCHOR-INTERSECTION-ENDPOINT -->
+### 1 交点の意味と指定可能範囲
+
+- 端点は既存 `IntersectionAnchor = unordered pair<SegmentInstanceRef>` を保持する。座標コピー、独立Anchor ID、独立registry、SplitRelation IDを導入しない。
+- 異なるcanonical concrete instanceの有限線分同士に `cross` または `touch` があるとき、そのpairの交点は解決可能。両端点同士のtouchも許可する。同一instance pair、none、overlapは交点端点にできない。
+- 同じsourceの異なる対称instanceの交点も、別sourceの端点から参照できる。参照するsource自身のinstanceを含むpairは循環規則により禁止する。
+- 未splitの交点も選べる。端点利用でsplitを暗黙追加しない。端点を接続しても参照元のFragmentは増えない。材操作のための分割は従来どおり明示操作する。
+- 同一点の異なるpair、Vertex / Edge Divisionと同座標のIntersectionは別identityであり、候補を座標で統合しない。
+
+<!-- test-contract: SPEC-ANCHOR-INTERSECTION-ENDPOINT-MATERIAL -->
+新規に端点として選択できる交点は、現在のEffective Geometryで双方に材が存在する点とする。Fragmentの端点も材あり集合に含める。split追加と違い、targetの材あり区間の「内部」である必要はない。有向targetやsplit orbitの追加可否は端点候補の条件にしない。
+
+選択後の既存端点の有効性・追従はDesign側の線分全体で判定する。後から参照点の材を消しても接続は解除しない。材を戻せば未使用交点は再び選択可能だが、削除済みsourceを復活させない。これにより#31の新規操作のEffective基準を維持し、材と参照解決の循環を避ける。
+
+Pattern APIも、新規追加・端点の新しい参照指定時に上記の選択条件を入力Pattern上で検証する。既存端点の継続・移行ではEffective条件を再適用しない。同じlogical端点への変更は材なしでもno-opとする。候補の表示済みフラグを信用せず現在の入力Patternで再判定する。
+
+<!-- test-contract: SPEC-PATTERN-ENDPOINT-DEPENDENCY-LIFECYCLE -->
+### 2 依存・追従・消滅
+
+`S.start = intersection(A@g, B@h)` はsource SがAとBに依存することを意味する。参照方向は「利用するsource → 参照されるsource」。両端点分の参照を集めたsource graphはDAGでなければならない。AとBが同一sourceなら依存辺は1本でよい。
+
+- 直接自己参照、複数sourceを通る間接循環を拒否する。Symmetry transformや材なしで依存を回避しない。
+- 依存先を先に解決し、source配列順に依存せず有限にGeometryを導出する。
+- 参照元の端点移動に伴い交点が移動した場合、同じpairへ追従する。移動が下位sourceへ連鎖することを許可する。
+- 参照元source削除、交差消失、instance移行不能、pairが同一instanceへ収束した場合、その交点を端点に持つ既存sourceを丸ごと削除し、下位依存へ連鎖する。半分のSegmentや未解決端点は保持しない。
+- split解除では端点依存を削除しない。既存のsplit-boundaryに依存する材指定の解除は従来どおり。
+- 削除済みsource、relation、材指定のhidden履歴は持たず、Geometryの再出現による自動復活を行わない。
+
+新規入力の不正と既存参照の喪失は区別する。新規指定が無効、循環する、または要求した編集source自身が候補結果に残れない場合は拒否する。要求sourceを消して「編集成功」にしない。
+
+### 3 拒否と連鎖削除の区別
+
+| 候補状態 | 結果 |
+| --- | --- |
+| 新規指定の参照なし・不正transform・選択不可・自己/間接循環 | 操作全体を拒否 |
+| 編集後も同じpairの交点が存在し移動する | 依存sourceを追従 |
+| 既存参照が消滅・移行不能 | 依存sourceを連鎖削除する候補を作り、UIで影響確認 |
+| 解決可能な生存sourceが両端同点に退化 | 操作全体を拒否。退化sourceを自動削除して救済しない |
+| 生存source / canonical instanceに有限長overlap | 操作全体を拒否。材の有無で例外化しない |
+| 端点編集により生存sourceのFamily重複が発生（下位source同士を含む） | 操作全体を拒否。編集ではFamily統合しない |
+| Symmetry変更によりFamilyが一致 | 既存方針どおりlogical mappingで統合。その後に全体検証 |
+
+退化については、現在の「同一logical端点拒否」を維持し、異なるidentityの両端がGeometry上で同点となる入力・依存移動も拒否する。Geometryの既存 `pointsAreClose` を正規化Cell座標の数値解像度判定として再利用する。新たなepsilonやユーザー向け最小部材長は導入しない。これはidentity統合ではない。非退化を確認してから `intersectSegments` へ渡す。
+
+拒否時には入力Pattern（source、relation、材指定、Symmetry）を全て維持する。候補で行った連鎖削除・Family統合も適用しない。
+
+<!-- test-contract: SPEC-EDITOR-INTERSECTION-ENDPOINT-INTERACTION -->
+### 4 操作と表示
+
+通常のAnchor操作を拡張する。交点専用の編集モードやsplit必須手順は増やさない。
+
+| 状態 | 交点での操作 |
+| --- | --- |
+| idle / 通常selection | 交点Anchorを選ぶと新規Segmentの始点指定へ進む |
+| Segment作成途中 | 交点Anchorを終点にできる。曖昧候補でも始点contextを維持 |
+| 端点ハンドルdrag / Inspector端点変更 | 交点Anchorを変更先候補に含める。既存の一意候補確定・曖昧候補previewを維持 |
+| 選択targetのsplit操作 | 従来の有向Intersection candidateを維持する |
+
+作成用の無向交点Anchorと、split操作用の有向Intersection candidateは異なる用途。両方がhitする場合は一方を優先して隠さず、Inspectorに「端点として使う交点」と「分割を操作する交点」を区別して提示し、既存preview・明示選択で決定する。作成途中・端点変更中は端点候補を使い、split操作に意図せず遷移させない。従来のVertex / Edge Division操作と、上位markerに覆われる短いSegment / Fragmentへの到達可能性を維持する。
+
+交点Anchor候補は選択targetに限定せずPatternから導出する。同じpairを逆順で二重表示しない。previewでは交点と構成する2つのconcrete instanceを強調し、端点変更では依存sourceを含む候補Geometryも表示する。無効な移動先の確定はPattern層で拒否し理由を表示する。循環等を防ぐためUI独自のGeometry検証を作らない。
+
+keyboardで交点Anchorと曖昧候補へ到達し、選択・確定・取消しできる。hoverや精密tapを必須にしない。既存ハンドルのpointer capture / touch-actionを維持する。
+
+<!-- test-contract: SPEC-EDITOR-ENDPOINT-DEPENDENCY-CONFIRMATION -->
+### 5 影響確認・取消し・古い候補
+
+- 端点編集では既存の分割・境界・材指定喪失と材なし拡大に、連鎖削除されるsource件数を加える。
+- source削除・Symmetry変更でも、端点依存によるsource喪失がある場合は、同じPattern評価から得たsource・分割・材の影響をInspectorに表示して確認する。追加依存喪失がない既存操作へ一律に確認を増やさない。
+- Family統合で代表へ移行できたsourceは「参照消失による削除」に数えない。要求したsource削除と追加の連鎖削除を区別する。材unionによる配列件数減を喪失扱いしない。
+- 確認中は元Patternを保持する。承認時に元Patternの一致を確かめ、同じ要求を再評価して一度だけ採用する。取消しは変更なし。
+- 端点編集のpreview・hit候補は開始Patternを基準とし、候補Patternを次の評価基準にしない。preview中に消える依存sourceや交点を候補導出の基準へ逆流させない。
+- 編集/影響確認中に外部Patternが変更されたら中断する。古い承認を新Patternへ適用しない。
+- 通常の作成途中は始点Intersectionを現在Patternで再照合する。消滅したら作成contextを破棄。存続なら同じidentityの現在座標へ更新し、終点確定時に新規操作条件も再検証する。
+- 曖昧候補の消滅は既存reconcile方針（previewだけ解除、残る候補維持、1件になっても自動確定しない）を維持する。別pairへ座標で付け替えない。

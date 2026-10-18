@@ -369,6 +369,10 @@ describe('Cell Editor直接操作', () => {
     render(<Harness />)
     pointerAtSegment(basePattern(), 'A')
     pointerAt(getIntersectionInteractionCandidates(basePattern(), { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
+    if (screen.queryByLabelText('選択対象インスペクター')) {
+      await user.click(screen.getByRole('button', { name: /分割を操作する交点:/ }))
+      await user.click(screen.getByRole('button', { name: '選択' }))
+    }
 
     expect(screen.getByLabelText('線分 2').getAttribute('aria-current')).toBe('true')
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('target: Segment 1 / 元の位置')
@@ -388,11 +392,11 @@ describe('Cell Editor直接操作', () => {
     pointerAt(resolveSegmentEndpoint({ kind: 'edge-division', edge: 'AB', divisions: 4, index: 2 }))
     expect(screen.getByLabelText('選択対象インスペクター')).toBeTruthy()
     expect(screen.getByText('選択対象を選択')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: /Intersection:/ }))
+    await user.click(screen.getByRole('button', { name: /分割を操作する交点:/ }))
     await user.click(screen.getByRole('button', { name: '選択' }))
     expect(screen.getByLabelText('Intersectionインスペクター')).toBeTruthy()
     pointerAt(resolveSegmentEndpoint({ kind: 'edge-division', edge: 'AB', divisions: 4, index: 2 }))
-    await user.click(screen.getByRole('button', { name: /Anchor:/ }))
+    await user.click(screen.getByRole('button', { name: /Anchor: AB辺/ }))
     await user.click(screen.getByRole('button', { name: '選択' }))
     expect(screen.getByText('終点を選択')).toBeTruthy()
   })
@@ -403,11 +407,11 @@ describe('Cell Editor直接操作', () => {
     const pattern = { ...basePattern(), segments: [target, cutter, colocatedCutter] }
     pointerAtSegment(pattern, 'A')
     pointerAt(getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
-    await user.click(screen.getByRole('button', { name: 'Intersection: Segment 2 / 元の位置' }))
+    await user.click(screen.getByRole('button', { name: '分割を操作する交点: Segment 2 / 元の位置' }))
     await user.click(screen.getByRole('button', { name: '選択' }))
     expect(screen.getByLabelText('線分 2').getAttribute('aria-current')).toBe('true')
     pointerAt(getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
-    await user.click(screen.getByRole('button', { name: 'Intersection: Segment 3 / 元の位置' }))
+    await user.click(screen.getByRole('button', { name: '分割を操作する交点: Segment 3 / 元の位置' }))
     await user.click(screen.getByRole('button', { name: '選択' }))
     expect(screen.getByLabelText('線分 3').getAttribute('aria-current')).toBe('true')
   })
@@ -470,6 +474,10 @@ describe('Cell Editor直接操作', () => {
     render(<Harness initial={initial} />)
     pointerAtSegment(initial, 'A')
     pointerAt(getIntersectionInteractionCandidates(initial, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
+    if (screen.queryByLabelText('選択対象インスペクター')) {
+      await user.click(screen.getByRole('button', { name: /分割を操作する交点:/ }))
+      await user.click(screen.getByRole('button', { name: '選択' }))
+    }
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('解除すると依存する材なし区間1件も解除されます')
     await user.click(screen.getByRole('button', { name: '分割を解除' }))
     expect(confirm).toHaveBeenCalledOnce()
@@ -486,6 +494,10 @@ describe('Cell Editor直接操作', () => {
     const split = { ...basePattern(), splitRelations: [relation] }
     pointerAtSegment(split, 'A')
     pointerAt(getIntersectionInteractionCandidates(split, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
+    if (screen.queryByLabelText('選択対象インスペクター')) {
+      await user.click(screen.getByRole('button', { name: /分割を操作する交点:/ }))
+      await user.click(screen.getByRole('button', { name: '選択' }))
+    }
     await user.click(screen.getByRole('button', { name: '分割を解除' }))
     expect(confirm).not.toHaveBeenCalled()
     expect(screen.getByLabelText('Intersectionインスペクター').textContent).toContain('未分割')
@@ -667,25 +679,25 @@ describe('候補previewと明示確定', () => {
     pointerAtSegment(pattern, 'A')
     pointerAt(getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
     expect((screen.getByRole('button', { name: '選択' }) as HTMLButtonElement).disabled).toBe(true)
-    const first = screen.getByRole('button', { name: 'Intersection: Segment 2 / 元の位置' })
-    const second = screen.getByRole('button', { name: 'Intersection: Segment 3 / 元の位置' })
+    const first = screen.getByRole('button', { name: '分割を操作する交点: Segment 2 / 元の位置' })
+    const second = screen.getByRole('button', { name: '分割を操作する交点: Segment 3 / 元の位置' })
     await user.click(first)
     expect(first.getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('img', { name: 'Intersection: Segment 2 / 元の位置のプレビュー' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: '分割を操作する交点: Segment 2 / 元の位置のプレビュー' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '分割を追加' })).toBeNull()
     await user.click(second)
     expect(first.getAttribute('aria-pressed')).toBe('false')
     expect(second.getAttribute('aria-pressed')).toBe('true')
-    const preview = screen.getByRole('img', { name: 'Intersection: Segment 3 / 元の位置のプレビュー' })
+    const preview = screen.getByRole('img', { name: '分割を操作する交点: Segment 3 / 元の位置のプレビュー' })
     const lines = [...preview.querySelectorAll('line')]
     const instances = expandPattern(pattern).filter(({ sourceId }) => sourceId === 'A' || sourceId === 'C')
     expect(lines.map((line) => [line.getAttribute('x1'), line.getAttribute('y1'), line.getAttribute('x2'), line.getAttribute('y2')]))
       .toEqual(instances.map(({ start, end }) => [start.x, start.y, end.x, end.y].map((value) => String(CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE))))
     expect(onPatternChange).toHaveBeenCalledTimes(1)
     // 再タップによる候補置換を繰り返しても、最初の操作基準を失わない。
-    for (const name of ['Intersection: Segment 2 / 元の位置', 'Intersection: Segment 3 / 元の位置']) {
+    for (const name of ['分割を操作する交点: Segment 2 / 元の位置', '分割を操作する交点: Segment 3 / 元の位置']) {
       pointerAt(getIntersectionInteractionCandidates(pattern, { sourceSegmentId: 'A', transform: { type: 'identity' } })[0].point)
-      expect(screen.getAllByRole('button', { name: /^Intersection:/ })).toHaveLength(2)
+      expect(screen.getAllByRole('button', { name: /^分割を操作する交点:/ })).toHaveLength(2)
       expect(screen.queryByRole('img', { name: /のプレビュー/ })).toBeNull()
       expect((screen.getByRole('button', { name: '選択' }) as HTMLButtonElement).disabled).toBe(true)
       await user.click(screen.getByRole('button', { name }))

@@ -8,11 +8,11 @@ import {
 } from './intersectionAnchor'
 import { resolveSegment, type Segment } from './segment'
 import {
-  deriveIntersectionAnchors,
+  deriveSplitIntersectionAnchors,
   deriveLogicalFragments,
   derivePatternGeometry,
   deriveSegmentSplitBoundaries,
-  resolveIntersectionAnchor,
+  resolveSplitIntersectionAnchor,
   resolveLogicalFragment,
 } from './designGeometry'
 import {
@@ -77,7 +77,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
       splitRelations: [relation('A', 'B')],
     }
 
-    expect(deriveIntersectionAnchors(pattern)).toHaveLength(3)
+    expect(deriveSplitIntersectionAnchors(pattern)).toHaveLength(3)
   })
 
   contractTest({ contract: 'SPEC-PATTERN-INTERSECTION-ANCHOR-DERIVATION' }, '逆向きrelationは同じconcrete pairのAnchorを共有する', () => {
@@ -88,7 +88,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
       splitRelations: [relation('A', 'B'), relation('B', 'A')],
     }
 
-    expect(deriveIntersectionAnchors(pattern)).toHaveLength(1)
+    expect(deriveSplitIntersectionAnchors(pattern)).toHaveLength(1)
   })
 
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '双方向relationの片方を解除するとAnchorを残して解除方向のtarget境界だけを失う', () => {
@@ -100,18 +100,18 @@ describe('IntersectionAnchorと論理Fragment', () => {
       symmetry: { type: 'none' },
       splitRelations: [aToB, bToA],
     }
-    const anchor = deriveIntersectionAnchors(bidirectional)[0]
+    const anchor = deriveSplitIntersectionAnchors(bidirectional)[0]
     const bidirectionalBoundaries = deriveSegmentSplitBoundaries(bidirectional)
     const staleBFragments = deriveLogicalFragments(bidirectional)
       .filter(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')
     const oneWay = removeSplitRelation(bidirectional, bToA)
     const boundaries = deriveSegmentSplitBoundaries(oneWay)
 
-    expect(deriveIntersectionAnchors(bidirectional)).toHaveLength(1)
+    expect(deriveSplitIntersectionAnchors(bidirectional)).toHaveLength(1)
     expect(bidirectionalBoundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(true)
     expect(bidirectionalBoundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(true)
-    expect(deriveIntersectionAnchors(oneWay)).toEqual([anchor])
-    expect(resolveIntersectionAnchor(oneWay, anchor)).not.toBeNull()
+    expect(deriveSplitIntersectionAnchors(oneWay)).toEqual([anchor])
+    expect(resolveSplitIntersectionAnchor(oneWay, anchor)).not.toBeNull()
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(true)
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(false)
     expect(staleBFragments.every((fragment) => resolveLogicalFragment(oneWay, fragment) === null)).toBe(true)
@@ -125,12 +125,12 @@ describe('IntersectionAnchorと論理Fragment', () => {
       symmetry: { type: 'none' },
       splitRelations: [aToB],
     }
-    const anchor = deriveIntersectionAnchors(withRelation)[0]
+    const anchor = deriveSplitIntersectionAnchors(withRelation)[0]
     const withoutRelation = removeSplitRelation(withRelation, aToB)
 
     expect(intersectSegments(resolveSegment(target), resolveSegment(cutterB)).kind).toBe('cross')
-    expect(deriveIntersectionAnchors(withoutRelation)).toEqual([])
-    expect(resolveIntersectionAnchor(withoutRelation, anchor)).toBeNull()
+    expect(deriveSplitIntersectionAnchors(withoutRelation)).toEqual([])
+    expect(resolveSplitIntersectionAnchor(withoutRelation, anchor)).toBeNull()
   })
 
   contractTest({ contract: 'SPEC-PATTERN-FRAGMENT-LOGICAL-BOUNDARIES' }, '逆向きrelationだけならAnchorは存在しB側境界だけが有効になる', () => {
@@ -140,10 +140,10 @@ describe('IntersectionAnchorと論理Fragment', () => {
       symmetry: { type: 'none' },
       splitRelations: [relation('B', 'A')],
     }
-    const anchor = deriveIntersectionAnchors(reverseOnly)[0]
+    const anchor = deriveSplitIntersectionAnchors(reverseOnly)[0]
     const boundaries = deriveSegmentSplitBoundaries(reverseOnly)
 
-    expect(resolveIntersectionAnchor(reverseOnly, anchor)).not.toBeNull()
+    expect(resolveSplitIntersectionAnchor(reverseOnly, anchor)).not.toBeNull()
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'A')).toBe(false)
     expect(boundaries.some(({ segmentInstanceRef }) => segmentInstanceRef.sourceSegmentId === 'B')).toBe(true)
   })
@@ -210,10 +210,10 @@ describe('IntersectionAnchorと論理Fragment', () => {
       symmetry: { type: 'none' },
       splitRelations: [relation('A', 'B'), relation('A', 'C')],
     }
-    const anchors = deriveIntersectionAnchors(pattern)
+    const anchors = deriveSplitIntersectionAnchors(pattern)
 
     expect(anchors).toHaveLength(2)
-    expect(resolveIntersectionAnchor(pattern, anchors[0])?.point).toEqual(resolveIntersectionAnchor(pattern, anchors[1])?.point)
+    expect(resolveSplitIntersectionAnchor(pattern, anchors[0])?.point).toEqual(resolveSplitIntersectionAnchor(pattern, anchors[1])?.point)
     expect(intersectionAnchorKey(anchors[0])).not.toBe(intersectionAnchorKey(anchors[1]))
   })
 
@@ -243,7 +243,7 @@ describe('IntersectionAnchorと論理Fragment', () => {
     }
     const removed = removeSegment(pattern, 'B')
 
-    expect(deriveIntersectionAnchors(removed)).toEqual([])
+    expect(deriveSplitIntersectionAnchors(removed)).toEqual([])
     expect(deriveLogicalFragments(removed).some(({ boundaryA, boundaryB }) => boundaryA.kind === 'intersection' || boundaryB.kind === 'intersection')).toBe(false)
   })
 
@@ -254,11 +254,11 @@ describe('IntersectionAnchorと論理Fragment', () => {
       symmetry: { type: 'rotational' },
       splitRelations: [{ targetSegmentId: 'A', cutterSegmentId: 'A', relativeTransform: { type: 'rotation', steps: 1 } }],
     }
-    const oldKeys = deriveIntersectionAnchors(rotational).map(intersectionAnchorKey)
+    const oldKeys = deriveSplitIntersectionAnchors(rotational).map(intersectionAnchorKey)
     const changed = changeSymmetry(rotational, { type: 'none' })
 
     expect(oldKeys).not.toHaveLength(0)
     expect(changed.splitRelations).toEqual([])
-    expect(deriveIntersectionAnchors(changed)).toEqual([])
+    expect(deriveSplitIntersectionAnchors(changed)).toEqual([])
   })
 })

@@ -22,7 +22,7 @@ contractTest({ contract: 'SPEC-EDITOR-OVERLAP-REJECTION-NOTICE', regression: 68 
   draw('BC辺を4等分した1番目の点', 'BC辺を4等分した2番目の点')
   count(1)
   const editor = screen.getByRole('region', { name: 'セルエディター' })
-  expect(within(editor).getByRole('status').textContent).toBe('線分が重複するため追加できません')
+  expect(within(editor).getByRole('status').textContent).toBe('端点参照が無効か線分が重複するため追加できません')
   expect(screen.queryByRole('dialog')).toBeNull()
   draw('頂点A', 'BC辺を4等分した2番目の点')
   count(2)

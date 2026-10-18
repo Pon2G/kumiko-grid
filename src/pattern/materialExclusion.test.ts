@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern } from './cellPattern'
 import type { Segment } from './segment'
-import { deriveIntersectionAnchors, deriveLogicalFragments } from './designGeometry'
+import { deriveSplitIntersectionAnchors, deriveLogicalFragments } from './designGeometry'
 import { deriveEffectiveGeometry, excludeMaterial, isFragmentExcluded, materialBoundaryRelation, restoreMaterial } from './materialExclusion'
 import { addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from './patternOperations'
 import { getIntersectionInteractionCandidates, getSplitCandidates } from './splitCandidates'
@@ -202,7 +202,7 @@ describe('MaterialExclusion', () => {
     const initial: CellPattern = { ...pattern(), splitRelations: [relation] }
     const excluded = targetFragments(initial).reduce(excludeMaterial, initial)
     expect(excluded.splitRelations).toEqual([relation])
-    expect(deriveIntersectionAnchors(excluded)).toHaveLength(1)
+    expect(deriveSplitIntersectionAnchors(excluded)).toHaveLength(1)
   })
 
   contractTest({ contract: 'ARCH-PATTERN-SPLIT-CANDIDATE-DERIVATION' }, '材なし区間だけで成立する新規split候補を返さない', () => {

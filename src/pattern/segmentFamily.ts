@@ -36,15 +36,15 @@ function segmentDirection(
   return fromKey === `${segmentEndpointAnchorKey(to.end)}\0${segmentEndpointAnchorKey(to.start)}` ? 'reverse' : null
 }
 
-function basisMapping(symmetry: Symmetry, source: Segment, representative: Segment): SegmentInstanceBasisMapping {
+function basisMapping(symmetry: Symmetry, source: Segment, representative: Segment, sources: readonly Segment[]): SegmentInstanceBasisMapping {
   const algebra = symmetryTransformAlgebra(symmetry)
   for (const transform of algebra.transforms) {
-    const transformed = transformedSegmentDefinition(symmetry, representative, transform)!
+    const transformed = transformedSegmentDefinition(symmetry, representative, transform, sources)!
     const direction = segmentDirection(source, transformed)
     if (direction) return {
       fromSourceSegmentId: source.id,
       toSourceSegmentId: representative.id,
-      toTransform: canonicalInstanceTransform(symmetry, representative, transform)!,
+      toTransform: canonicalInstanceTransform(symmetry, representative, transform, sources)!,
       direction,
     }
   }
@@ -55,14 +55,14 @@ function basisMapping(symmetry: Symmetry, source: Segment, representative: Segme
 export function canonicalizeSegmentFamilies(segments: readonly Segment[], symmetry: Symmetry): CanonicalSegmentFamilies {
   const groups = new Map<string, Segment[]>()
   for (const segment of segments) {
-    const key = segmentFamilyKey(symmetry, segment)
+    const key = segmentFamilyKey(symmetry, segment, segments)
     groups.set(key, [...(groups.get(key) ?? []), segment])
   }
   const mappings = new Map<string, SegmentInstanceBasisMapping>()
   const representatives = [...groups.values()].map((family) => {
     const representative = [...family].sort((left, right) =>
       compareKey(segmentDefinitionKey(left), segmentDefinitionKey(right)) || compareKey(left.id, right.id))[0]
-    for (const source of family) mappings.set(source.id, basisMapping(symmetry, source, representative))
+    for (const source of family) mappings.set(source.id, basisMapping(symmetry, source, representative, segments))
     return representative
   })
   return { segments: representatives, mappings }
@@ -82,10 +82,10 @@ export function canonicalizeInstanceRefWithDirection(
 ): CanonicalSegmentInstanceMapping | null {
   const segment = pattern.segments.find(({ id }) => id === ref.sourceSegmentId)
   if (!segment) return null
-  const transform = canonicalInstanceTransform(pattern.symmetry, segment, ref.transform)
+  const transform = canonicalInstanceTransform(pattern.symmetry, segment, ref.transform, pattern.segments)
   if (!transform) return null
-  const rawDefinition = transformedSegmentDefinition(pattern.symmetry, segment, ref.transform)
-  const canonicalDefinition = transformedSegmentDefinition(pattern.symmetry, segment, transform)
+  const rawDefinition = transformedSegmentDefinition(pattern.symmetry, segment, ref.transform, pattern.segments)
+  const canonicalDefinition = transformedSegmentDefinition(pattern.symmetry, segment, transform, pattern.segments)
   const direction = rawDefinition && canonicalDefinition && segmentDirection(rawDefinition, canonicalDefinition)
   return direction ? { ref: { sourceSegmentId: ref.sourceSegmentId, transform }, direction } : null
 }

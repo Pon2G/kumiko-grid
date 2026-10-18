@@ -1,10 +1,13 @@
+import { createIntersectionAnchor } from '../../pattern/intersectionAnchor'
+import { changeSegmentEndpoint } from '../../pattern/endpointEdit'
+import { resolveEndpoint } from '../../pattern/sourceGeometry'
 import { expect } from 'vitest'
 import { contractTest } from '../../test/contractTest'
 import type { CellPattern } from '../../pattern/cellPattern'
 import { createSegmentEndpointAnchors, resolveSegmentEndpoint } from '../../pattern/anchor'
 import { derivePatternGeometry } from '../../pattern/designGeometry'
 import { expandPattern } from '../../pattern/symmetry'
-import { cancelEndpoint, endpointPreviewAnchor, reconcileEditorInteraction, transitionEditorInteraction, type EditorInteraction, type EndpointInteraction } from './editorInteraction'
+import { canvasHitCandidateKey, cancelEndpoint, endpointPreviewAnchor, reconcileEditorInteraction, transitionEditorInteraction, type EditorInteraction, type EndpointInteraction } from './editorInteraction'
 import { canvasPointToScreen, endpointCoveredTargets, resolveEndpointAnchors, resolveEndpointHandles } from './canvasHitResolver'
 const a = { kind: 'vertex', vertex: 'A' } as const
 const b = { kind: 'vertex', vertex: 'B' } as const
@@ -56,4 +59,24 @@ contractTest({ contract: 'SPEC-EDITOR-ENDPOINT-HANDLES' }, '縮小viewportでも
   const anchors = createSegmentEndpointAnchors(40).map((anchor) => ({ anchor, point: resolveSegmentEndpoint(anchor) }))
   expect(resolveEndpointAnchors(pointer, anchors, viewport).length).toBeGreaterThan(1)
   expect(resolveEndpointAnchors({ x: -100, y: -100 }, anchors, viewport)).toHaveLength(0)
+})
+
+contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-ENDPOINT-INTERACTION' }, '交点始点は移動に追従し消失でcontextを破棄し曖昧候補の減少を自動確定しない', () => {
+  const ref = (sourceSegmentId: string) => ({ sourceSegmentId, transform: { type: 'identity' as const } })
+  const pattern: CellPattern = { ...base, segments: [
+    { id: 'T', start: a, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } },
+    { id: 'U', start: b, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } },
+  ] }
+  const anchor = createIntersectionAnchor(ref('T'), ref('U'))
+  const creating: EditorInteraction = { kind: 'creating-segment', startAnchor: anchor }
+  const moved = changeSegmentEndpoint(pattern, 'T', 'end', { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 })
+  expect(moved.kind).toBe('changed')
+  if (moved.kind !== 'changed') return
+  expect(reconcileEditorInteraction(moved.pattern, creating)).toEqual(creating)
+  expect(resolveEndpoint(moved.pattern, anchor)).not.toEqual(resolveEndpoint(pattern, anchor))
+  const missing = { ...pattern, segments: [pattern.segments[0]] }
+  expect(reconcileEditorInteraction(missing, creating)).toEqual({ kind: 'idle' })
+  const candidate = { kind: 'anchor' as const, anchor }
+  const choosing: EditorInteraction = { kind: 'choosing-target', context: { kind: 'normal' }, candidates: [candidate, { kind: 'anchor', anchor: c }], previewKey: canvasHitCandidateKey(candidate) }
+  expect(reconcileEditorInteraction(missing, choosing)).toEqual({ ...choosing, candidates: [{ kind: 'anchor', anchor: c }], previewKey: null })
 })

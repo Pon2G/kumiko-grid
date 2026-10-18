@@ -1,11 +1,12 @@
 import { canonicalTriangle } from '../geometry/triangle'
 import type { EdgeName, Point, Triangle, VertexName } from '../geometry/types'
-import type { IntersectionAnchor } from './intersectionAnchor'
+import { intersectionAnchorKey, type IntersectionAnchor } from './intersectionAnchor'
 
 export type VertexAnchor = { kind: 'vertex'; vertex: VertexName }
 export type EdgeDivisionAnchor = { kind: 'edge-division'; edge: EdgeName; divisions: number; index: number }
-export type SegmentEndpointAnchor = VertexAnchor | EdgeDivisionAnchor
-export type AnchorRef = SegmentEndpointAnchor | IntersectionAnchor
+export type BoundaryAnchor = VertexAnchor | EdgeDivisionAnchor
+export type SegmentEndpointAnchor = BoundaryAnchor | IntersectionAnchor
+export type AnchorRef = SegmentEndpointAnchor
 
 const edgeVertices: Record<EdgeName, [VertexName, VertexName]> = {
   AB: ['A', 'B'],
@@ -18,8 +19,8 @@ export const interpolate = (start: Point, end: Point, ratio: number): Point => (
   y: start.y + (end.y - start.y) * ratio,
 })
 
-/** source Segmentの端点として現在許可されるAnchorだけを座標へ解決する。 */
-export function resolveSegmentEndpoint(anchor: SegmentEndpointAnchor, triangle: Triangle = canonicalTriangle): Point {
+/** Pattern文脈が不要な境界Anchorを解決する。交点にはsourceGeometry.resolveEndpointを使う。 */
+export function resolveSegmentEndpoint(anchor: BoundaryAnchor, triangle: Triangle = canonicalTriangle): Point {
   if (anchor.kind === 'vertex') return triangle[anchor.vertex]
   if (anchor.divisions < 2 || anchor.index <= 0 || anchor.index >= anchor.divisions) {
     throw new RangeError('辺の分割数は2以上とし、indexには端点を除く内分点を指定してください')
@@ -28,14 +29,14 @@ export function resolveSegmentEndpoint(anchor: SegmentEndpointAnchor, triangle: 
   return interpolate(triangle[start], triangle[end], anchor.index / anchor.divisions)
 }
 
-export function createSegmentEndpointAnchors(divisions: number): SegmentEndpointAnchor[] {
+export function createSegmentEndpointAnchors(divisions: number): BoundaryAnchor[] {
   if (!Number.isInteger(divisions) || divisions < 2) throw new RangeError('分割数には2以上の整数を指定してください')
-  const vertices: SegmentEndpointAnchor[] = (['A', 'B', 'C'] as const).map((vertex) => ({ kind: 'vertex', vertex }))
-  const divisionsOnEdges: SegmentEndpointAnchor[] = (['AB', 'BC', 'CA'] as const).flatMap((edge) =>
+  const vertices: BoundaryAnchor[] = (['A', 'B', 'C'] as const).map((vertex) => ({ kind: 'vertex', vertex }))
+  const divisionsOnEdges: BoundaryAnchor[] = (['AB', 'BC', 'CA'] as const).flatMap((edge) =>
     Array.from({ length: divisions - 1 }, (_, offset) => ({ kind: 'edge-division' as const, edge, divisions, index: offset + 1 })))
   return [...vertices, ...divisionsOnEdges]
 }
 
 export const segmentEndpointAnchorKey = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
   ? `vertex-${anchor.vertex}`
-  : `edge-${anchor.edge}-${anchor.divisions}-${anchor.index}`
+  : anchor.kind === 'intersection' ? `intersection-${intersectionAnchorKey(anchor)}` : `edge-${anchor.edge}-${anchor.divisions}-${anchor.index}`

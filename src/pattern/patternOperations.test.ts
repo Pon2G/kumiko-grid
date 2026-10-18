@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { SegmentEndpointAnchor } from './anchor'
 import type { CellPattern } from './cellPattern'
-import { addSegment } from './patternOperations'
+import { addSegment, evaluateAddSegment } from './patternOperations'
 import type { Segment } from './segment'
 
 const existingPattern = (): CellPattern => ({
@@ -53,4 +53,25 @@ describe('Segment追加', () => {
     expect(addSegment(pattern, segment)).toBe(pattern)
     expect(pattern).toEqual(before)
   })
+})
+
+contractTest({ contract: 'SPEC-EDITOR-OVERLAP-REJECTION-NOTICE', regression: 72 }, '追加評価は原因別の拒否理由を返しaddSegmentと同じ可否と原子的拒否を保つ', () => {
+  const pattern = existingPattern()
+  const valid: Segment = { id: 'new', start: { kind: 'vertex', vertex: 'B' }, end: { kind: 'vertex', vertex: 'C' } }
+  const missing = { kind: 'intersection' as const, first: { sourceSegmentId: 'missing', transform: { type: 'identity' as const } }, second: { sourceSegmentId: 'existing', transform: { type: 'identity' as const } } }
+  const cases: [Segment, string][] = [
+    [{ ...valid, id: 'existing' }, '線分IDが使用済みのため追加できません'],
+    [{ ...pattern.segments[0], id: 'duplicate' }, '線分が重複するため追加できません'],
+    [{ ...valid, end: valid.start }, '両端が同じ位置になる線分は作成できません'],
+    [{ ...valid, end: { kind: 'edge-division', edge: 'AB', divisions: 2, index: 2 } }, '端点の指定が不正なため追加できません'],
+    [{ ...valid, end: missing }, '参照する交点が存在しないため追加できません'],
+    [{ ...valid, end: { ...missing, first: { ...missing.first, sourceSegmentId: 'new' } } }, '端点参照が循環するため追加できません'],
+  ]
+  const before = structuredClone(pattern)
+  for (const [segment, reason] of cases) {
+    expect(evaluateAddSegment(pattern, segment)).toMatchObject({ kind: 'rejected', reason })
+    expect(addSegment(pattern, segment)).toBe(pattern)
+    expect(pattern).toEqual(before)
+  }
+  expect(evaluateAddSegment(pattern, valid)).toEqual({ kind: 'changed', pattern: addSegment(pattern, valid) })
 })

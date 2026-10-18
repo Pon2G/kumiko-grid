@@ -1,13 +1,16 @@
+import { continueEndpointSources, validateEndpointSources, validEndpointAnchor as validAnchor } from './endpointDependencies'
+import { selectableEndpoint } from './endpointCandidates'
+import { dependencyOrder, transformEndpoint } from './sourceGeometry'
 import { segmentEndpointAnchorKey, type SegmentEndpointAnchor } from './anchor'
 import type { CellPattern, MaterialBoundaryRef, SegmentInstanceRef } from './cellPattern'
 import { canonicalizeSplitRelation, expandSplitRelationOrbit, splitRelationKey, validateSplitRelationOrbit } from './designGeometry'
 import { normalizeConcreteSplitBoundary, normalizeMigratedMaterial } from './materialExclusion'
 import { canonicalizeInstanceRef, canonicalizeInstanceRefWithDirection } from './segmentFamily'
-import { expandPattern, instanceRefKey, segmentFamilyKey, symmetryTransformAlgebra } from './symmetry'
-import { hasOverlap } from './segmentOverlap'
+import { instanceRefKey, symmetryTransformAlgebra } from './symmetry'
 
 export type EndpointRole = 'start' | 'end'
 export interface EndpointEditImpact {
+  lostSourceIds?: string[]
   lostRelations: number
   lostBoundaries: number
   lostExclusions: number
@@ -18,26 +21,27 @@ export type EndpointEditResult =
   | { kind: 'rejected'; reason: string }
   | { kind: 'changed'; pattern: CellPattern; impact: EndpointEditImpact }
 
-const validAnchor = (anchor: SegmentEndpointAnchor) => anchor && (anchor.kind === 'vertex'
-  ? ['A', 'B', 'C'].includes(anchor.vertex)
-  : anchor.kind === 'edge-division' && ['AB', 'BC', 'CA'].includes(anchor.edge)
-    && Number.isInteger(anchor.divisions) && Number.isInteger(anchor.index)
-    && anchor.divisions >= 2 && anchor.index > 0 && anchor.index < anchor.divisions)
 const pairKey = (target: SegmentInstanceRef, cutter: SegmentInstanceRef) => `${instanceRefKey(target)}\0${instanceRefKey(cutter)}`
 
 /** 定義変更はbasis交換ではない。保存relativeとsource roleを継続し、完成Patternだけを公開する。 */
-export function changeSegmentEndpoint(pattern: CellPattern, sourceId: string, endpoint: EndpointRole, anchor: SegmentEndpointAnchor): EndpointEditResult {
+export function changeSegmentEndpoint(pattern: CellPattern, sourceId: string, endpoint: EndpointRole, requestedAnchor: SegmentEndpointAnchor): EndpointEditResult {
   const source = pattern.segments.find(({ id }) => id === sourceId)
-  if (!source || (endpoint !== 'start' && endpoint !== 'end') || !validAnchor(anchor)) return { kind: 'rejected', reason: '端点の指定が無効です' }
+  if (!source || (endpoint !== 'start' && endpoint !== 'end') || !validAnchor(requestedAnchor)) return { kind: 'rejected', reason: '端点の指定が無効です' }
+  const anchor = transformEndpoint(pattern.symmetry, requestedAnchor, { type: 'identity' }, pattern.segments)
+  if (!anchor) return { kind: 'rejected', reason: '交点参照が無効です' }
   if (segmentEndpointAnchorKey(source[endpoint]) === segmentEndpointAnchorKey(anchor)) return { kind: 'unchanged' }
   const changed = { ...source, [endpoint]: anchor }
   if (segmentEndpointAnchorKey(changed.start) === segmentEndpointAnchorKey(changed.end)) return { kind: 'rejected', reason: '反対側と同じ点には変更できません' }
-  const others = pattern.segments.filter(({ id }) => id !== sourceId)
-  if (others.some((other) => segmentFamilyKey(pattern.symmetry, other) === segmentFamilyKey(pattern.symmetry, changed))) return { kind: 'rejected', reason: '線分が重複するため変更できません' }
-  const base = { segments: pattern.segments.map((item) => item.id === sourceId ? changed : item), symmetry: pattern.symmetry }
-  const instances = expandPattern({ segments: [changed], symmetry: pattern.symmetry })
-  const existing = expandPattern({ segments: others, symmetry: pattern.symmetry })
-  if (hasOverlap(instances, existing)) return { kind: 'rejected', reason: '線分が重なるため変更できません' }
+  if (!selectableEndpoint(pattern, anchor)) return { kind: 'rejected', reason: 'この交点には材がないため指定できません' }
+  let base: Pick<CellPattern, 'segments' | 'symmetry'>
+  try {
+    const requested = pattern.segments.map(item => item.id === sourceId ? changed : item)
+    dependencyOrder(requested)
+    base = { segments: continueEndpointSources(requested, pattern.symmetry), symmetry: pattern.symmetry }
+    if (!base.segments.some(item => item.id === sourceId)) return { kind: 'rejected', reason: '変更する線分の交点参照が失われます' }
+    const reason = validateEndpointSources(base)
+    if (reason) return { kind: 'rejected', reason }
+  } catch (error) { return { kind: 'rejected', reason: error instanceof Error ? error.message : '端点参照が無効です' } }
   const next: CellPattern = { ...base, splitRelations: [], materialExclusions: [] }
   let lostRelations = 0
   let lostBoundaries = 0
@@ -66,7 +70,7 @@ export function changeSegmentEndpoint(pattern: CellPattern, sourceId: string, en
     return boundaryA && boundaryB ? { ...item, boundaryA, boundaryB } : null
   })
   const material = normalizeMigratedMaterial(next, migrated)
-  return { kind: 'changed', pattern: material.pattern, impact: { lostRelations, lostBoundaries, lostExclusions: material.lostExclusions, exclusionExpandedBySymmetry: material.expanded } }
+  return { kind: 'changed', pattern: material.pattern, impact: { lostSourceIds: pattern.segments.filter(s => !base.segments.some(n => n.id === s.id)).map(s => s.id), lostRelations, lostBoundaries, lostExclusions: material.lostExclusions, exclusionExpandedBySymmetry: material.expanded } }
 }
 
 /** 表示instanceの移動先を既存algebraでsource座標へ戻す。canonical instanceだけを編集入口にする。 */
@@ -75,11 +79,11 @@ export function sourceEndpointDestination(pattern: CellPattern, instance: Segmen
   if (!validAnchor(anchor) || !canonical || instanceRefKey(canonical) !== instanceRefKey(instance)) return null
   const algebra = symmetryTransformAlgebra(pattern.symmetry)
   const inverse = algebra.inverse(instance.transform)
-  return inverse && algebra.applyToAnchor(inverse, anchor)
+  return inverse && transformEndpoint(pattern.symmetry, anchor, inverse, pattern.segments)
 }
 
 export function endpointSelectionAfterEdit(pattern: CellPattern, instance: SegmentInstanceRef, endpoint: EndpointRole) {
   const mapping = canonicalizeInstanceRefWithDirection(pattern, instance)
   return mapping && { instance: mapping.ref, endpoint: mapping.direction === 'reverse' ? endpoint === 'start' ? 'end' as const : 'start' as const : endpoint }
 }
-export const endpointImpactNeedsConfirmation = (impact: EndpointEditImpact) => impact.lostRelations > 0 || impact.lostBoundaries > 0 || impact.lostExclusions > 0 || impact.exclusionExpandedBySymmetry
+export const endpointImpactNeedsConfirmation = (impact: EndpointEditImpact) => (impact.lostSourceIds?.length ?? 0) > 0 || impact.lostRelations > 0 || impact.lostBoundaries > 0 || impact.lostExclusions > 0 || impact.exclusionExpandedBySymmetry

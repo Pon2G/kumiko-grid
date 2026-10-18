@@ -1,3 +1,7 @@
+import { resolveSegmentEndpoint } from './anchor'
+import type { Segment } from './segment'
+import type { IntersectionAnchor } from './intersectionAnchor'
+import { createEndpointGeometryQuery, type EndpointGeometryQuery } from './endpointCandidates'
 import type { CellPattern, SplitRelation } from './cellPattern'
 import {
   deriveDesignGeometrySnapshot,
@@ -13,6 +17,17 @@ import {
 function verifyDerivedGeometryTypes(patternA: CellPattern, patternB: CellPattern, relation: SplitRelation): void {
   const snapshot = deriveDesignGeometrySnapshot(patternA)
   const query = createEffectiveGeometryQuery(patternA)
+  const endpoints = createEndpointGeometryQuery(patternA)
+  // @ts-expect-error spreadで元Patternや問い合わせを差し替えた値は正規queryにならない
+  const mixedEndpoints: EndpointGeometryQuery = { ...endpoints, matches: () => true }
+  // @ts-expect-error 候補のpairは読み取り専用
+  endpoints.candidates[0].first = { sourceSegmentId: 'other', transform: { type: 'identity' } }
+  // @ts-expect-error 共有instanceの座標は読み取り専用
+  endpoints.instances[0].start.x = 0
+  const point = endpoints.resolve({ kind: 'vertex', vertex: 'A' })
+  // @ts-expect-error 解決点は読み取り専用
+  if (point) point.x = 0
+  void mixedEndpoints
   const orbit = validateSplitRelationOrbitFromSnapshot(snapshot, relation)
   query.validateSplitRelationOrbit(relation)
 
@@ -69,3 +84,14 @@ function verifyDerivedGeometryTypes(patternA: CellPattern, patternB: CellPattern
 }
 
 void verifyDerivedGeometryTypes
+
+/** 文脈なしresolverへ一般端点を渡せないことを型で保証する。 */
+function verifyBoundaryResolverTypes(segment: Segment, intersection: IntersectionAnchor): void {
+  resolveSegmentEndpoint({ kind: 'vertex', vertex: 'A' })
+  resolveSegmentEndpoint({ kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 })
+  // @ts-expect-error Intersectionの解決にはPattern文脈が必要
+  resolveSegmentEndpoint(intersection)
+  // @ts-expect-error 一般Segmentの端点は境界Anchorに限定されない
+  resolveSegmentEndpoint(segment.start)
+}
+void verifyBoundaryResolverTypes

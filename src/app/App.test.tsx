@@ -65,3 +65,17 @@ contractTest({ contract: 'SPEC-EDITOR-OVERLAP-REJECTION-NOTICE', regression: 68 
   expect(screen.getByRole('button', { name: '鏡映B' }).getAttribute('aria-pressed')).toBe('true')
   expect(screen.queryByText('線分が重なるため対称変換を変更できません')).toBeNull()
 })
+
+contractTest({ contract: 'SPEC-EDITOR-OVERLAP-REJECTION-NOTICE', regression: 72 }, '同座標の異なる端点での追加拒否は重複と混同せずPattern評価の原因を表示する', async () => {
+  const user = userEvent.setup()
+  render(<App />)
+  await user.click(screen.getByRole('button', { name: 'なし' }))
+  draw('頂点A', 'BC辺を4等分した2番目の点')
+  draw('頂点A', '頂点B')
+  const canvas = screen.getByLabelText('正三角形セルエディター')
+  fireEvent.keyDown(within(canvas).getByRole('button', { name: /端点として使う交点/ }), { key: 'Enter' })
+  anchor('頂点A')
+  count(2)
+  expect(screen.getByRole('region', { name: 'セルエディター' }).textContent).toContain('両端が同じ位置になる線分は作成できません')
+  expect(screen.getByText('終点を選択')).toBeTruthy()
+})

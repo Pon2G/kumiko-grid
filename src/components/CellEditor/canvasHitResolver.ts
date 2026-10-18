@@ -19,8 +19,8 @@ export interface CanvasHitViewport {
 export interface CanvasHitContext {
   anchors: Array<{ anchor: SegmentEndpointAnchor; point: Point }>
   intersections: IntersectionInteractionCandidate[]
-  fragments: PatternFragment[]
-  segments: RenderedSegment[]
+  fragments: readonly PatternFragment[]
+  segments: readonly RenderedSegment[]
 }
 
 const screenTransform = (viewport: CanvasHitViewport) => {
@@ -102,7 +102,7 @@ export function resolveCanvasHitCandidates(
   const intersections = context.intersections.filter(({ point }) => distance(pointer, canvasPointToScreen(point, viewport)) <= tapRadius)
     .map((candidate) => ({ kind: 'intersection' as const, candidate }))
 
-  const hitSegments = <T extends PatternFragment | RenderedSegment>(values: T[]) => values.filter((value) =>
+  const hitSegments = <T extends PatternFragment | RenderedSegment>(values: readonly T[]) => values.filter((value) =>
     distanceToSegment(pointer, canvasPointToScreen(value.start, viewport), canvasPointToScreen(value.end, viewport)) <= tapRadius)
 
   const hitFragments = hitSegments(context.fragments)

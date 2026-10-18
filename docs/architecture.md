@@ -44,12 +44,16 @@ src/
   pattern/
     anchor.ts              # 論理Anchor unionとSegmentEndpointAnchorの解決
     segment.ts             # 安定したSegmentIdを持つsource Segment
-    symmetry.ts            # logical Anchorを含むSymmetry transform algebra、派生Segment展開
+    transformAlgebra.ts    # Symmetry algebraとraw logical作用
+    sourceGeometry.ts      # DAG順のsource解決、logical canonicalization、instance展開
+    symmetry.ts            # 既存呼出し元向けの再export
     segmentFamily.ts       # Segment Family canonicalization、instance basis mapping
     intersectionAnchor.ts  # concrete instance pairのcanonical identity
     designGeometry.ts      # SplitRelation orbit、Anchor / Fragment Design Geometryの導出・解決
     materialExclusion.ts    # MaterialExclusionの正規化、Fragment操作、Effective Geometryの導出
     patternOperations.ts    # Pattern状態遷移とinvariant回復
+    endpointDependencies.ts # 端点依存の継続と全体検証
+    endpointCandidates.ts   # Effective基準の新規端点候補
     endpointEdit.ts         # atomicな端点変更、継続影響、instance入力mapping
     splitCandidates.ts      # Design / Effective Geometryを用いるsplit候補導出
   layout/
@@ -69,7 +73,7 @@ Anchorやsource Segmentの型はPatternの論理モデルに置き、Patternか�
 
 Pattern内部では、Symmetryの離散transformに関する列挙・合成・逆変換・相対化、logical Anchor作用、Geometry適用を `symmetry` の責務へ集約し、`segmentFamily`、`designGeometry`、`materialExclusion`、`patternOperations`、`splitCandidates` がSymmetry種別ごとの分岐を個別に持たない。`symmetry` はGeometry層のpureな回転・鏡映primitiveを利用してよいが、Geometry層へPatternのSymmetry型やlogical identityを持ち込まない。
 
-その上で依存方向は `symmetry` → `segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。この依存方向を逆転させたり循環させたりしない。
+その上で依存方向は `instanceKey / anchor` → `transformAlgebra` → `sourceGeometry / segmentFamily` → `designGeometry` → `materialExclusion` → `patternOperations / endpointEdit / endpointCandidates / splitCandidates` とする。`segmentFamily` はlogical Segment definitionからFamily、canonical concrete instance、basis mappingを導出する。`designGeometry` が公開するSplitRelation orbitはPattern文脈を受け取り、source stabilizerを反映したcanonical concrete pairだけを返す。canonicalization途中のraw transform pair列挙は外部へ公開しない。`designGeometry` はsource Segment、Symmetry、既存SplitRelationだけからDesign Geometryを導出し、MaterialExclusionやEffective Geometryへ依存しない。`materialExclusion` はDesign Geometryを利用して正規化とEffective Geometryを導出する。`patternOperations` はFamily、SplitRelation、MaterialExclusionのinvariantを一連の状態遷移として回復し、`splitCandidates` はDesign GeometryとEffective Geometryを使い分ける派生候補を担当する。この依存方向を逆転させたり循環させたりしない。
 
 ### layout
 
@@ -190,7 +194,7 @@ type EditorSelection =
 
 Segment作成途中、EditorSelection、Canvas上で曖昧だった候補集合はトップレベルでは排他的な一時interaction stateとして表現し、複数を独立して同時保持できないことを不変条件とする。ただし曖昧候補状態は、開始済みgestureを継続するためのcontextを内包してよい。Segment終点の候補選択では開始Anchorをcontextとして保持し、Anchor決定時に同じ状態遷移からSegment作成commandを返す。候補集合・preview identity・gesture contextは同じinteraction内に保持する。previewは現在の候補集合に属するlogical identityで表し、座標や配列indexをidentityにしない。現在のpreview値は更新後の候補集合から取得する。候補集合とgesture contextはEditor専用でありCellPatternへ永続化しない。選択解除時は作成途中のAnchor、曖昧候補、cutter highlightなど、そのinteractionに従属する一時状態も破棄する。Pattern状態遷移後も同じ論理identityが存在する場合だけselectionまたは候補を維持し、identityが消滅した場合は解除する。preview対象が消滅した場合はpreviewだけを解除し、残った候補とgesture contextを保持する。全候補が消滅した場合はidleへ戻る。候補が1件へ減っても自動preview・自動確定せず、既存のpreview identityが残れば維持する。Geometry一致する別identityへ自動で付け替えない。
 
-Segment・Fragment・IntersectionのPatternに対する存在確認と必要な派生値更新は、selectionと候補集合で同じ照合規則を使う。この照合はReactやinteractionの状態遷移に依存させず、対象消滅時の解除、候補の順序を保つ除去、gesture contextの保持はinteraction側で判断する。AnchorとSegment作成contextはEditor固有として扱う。Patternとの照合と、Inspector確定時の保持候補集合との照合は別責務とする。意味のある変更がないreconcileでは既存の参照を維持し、Appのeffectで不要なstate更新を繰り返さない。
+Segment・Fragment・IntersectionのPatternに対する存在確認と必要な派生値更新は、selectionと候補集合で同じ照合規則を使う。この照合はReactやinteractionの状態遷移に依存させず、対象消滅時の解除、候補の順序を保つ除去、gesture contextの保持はinteraction側で判断する。AnchorとSegment作成contextはEditor固有として扱う。交点Anchorの通常reconcileは現在のcanonical concrete pairとのidentity一致を確認し、永続参照用canonicalizationで別pairへ移行しない。作成途中の始点はDesign Geometry、曖昧候補とpreviewはEffective Geometryで存在確認する。永続端点の明示的な継続と、端点編集成功時のselection mappingは別経路に保つ。Patternとの照合と、Inspector確定時の保持候補集合との照合は別責務とする。意味のある変更がないreconcileでは既存の参照を維持し、Appのeffectで不要なstate更新を繰り返さない。
 
 オブジェクト選択から候補選択を始める場合、Intersection / Fragmentのhit判定に使っていたconcrete Segment instanceのlogical identityを、候補選択のresolver contextとして同じinteraction内に保持する。過去のselection全体やGeometryは保存せず、確定済みselection・preview・resolver contextを区別する。previewから操作基準を導出せず、候補切替や新しい複数hitによる候補集合の置換でもresolver contextを維持する。clear・確定・一意hitによって候補操作を終了すると従属contextも終了し、その後の操作対象は新しいinteractionから導出する。過去selectionは復元しない。
 
@@ -286,7 +290,7 @@ UIからの確定要求はsource endpointと移動先Anchor、および編集con
 
 交点座標とSegment parameterは保存対象ではない派生Geometryとし、基本Segment、Symmetry、canonicalなSplitRelationとそこから導出されるconcrete instance pairから再計算する。IntersectionAnchorは座標そのものではなくconcrete SegmentInstanceRef pairを参照する論理identityであり、Geometry上の交点とは区別する。Layout層はsplitの意味論や交差計算を扱わない。
 
-Design Geometry / IntersectionAnchorは、source Segment、Symmetry、既存SplitRelationから解決する設計上の論理境界である。MaterialExclusionの境界解決とEditor上のLogicalFragment選択はDesign Geometryを利用し、exclusion自身を適用した結果によってDesign IntersectionAnchorを自動消滅させない。
+Design Geometryのsplit境界はsource Segment、Symmetry、既存SplitRelationから解決する。一般の交点端点はsource定義とSymmetryだけから解決し、split境界の存在条件と分離する。MaterialExclusionの境界解決とEditor上のLogicalFragment選択はDesign Geometryを利用し、exclusion自身を適用した結果によってDesign IntersectionAnchorを自動消滅させない。
 
 Effective GeometryはMaterialExclusionを反映した「実際に材が存在するGeometry」であり、Effective intersectionはそのGeometry同士から得て新規intersection候補・新規split候補の判定に利用する。Design IntersectionAnchorとEffective intersectionは別責務とする。
 

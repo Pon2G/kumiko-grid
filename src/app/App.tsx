@@ -1,10 +1,12 @@
+import { createEndpointGeometryQuery } from '../pattern/endpointCandidates'
+import type { EndpointEditImpact } from '../pattern/endpointEdit'
 import { segmentEndpointAnchorKey } from '../pattern/anchor'
 import { sourceEndpointDestination, endpointSelectionAfterEdit, endpointImpactNeedsConfirmation } from '../pattern/endpointEdit'
 import { useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation, Symmetry } from '../pattern/cellPattern'
 import { splitRelationKey } from '../pattern/designGeometry'
-import { changeSegmentEndpoint, addSegment, addSplitRelation, changeSymmetry, removeSegment, removeSplitRelation } from '../pattern/patternOperations'
+import { changeSegmentEndpoint, evaluateAddSegment, addSplitRelation, evaluateSymmetryChange, evaluateRemoveSegment, removeSplitRelation } from '../pattern/patternOperations'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {
@@ -26,6 +28,8 @@ export default function App() {
     splitRelations: [],
     materialExclusions: [],
   })
+  type PendingOperation = { base: CellPattern; request: { kind: 'remove'; id: string } | { kind: 'symmetry'; symmetry: Symmetry }; impact: EndpointEditImpact }
+  const [pendingOperation, setPendingOperation] = useState<PendingOperation | null>(null)
   const [segmentNotice, setSegmentNotice] = useState<string>()
   const [symmetryNotice, setSymmetryNotice] = useState<string>()
   const [interaction, rawSetInteraction] = useState<EditorInteraction>(idleEditorInteraction)
@@ -41,6 +45,7 @@ export default function App() {
   const editing = interaction.kind === 'editing-endpoint' && interaction.context.base === pattern && interaction.context.divisions === divisions ? interaction : null
   const previewAnchor = editing && endpointPreviewAnchor(editing)
   const previewAnchorKey = previewAnchor ? segmentEndpointAnchorKey(previewAnchor) : null
+  const geometry = useMemo(() => createEndpointGeometryQuery(pattern), [pattern])
   const endpointEvaluation = useMemo(() => {
     if (!editing || !previewAnchor) return null
     const anchor = sourceEndpointDestination(editing.context.base, editing.context.instance, previewAnchor)
@@ -55,6 +60,7 @@ export default function App() {
 
   const handleInteraction = (event: EditorInteractionEvent) => {
     setSegmentNotice(undefined)
+    if (event.kind === 'clear') setPendingOperation(null)
     const transition = transitionEditorInteraction(interactionRef.current, event, { pattern: patternRef.current, divisions })
     setInteraction(transition.interaction)
     if (transition.command?.kind === 'edit-endpoint') {
@@ -85,9 +91,11 @@ export default function App() {
         start: transition.command.startAnchor,
         end: transition.command.endAnchor,
       }
-      const next = addSegment(pattern, segment)
-      setSegmentNotice(next === pattern ? '線分が重複するため追加できません' : undefined)
-      setPattern(next)
+      const current = patternRef.current
+      const result = evaluateAddSegment(current, segment)
+      setSegmentNotice(result.kind === 'rejected' ? result.reason : undefined)
+      if (result.kind === 'rejected' && result.startSelectable) setInteraction({ kind: 'creating-segment', startAnchor: segment.start })
+      if (result.kind === 'changed') setPattern(result.pattern)
     }
   }
 
@@ -95,15 +103,33 @@ export default function App() {
     setSymmetryNotice(undefined)
     if (pattern.symmetry.type === symmetry.type
       && (pattern.symmetry.type !== 'mirror' || symmetry.type !== 'mirror' || pattern.symmetry.axis === symmetry.axis)) return
-    const next = changeSymmetry(pattern, symmetry)
-    setSymmetryNotice(next === pattern ? '線分が重なるため対称変換を変更できません' : undefined)
-    setPattern(next)
+    requestOperation({ kind: 'symmetry', symmetry })
   }
 
-  const deleteSegment = (id: string) => {
-    setPattern((current) => removeSegment(current, id))
+  const evaluateOperation = (base: CellPattern, request: PendingOperation['request']) => request.kind === 'remove'
+    ? evaluateRemoveSegment(base, request.id) : evaluateSymmetryChange(base, request.symmetry)
+  const requestOperation = (request: PendingOperation['request']) => {
+    const base = patternRef.current
+    const result = evaluateOperation(base, request)
+    if (result.kind === 'rejected') {
+      if (request.kind === 'symmetry') setSymmetryNotice(result.reason === '線分が重なるため変更できません'
+        ? '線分が重なるため対称変換を変更できません' : result.reason)
+      else setSegmentNotice(result.reason)
+      return
+    }
+    if (result.kind !== 'changed') return
+    if (result.impact.lostSourceIds?.length) { setPendingOperation({ base, request, impact: result.impact }); return }
+    setPattern(result.pattern)
     setInteraction(idleEditorInteraction())
   }
+  const approveOperation = () => {
+    if (!pendingOperation) return
+    setPendingOperation(null)
+    if (patternRef.current !== pendingOperation.base) return
+    const result = evaluateOperation(patternRef.current, pendingOperation.request)
+    if (result.kind === 'changed') { setPattern(result.pattern); setInteraction(idleEditorInteraction()) }
+  }
+  const deleteSegment = (id: string) => requestOperation({ kind: 'remove', id })
 
   const toggleSplitRelation = (relation: SplitRelation) => {
     setPattern((current) => current.splitRelations.some((item) => splitRelationKey(item) === splitRelationKey(relation))
@@ -111,9 +137,10 @@ export default function App() {
   }
 
   useEffect(() => {
-    const next = reconcileEditorInteraction(pattern, interaction)
+    if (pendingOperation && pendingOperation.base !== pattern) setPendingOperation(null)
+    const next = reconcileEditorInteraction(pattern, interaction, geometry)
     if (next !== interaction) setInteraction(next)
-  }, [pattern, interaction])
+  }, [pattern, interaction, geometry])
 
   return (
     <>
@@ -134,6 +161,10 @@ export default function App() {
         />
         <div className="workspace">
           <CellEditor
+            geometry={geometry}
+            dependencyConfirmation={pendingOperation?.base === pattern ? pendingOperation.impact : null}
+            onApproveDependency={approveOperation}
+            onCancelDependency={() => setPendingOperation(null)}
             endpointEvaluation={endpointEvaluation}
             previewPattern={previewPattern}
             notice={segmentNotice}

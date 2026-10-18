@@ -263,7 +263,7 @@ function deriveCurrentPatternContext(pattern: CellPattern): CurrentPatternContex
 }
 
 /** 有効なrelation orbitの少なくとも1つが支える無向IntersectionAnchorだけを返す。 */
-export function deriveIntersectionAnchors(pattern: CellPattern): IntersectionAnchor[] {
+export function deriveSplitIntersectionAnchors(pattern: CellPattern): IntersectionAnchor[] {
   return [...deriveCurrentPatternContext(pattern).anchors.values()].map(({ anchor }) => anchor)
 }
 
@@ -273,7 +273,7 @@ export function deriveSegmentSplitBoundaries(pattern: CellPattern): SegmentSplit
 }
 
 /** 現在の有効relationに支えられていない旧Anchorは、Geometryが交差していても解決しない。 */
-export function resolveIntersectionAnchor(pattern: CellPattern, anchor: IntersectionAnchor): ResolvedIntersectionAnchor | null {
+export function resolveSplitIntersectionAnchor(pattern: CellPattern, anchor: IntersectionAnchor): ResolvedIntersectionAnchor | null {
   return deriveCurrentPatternContext(pattern).anchors.get(intersectionAnchorKey(anchor))?.resolved ?? null
 }
 
@@ -311,6 +311,8 @@ export class DesignGeometrySnapshot {
       geometry,
     })
   }
+
+  get instances(): ReadonlyArray<DeepReadonly<RenderedSegment>> { return [...this.#state.instancesByRef.values()] }
 
   get logicalFragments(): ReadonlyArray<ReadonlyResolvedLogicalFragment> { return this.#state.logicalFragments }
   get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#state.geometry }

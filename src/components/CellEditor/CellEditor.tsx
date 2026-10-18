@@ -1,17 +1,22 @@
-import type { EndpointEditResult } from '../../pattern/endpointEdit'
+import { createEndpointGeometryQuery, type EndpointGeometryQuery } from '../../pattern/endpointCandidates'
+import type { EndpointEditResult, EndpointEditImpact } from '../../pattern/endpointEdit'
 import type { Point } from '../../geometry/types'
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
 import { TRIANGLE_HEIGHT, trianglePoints } from '../../geometry/triangle'
-import { createSegmentEndpointAnchors, resolveSegmentEndpoint, segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
+import { createSegmentEndpointAnchors, segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { CellPattern, SplitRelation } from '../../pattern/cellPattern'
 import { derivePatternGeometry, logicalFragmentKey, type LogicalFragment } from '../../pattern/designGeometry'
 import { isFragmentExcluded, materialExclusionsDependingOn } from '../../pattern/materialExclusion'
 import { getIntersectionInteractionCandidates, intersectionCandidateKey } from '../../pattern/splitCandidates'
-import { expandPattern, instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
-import { endpointPreviewAnchor, canvasHitCandidateKey, editorResolverTarget, editorSelection, pendingEditorAnchor, previewEditorCandidate, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
+import { instanceRefKey, isSymmetryGeneratedSegment } from '../../pattern/symmetry'
+import { reconcileEditorInteraction, endpointPreviewAnchor, canvasHitCandidateKey, editorResolverTarget, editorSelection, pendingEditorAnchor, previewEditorCandidate, type CanvasHitCandidate, type EditorInteraction, type EditorInteractionEvent } from './editorInteraction'
 import { screenPointToCanvas, canvasPointToScreen, endpointCoveredTargets, resolveEndpointAnchors, resolveEndpointHandles, CELL_CANVAS_PAD, CELL_CANVAS_SCALE, CELL_CANVAS_WIDTH, resolveCanvasHitCandidates } from './canvasHitResolver'
 
 interface CellEditorProps {
+  geometry?: EndpointGeometryQuery
+  dependencyConfirmation?: EndpointEditImpact | null
+  onApproveDependency?: () => void
+  onCancelDependency?: () => void
   previewPattern?: CellPattern | null
   endpointEvaluation?: EndpointEditResult | null
   notice?: string
@@ -27,8 +32,8 @@ interface CellEditorProps {
 
 const px = (value: number) => CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE
 const py = (value: number) => CELL_CANVAS_PAD + value * CELL_CANVAS_SCALE
-const anchorLabel = (anchor: SegmentEndpointAnchor): string => anchor.kind === 'vertex'
-  ? `頂点${anchor.vertex}` : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
+const anchorLabel = (anchor: SegmentEndpointAnchor, pattern: CellPattern): string => anchor.kind === 'vertex'
+  ? `頂点${anchor.vertex}` : anchor.kind === 'intersection' ? `端点として使う交点（${instanceLabel(pattern, anchor.first)} × ${instanceLabel(pattern, anchor.second)}）` : `${anchor.edge}辺を${anchor.divisions}等分した${anchor.index}番目の点`
 const instanceLabel = (pattern: CellPattern, instance: { sourceSegmentId: string; transform: { type: string; steps?: number; axis?: string } }): string => {
   const number = pattern.segments.findIndex(({ id }) => id === instance.sourceSegmentId) + 1
   const transform = instance.transform.type === 'identity' ? '元の位置'
@@ -44,7 +49,9 @@ const boundaryLabel = (pattern: CellPattern, target: LogicalFragment['segmentIns
 }
 
 export function CellEditor(props: CellEditorProps) {
-  const { pattern, interaction } = props
+  const { pattern } = props
+  const geometry = useMemo(() => props.geometry?.matches(pattern) ? props.geometry : createEndpointGeometryQuery(pattern), [pattern, props.geometry])
+  const interaction = reconcileEditorInteraction(pattern, props.interaction, geometry)
   const svgRef = useRef<SVGSVGElement>(null)
   const owner = useRef<number | null>(null)
   const suppressedPointers = useRef(new Set<number>())
@@ -67,9 +74,10 @@ export function CellEditor(props: CellEditorProps) {
   const preview = previewEditorCandidate(interaction)
   const pendingAnchor = pendingEditorAnchor(interaction)
   const choosingCandidates = interaction.kind === 'choosing-target' ? interaction.candidates : null
-  const anchors = createSegmentEndpointAnchors(props.divisions)
-  const designFragments = derivePatternGeometry(pattern)
-  const instances = expandPattern(pattern)
+  const anchors = [...createSegmentEndpointAnchors(props.divisions), ...geometry.candidates]
+  const designFragments = geometry.design.geometry
+  const instances = geometry.instances
+  const effectiveFragmentKeys = new Set(geometry.effective.geometry.map(fragment => logicalFragmentKey(fragment.logicalFragment)))
   const target = selection?.kind === 'segment' ? selection.segment
     : selection?.kind === 'intersection' ? selection.candidate.target
       : selection?.kind === 'fragment' ? selection.fragment.segmentInstanceRef : null
@@ -115,7 +123,7 @@ export function CellEditor(props: CellEditorProps) {
   const handles = selectedInstance && (interaction.kind === 'selected' || editing) ? [
     { endpoint: 'start' as const, point: selectedInstance.start }, { endpoint: 'end' as const, point: selectedInstance.end },
   ] : []
-  const anchorPoints = anchors.map((anchor) => ({ anchor, point: resolveSegmentEndpoint(anchor) }))
+  const anchorPoints = anchors.map((anchor) => ({ anchor, point: geometry.resolve(anchor)! }))
   const context = { anchors: anchorPoints, intersections: candidates, fragments: targetFragments, segments: instances }
   const covered = interaction.kind === 'selected' ? endpointCoveredTargets(context, handles.map(({ point }) => point), viewport) : []
   const pointerInput = (event: PointerEvent<SVGSVGElement | HTMLButtonElement>) => {
@@ -135,7 +143,7 @@ export function CellEditor(props: CellEditorProps) {
       return
     }
     if (editing?.phase === 'confirming') return
-    const hits = resolveCanvasHitCandidates(input.point, editing ? { ...context, intersections: [], fragments: [] } : context, input.viewport)
+    const hits = resolveCanvasHitCandidates(input.point, editing ? { ...context, intersections: [], fragments: [] } : pendingAnchor ? { ...context, intersections: [] } : context, input.viewport)
     props.onInteraction({ kind: 'canvas-hit', candidates: hits })
   }
   const pointerDown = (event: PointerEvent<SVGSVGElement | HTMLButtonElement>) => {
@@ -173,9 +181,14 @@ export function CellEditor(props: CellEditorProps) {
     owner.current = null; suppressedPointers.current.add(event.pointerId); props.onInteraction({ kind: 'clear' })
   }
   const destination = editing && endpointPreviewAnchor(editing)
-  const movingPoint: Point | null = destination ? resolveSegmentEndpoint(destination) : null
+  const movingPoint: Point | null = destination ? geometry.resolve(destination)! : null
 
   return <section className="panel editor-panel" aria-labelledby="editor-title">
+    {props.dependencyConfirmation && <div className="object-inspector" aria-label="端点依存の影響確認">
+      <p>依存する線分 {props.dependencyConfirmation.lostSourceIds?.length} 件、分割 {props.dependencyConfirmation.lostRelations} 件、境界 {props.dependencyConfirmation.lostBoundaries} 件、材指定 {props.dependencyConfirmation.lostExclusions} 件が失われます。</p>
+      <button type="button" onClick={props.onApproveDependency}>変更を適用</button>
+      <button type="button" onClick={props.onCancelDependency}>取消し</button>
+    </div>}
     <div className="panel-heading editor-heading"><div><span className="eyebrow">02 / セル</span><h2 id="editor-title">セルエディター</h2></div>
       <span className="status-pill">{choosingCandidates ? pendingAnchor ? '終点候補を選択' : '選択対象を選択' : pendingAnchor ? '終点を選択' : selection ? '選択中' : '描画できます'}</span></div>
     {handleHint && interaction.kind === 'selected' && selection?.kind === 'segment' && <p role="status">端点が近接しています。Inspectorで始点または終点を指定してください</p>}
@@ -187,7 +200,7 @@ export function CellEditor(props: CellEditorProps) {
           <polygon className="triangle-fill" points={points} />
           <polygon className="triangle-border" points={points} />
           {designFragments.map((fragment) => <line key={fragment.id}
-          className={`${isSymmetryGeneratedSegment(fragment) ? 'pattern-line generated' : 'pattern-line source'} ${isFragmentExcluded(pattern, fragment.logicalFragment) ? 'material-ghost' : ''}`}
+          className={`${isSymmetryGeneratedSegment(fragment) ? 'pattern-line generated' : 'pattern-line source'} ${!effectiveFragmentKeys.has(logicalFragmentKey(fragment.logicalFragment)) ? 'material-ghost' : ''}`}
           x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}
           {target && instances.filter(({ instanceRef }) => instanceRefKey(instanceRef) === targetKey).map((instance) =>
             <line key="target-highlight" className={`selection-highlight target ${editing ? 'endpoint-original' : ''}`} x1={px(instance.start.x)} y1={py(instance.start.y)} x2={px(instance.end.x)} y2={py(instance.end.y)} />)}
@@ -199,7 +212,7 @@ export function CellEditor(props: CellEditorProps) {
             className={`split-candidate-marker ${selectedCandidateKey === intersectionCandidateKey(candidate) ? 'selected' : ''}`}
             cx={px(candidate.point.x)} cy={py(candidate.point.y)} r="9" />)}
           {anchors.map((anchor) => {
-            const point = resolveSegmentEndpoint(anchor)
+            const point = geometry.resolve(anchor)!
             const selected = pendingAnchor && segmentEndpointAnchorKey(anchor) === segmentEndpointAnchorKey(pendingAnchor)
             return <circle key={`dot-${segmentEndpointAnchorKey(anchor)}`} className={`anchor-dot ${selected ? 'selected' : ''}`}
               cx={px(point.x)} cy={py(point.y)} r={anchor.kind === 'vertex' ? 7 : 5} />
@@ -208,7 +221,7 @@ export function CellEditor(props: CellEditorProps) {
         {editing && <g className="endpoint-preview" aria-label="端点変更プレビュー" role="img">
           {props.previewPattern && derivePatternGeometry(props.previewPattern).map((fragment) => <line key={fragment.id} className={`candidate-preview-line target ${isFragmentExcluded(props.previewPattern!, fragment.logicalFragment) ? 'material-ghost' : ''}`}
             x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}
-          {editing.candidates.map((anchor) => { const point = resolveSegmentEndpoint(anchor); return <rect key={segmentEndpointAnchorKey(anchor)} className="candidate-preview-point" x={px(point.x)-13} y={py(point.y)-13} width="26" height="26" /> })}
+          {editing.candidates.map((anchor) => { const point = geometry.resolve(anchor)!; return <rect key={segmentEndpointAnchorKey(anchor)} className="candidate-preview-point" x={px(point.x)-13} y={py(point.y)-13} width="26" height="26" /> })}
           {!props.previewPattern && selectedInstance && (movingPoint || editing.position) && (() => {
             const fixed = selectedInstance[editing.context.endpoint === 'start' ? 'end' : 'start']
             const screen = movingPoint ? canvasPointToScreen(movingPoint, viewport) : editing.position!
@@ -216,7 +229,8 @@ export function CellEditor(props: CellEditorProps) {
             return <line className={`endpoint-rubber-band ${props.endpointEvaluation?.kind === 'rejected' ? 'invalid' : ''}`} x1={px(fixed.x)} y1={py(fixed.y)} x2={moving.x} y2={moving.y} />
           })()}
         </g>}
-        {preview && <CandidatePreview pattern={pattern} candidate={preview} />}
+        {destination?.kind === 'intersection' && <CandidatePreview geometry={geometry} pattern={pattern} candidate={{ kind: 'anchor', anchor: destination }} />}
+        {preview && <CandidatePreview geometry={geometry} pattern={pattern} candidate={preview} />}
         <g className="interaction-layer" data-canvas-layer="interaction">
         {instances.map((instance) => {
           const key = instanceRefKey(instance.instanceRef)
@@ -236,9 +250,9 @@ export function CellEditor(props: CellEditorProps) {
           />
         })}
         {anchors.map((anchor) => {
-          const point = resolveSegmentEndpoint(anchor)
+          const point = geometry.resolve(anchor)!
           return <circle className="anchor-hit" key={segmentEndpointAnchorKey(anchor)} role="button"
-            aria-label={anchorLabel(anchor)} tabIndex={handles.some(({ point: handle }) => Math.hypot(handle.x-point.x, handle.y-point.y) < 1e-9) && !editing ? -1 : 0}
+            aria-label={anchorLabel(anchor, pattern)} tabIndex={handles.some(({ point: handle }) => Math.hypot(handle.x-point.x, handle.y-point.y) < 1e-9) && !editing ? -1 : 0}
             cx={px(point.x)} cy={py(point.y)} r="11" vectorEffect="non-scaling-stroke"
             onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') props.onInteraction({ kind: 'activate-anchor', anchor }) }} />
         })}
@@ -254,7 +268,7 @@ export function CellEditor(props: CellEditorProps) {
       </div></div>
     <div className="legend"><span><i className="source-key" /> 種となる線分</span><span><i className="generated-key" /> 自動生成</span>
       <span className="segment-count">種となる線分：{pattern.segments.length}本</span></div>
-    <Inspector {...props} covered={covered} />
+    <Inspector {...props} interaction={interaction} covered={covered} />
   </section>
 }
 
@@ -271,12 +285,13 @@ function Inspector(props: CellEditorProps & { covered: CanvasHitCandidate[] }) {
       <p role="status">{interaction.phase === 'confirming' ? '変更の影響を確認してください' : '移動先の点を選択'}</p>
       {evaluation?.kind === 'rejected' && <p role="status">{evaluation.reason}</p>}
       {interaction.phase === 'confirming' && impact && <div className="impact-warning">
+        {!!impact.lostSourceIds?.length && <p>依存する線分 {impact.lostSourceIds.length} 件が削除されます</p>}
         {(impact.lostRelations > 0 || impact.lostBoundaries > 0) && <p>分割が一部解除されます</p>}
         {impact.lostExclusions > 0 && <p>材なし区間{impact.lostExclusions}件が解除されます</p>}
         {impact.exclusionExpandedBySymmetry && <p>対称性を保つため材なし区間が広がります</p>}
       </div>}
       {interaction.phase === 'destination' && interaction.candidates.length > 0 && <>
-        <div className="target-choices">{interaction.candidates.map((anchor) => <button type="button" key={segmentEndpointAnchorKey(anchor)} aria-pressed={interaction.previewKey === segmentEndpointAnchorKey(anchor)} onClick={() => props.onInteraction({ kind: 'preview-endpoint', anchor })}>{anchorLabel(anchor)}</button>)}</div>
+        <div className="target-choices">{interaction.candidates.map((anchor) => <button type="button" key={segmentEndpointAnchorKey(anchor)} aria-pressed={interaction.previewKey === segmentEndpointAnchorKey(anchor)} onClick={() => props.onInteraction({ kind: 'preview-endpoint', anchor })}>{anchorLabel(anchor, pattern)}</button>)}</div>
         <button type="button" disabled={!endpointPreviewAnchor(interaction)} onClick={() => props.onInteraction({ kind: 'confirm-endpoint' })}>選択</button>
       </>}
       {interaction.phase === 'confirming' && <button type="button" onClick={() => props.onInteraction({ kind: 'approve-endpoint' })}>変更する</button>}
@@ -327,24 +342,25 @@ function Inspector(props: CellEditorProps & { covered: CanvasHitCandidate[] }) {
 }
 
 const canvasHitCandidateLabel = (pattern: CellPattern, candidate: CanvasHitCandidate): string => candidate.kind === 'anchor'
-  ? `Anchor: ${anchorLabel(candidate.anchor)}`
+  ? `Anchor: ${anchorLabel(candidate.anchor, pattern)}`
   : candidate.kind === 'segment' ? instanceLabel(pattern, candidate.segment)
-    : candidate.kind === 'intersection' ? `Intersection: ${instanceLabel(pattern, candidate.candidate.cutter)}`
+    : candidate.kind === 'intersection' ? `分割を操作する交点: ${instanceLabel(pattern, candidate.candidate.cutter)}`
       : `Fragment: ${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryA)}–${boundaryLabel(pattern, candidate.fragment.segmentInstanceRef, candidate.fragment.boundaryB)}`
 
 /** 表示専用。preview対象をhit resolverの選択対象へ渡さない。 */
-function CandidatePreview({ pattern, candidate }: { pattern: CellPattern; candidate: CanvasHitCandidate }) {
-  const instances = expandPattern(pattern)
+function CandidatePreview({ pattern, candidate, geometry }: { pattern: CellPattern; candidate: CanvasHitCandidate; geometry: EndpointGeometryQuery }) {
+  const instances = geometry.instances
   const line = (ref: Parameters<typeof instanceRefKey>[0], role: string) => instances
     .filter(({ instanceRef }) => instanceRefKey(instanceRef) === instanceRefKey(ref))
     .map((instance) => <line key={role} className={`candidate-preview-line ${role}`}
       x1={px(instance.start.x)} y1={py(instance.start.y)} x2={px(instance.end.x)} y2={py(instance.end.y)} />)
-  const point = candidate.kind === 'anchor' ? resolveSegmentEndpoint(candidate.anchor)
+  const point = candidate.kind === 'anchor' ? geometry.resolve(candidate.anchor)!
     : candidate.kind === 'intersection' ? candidate.candidate.point : null
   return <g className="candidate-preview" role="img" aria-label={`${canvasHitCandidateLabel(pattern, candidate)}のプレビュー`}>
+    {candidate.kind === 'anchor' && candidate.anchor.kind === 'intersection' && <>{line(candidate.anchor.first, 'target')}{line(candidate.anchor.second, 'cutter')}</>}
     {candidate.kind === 'segment' && line(candidate.segment, 'target')}
     {candidate.kind === 'intersection' && <>{line(candidate.candidate.target, 'target')}{line(candidate.candidate.cutter, 'cutter')}</>}
-    {candidate.kind === 'fragment' && derivePatternGeometry(pattern)
+    {candidate.kind === 'fragment' && geometry.design.geometry
       .filter(({ logicalFragment }) => logicalFragmentKey(logicalFragment) === logicalFragmentKey(candidate.fragment))
       .map((fragment) => <line key={fragment.id} className="candidate-preview-line fragment"
         x1={px(fragment.start.x)} y1={py(fragment.start.y)} x2={px(fragment.end.x)} y2={py(fragment.end.y)} />)}

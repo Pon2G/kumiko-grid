@@ -1,6 +1,6 @@
 import type { Point } from '../geometry/types'
 import type { SegmentInstanceRef } from './cellPattern'
-import { instanceRefKey } from './symmetry'
+import { instanceRefKey } from './instanceKey'
 
 export interface IntersectionAnchor {
   kind: 'intersection'
@@ -16,7 +16,7 @@ export function createIntersectionAnchor(left: SegmentInstanceRef, right: Segmen
 }
 
 export const intersectionAnchorKey = (anchor: IntersectionAnchor): string =>
-  JSON.stringify([instanceRefKey(anchor.first), instanceRefKey(anchor.second)])
+  JSON.stringify([instanceRefKey(anchor.first), instanceRefKey(anchor.second)].sort())
 
 export interface ResolvedIntersectionAnchor {
   point: Point

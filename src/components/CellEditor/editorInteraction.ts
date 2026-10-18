@@ -1,3 +1,4 @@
+import { createEndpointGeometryQuery, type EndpointGeometryQuery } from '../../pattern/endpointCandidates'
 import type { Point } from '../../geometry/types'
 import type { EndpointRole } from '../../pattern/endpointEdit'
 import { segmentEndpointAnchorKey, type SegmentEndpointAnchor } from '../../pattern/anchor'
@@ -160,11 +161,15 @@ function activateCandidate(interaction: EditorInteraction, candidate: CanvasHitC
   }
 }
 
-export function reconcileEditorInteraction(pattern: CellPattern, interaction: EditorInteraction): EditorInteraction {
+export function reconcileEditorInteraction(pattern: CellPattern, interaction: EditorInteraction, geometry?: EndpointGeometryQuery): EditorInteraction {
+  let query = geometry?.matches(pattern) ? geometry : undefined
+  const currentGeometry = () => query ??= createEndpointGeometryQuery(pattern)
+  const pending = pendingEditorAnchor(interaction)
+  if (pending && !currentGeometry().resolve(pending)) return idleEditorInteraction()
   if (interaction.kind === 'editing-endpoint') return pattern === interaction.context.base ? interaction : cancelEndpoint(pattern, interaction)
   if (interaction.kind === 'choosing-target') {
     const candidates = interaction.candidates.flatMap((candidate) => {
-      const current = candidate.kind === 'anchor' ? candidate : reconcileLogicalTarget(pattern, candidate)
+      const current = candidate.kind === 'anchor' ? (currentGeometry().selectable(candidate.anchor) ? candidate : null) : reconcileLogicalTarget(pattern, candidate)
       return current ? [current] : []
     })
     if (candidates.length === 0) return idleEditorInteraction()

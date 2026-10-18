@@ -2,7 +2,7 @@ import { describe, expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import { canonicalTriangle } from '../geometry/triangle'
 import type { Point } from '../geometry/types'
-import { resolveSegmentEndpoint, type SegmentEndpointAnchor } from './anchor'
+import { resolveSegmentEndpoint, type BoundaryAnchor } from './anchor'
 import type { CellPattern } from './cellPattern'
 import {
   expandPattern,
@@ -64,7 +64,7 @@ describe('CellPatternの対称展開', () => {
 
 describe('Symmetry transform algebra', () => {
   contractTest({ contract: 'ARCH-PATTERN-SYMMETRY-TRANSFORM-ALGEBRA', regression: 37 }, 'logical Anchor作用を各transformのGeometry作用と整合させる', () => {
-    const anchors: SegmentEndpointAnchor[] = [
+    const anchors: BoundaryAnchor[] = [
       { kind: 'vertex', vertex: 'A' },
       { kind: 'edge-division', edge: 'AB', divisions: 3, index: 1 },
       { kind: 'edge-division', edge: 'CA', divisions: 4, index: 3 },
@@ -84,7 +84,8 @@ describe('Symmetry transform algebra', () => {
           const transformedPoint = algebra.applyToPoint(transform, resolveSegmentEndpoint(anchor))
           expect(transformedAnchor).not.toBeNull()
           expect(transformedPoint).not.toBeNull()
-          expect(pointsAreClose(resolveSegmentEndpoint(transformedAnchor!), transformedPoint!)).toBe(true)
+          if (!transformedAnchor || transformedAnchor.kind === 'intersection') throw new Error('境界Anchorへの変換が必要です')
+          expect(pointsAreClose(resolveSegmentEndpoint(transformedAnchor), transformedPoint!)).toBe(true)
         }
       }
     }

@@ -16,7 +16,7 @@ type AnchorRef =
   | IntersectionAnchor
 ```
 
-現在のsource Segment作成で端点として利用できるのはVertexとEdge Division Pointであり、IntersectionAnchorをsource Segment端点として許可することは別のdomain constraintとして扱う。Anchor unionへIntersectionAnchorを含めることと、すべてのAnchor種別をすべての用途で許可することは分けて設計する。
+SegmentEndpointAnchorはVertex、Edge Division Point、IntersectionAnchorを含む。交点端点はsource定義とSymmetryの文脈から解決する。
 
 Vertexは頂点名を、Edge Division Pointはedge、divisions、indexを論理情報として持ち、座標は保存せず解決する。
 
@@ -36,15 +36,15 @@ interface Segment {
 }
 ```
 
-端点2つをSegment identityとしない理由は、端点編集だけでSegment自体のidentityが失われ、SplitRelation等の参照が不要に連鎖して変化するためである。また、将来IntersectionAnchorを端点として許可した場合、IntersectionAnchorがSegmentInstanceRefを参照するため、端点構造からSegment identityを再帰的に定義するとidentity自体へ循環参照を持ち込み得る。安定したIDと現在の定義を分離し、端点pairはSegment definition / family equivalenceの判定には利用しても論理identityそのものにはしない。
+端点2つをSegment identityとしない理由は、端点編集だけでSegment自体のidentityが失われ、SplitRelation等の参照が不要に連鎖して変化するためである。また、IntersectionAnchorを端点として利用すると、IntersectionAnchorがSegmentInstanceRefを参照するため、端点構造からSegment identityを再帰的に定義するとidentity自体へ循環参照を持ち込み得る。安定したIDと現在の定義を分離し、端点pairはSegment definition / family equivalenceの判定には利用しても論理identityそのものにはしない。
 
 <!-- test-contract: ARCH-PATTERN-SEGMENT-DISTINCT-ENDPOINTS -->
-同一Anchorを始点・終点に持つ退化Segmentは基本入力として作成しない。Pattern追加APIの `addSegment` でも、両端点のlogical Anchor identityが同一なら追加を拒否し、入力を変更せず元のPatternを返す。object参照が異なっていても、Vertexは頂点名、Edge Division Anchorはedge・divisions・indexが同じなら同一Anchorとする。この判定は座標一致、epsilon、最小長、分数の約分による同一視へ拡張しない。
+同一Anchorを始点・終点に持つ退化Segmentは基本入力として作成しない。Pattern追加APIの `addSegment` でも、両端点のlogical Anchor identityが同一なら追加を拒否し、入力を変更せず元のPatternを返す。object参照が異なっていても、Vertexは頂点名、Edge Division Anchorはedge・divisions・indexが同じなら同一Anchorとする。identityの判定と別に、解決後の両端がpointsAreCloseで一致する退化も拒否する。identityの統合や新たな最小長は導入しない。
 
 ### Segment definitionとSegment Family canonicalization
 
 <!-- test-contract: ARCH-PATTERN-SEGMENT-FAMILY-CANONICALIZATION -->
-現在source Segment端点として許可する `SegmentEndpointAnchor` は、VertexまたはEdge Division Anchorの論理参照である。Segment definitionは始点・終点の順序を持たない2 Anchorのpairとして比較する。同じAnchor pairを逆順で持つSegmentは同一定義とする。
+現在source Segment端点として許可する `SegmentEndpointAnchor` は、Vertex、Edge Division AnchorまたはIntersectionAnchorの論理参照である。Segment definitionは始点・終点の順序を持たない2 Anchorのpairとして比較する。同じAnchor pairを逆順で持つSegmentは同一定義とする。
 
 SymmetryによるFamily判定は、PointSegmentへ解決した浮動小数点座標の近似比較ではなく、Symmetry transformを論理Endpoint Anchorへ作用させた結果から行う。Vertexはtransformによる頂点置換として、Edge Division Anchorは変換後edgeとその向きに応じたindexへ写す。edge向きが反転する場合は `index` を `divisions - index` へ対応付け、`divisions` 自体は維持する。この論理Anchor作用もSymmetry固有知識として `symmetry` 境界へ集約し、Pattern状態遷移側へSymmetry種別分岐を複製しない。
 
@@ -58,13 +58,13 @@ source Segmentを追加するPattern APIは、同一unordered Anchor pairと現�
 
 ### Geometry overlapの検証境界
 
-logical Family / stabilizer canonicalizationとGeometry overlap拒否は別責務とする。Pattern操作は `expandPattern()` の論理定義に基づくcanonical instance展開を再利用し、解決済み線分のpairに対して `intersectSegments()` の `kind === 'overlap'` を入力制約へ利用する。独立した交差判定・epsilon・区間演算や、Geometryによるinstance重複除去は設けない。同じsourceでも異なるcanonical instanceは比較する。現在の `expandPattern()` はsource Segment群とSymmetryだけを展開入力の型として要求し、候補展開にもその情報だけを渡す。既存の依存情報を保持したままSegment群だけを候補へ差し替えた不整合なCellPatternは構築しない。将来の依存する端点の解決に必要となり得る完全なPattern文脈と、現在の展開入力は分けて扱う。
+logical Family / stabilizer canonicalizationとGeometry overlap拒否は別責務とする。Pattern操作は `expandPattern()` の論理定義に基づくcanonical instance展開を再利用し、解決済み線分のpairに対して `intersectSegments()` の `kind === 'overlap'` を入力制約へ利用する。独立した交差判定・epsilon・区間演算や、Geometryによるinstance重複除去は設けない。同じsourceでも異なるcanonical instanceは比較する。現在の `expandPattern()` はsource Segment群とSymmetryだけを展開入力の型として要求し、候補展開にもその情報だけを渡す。既存の依存情報を保持したままSegment群だけを候補へ差し替えた不整合なCellPatternは構築しない。依存closureを含む完全なsource定義を渡し、参照先を除いた部分sourceだけを展開しない。splitや材情報は不要である。
 
 検証対象はsource＋SymmetryによるDesign側の線分全体であり、split FragmentやEffective Geometryは検証対象にしない。MaterialExclusionとSplitRelationの追加・解除・復元へ重複したoverlap検証を置かない。
 
 `addSegment` は同一Anchor／ID／Family拒否を維持し、新規instanceと既存instanceの全組合せと新規instance内の異なるpairを検証する。既存instance同士を修復せず、代表も選び直さない。`changeSymmetry` は変更先でFamily canonicalizationとmapping導出を済ませてから全pairを検証する。どちらもoverlap拒否はatomicとし、入力を変更せず元の `CellPattern` をそのまま返す。途中のFamily統合結果や依存情報の移行結果を返さない。既存の `CellPattern → CellPattern` APIを維持し、UIは返却結果から拒否を判別する。
 
-importや既存malformed Patternの一括修復は保証しない。Geometry交差分類の非退化入力前提を維持し、異なるAnchor identityが同一点へ解決される問題へ新たな退化Segment仕様や最小長制約を導入しない。将来IntersectionAnchorを端点へ許可するときは、端点Geometryの依存変化に伴う再検証をその機能の責務として検討する。
+importや既存malformed Patternの一括修復は保証しない。交差分類へ渡す前に非退化を確認し、依存端点の移動でも全生存sourceの退化・Family重複・overlapを検証する。
 
 ### IntersectionAnchor
 
@@ -226,7 +226,7 @@ SplitRelation
 
 1つのSplitRelationはSymmetryに応じて複数のconcrete pairへ展開されるため、SplitRelationとIntersectionAnchorは1対1対応ではない。逆向きSplitRelationは別relationだが、同じconcrete pairに対応するIntersectionAnchorは共有する。両方向のrelationがある場合は1つのIntersectionAnchorから両target上のSegmentSplitBoundaryが得られ、片方向だけを解除するとAnchorが残っても解除方向の境界は消滅する。
 
-IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitRelationと二重保存しない。必要なIntersectionAnchor集合とSegmentSplitBoundary集合は、現在有効なrelation orbitを同じ派生段階で解釈して得る。IntersectionAnchorは少なくとも1つのrelationが同じconcrete pairを支える間だけ存在する。一方、特定Segment instance上の境界は、そのinstanceをtargetとするrelationが支える間だけ存在する。Anchorの存在だけから別方向の境界を推論しない。他の永続ドメイン情報が境界などとして特定のIntersectionAnchorを参照する場合は、その参照値を保持してよい。参照先Anchorが論理的に消滅したときは依存削除規則を適用する。
+IntersectionAnchorをCellPattern内の独立したAnchor registryとしてSplitRelationと二重保存しない。必要なIntersectionAnchor集合とSegmentSplitBoundary集合は、現在有効なrelation orbitを同じ派生段階で解釈して得る。split由来のAnchor集合へ含める条件は少なくとも1つのrelationが同じconcrete pairを支えることである。一般の交点端点の存在条件はDesign線分のcross/touchであり、この集合とは独立する。一方、特定Segment instance上の境界は、そのinstanceをtargetとするrelationが支える間だけ存在する。Anchorの存在だけから別方向の境界を推論しない。他の永続ドメイン情報が境界などとして特定のIntersectionAnchorを参照する場合は、その参照値を保持してよい。参照先Anchorが論理的に消滅したときは依存削除規則を適用する。
 
 ### SplitRelationの有効性とCellPattern invariant
 
@@ -454,7 +454,7 @@ Pattern Preview、将来の加工出力、および新規split候補の交差判
 
 <!-- test-contract: ARCH-PATTERN-ENDPOINT-CONTINUATION -->
 
-操作の意味は「指定source SegmentIdのstartまたはendを、指定SegmentEndpointAnchorへ変更する」である。SegmentId、反対側端点、他source定義、Symmetryは維持する。sourceのstart / endを並べ直したり、代表sourceを選び直したりしない。
+操作の意味は「指定source SegmentIdのstartまたはendを、指定SegmentEndpointAnchorへ変更する」である。SegmentId、反対側端点、他sourceの安定IDと論理参照、Symmetryは維持する。参照喪失時には依存sourceを連鎖削除する。sourceのstart / endを並べ直したり、代表sourceを選び直したりしない。
 
 Pattern層は、この変更をatomicに評価するpureな公開操作を持つ。返却結果は少なくとも `unchanged`、`rejected`（理由）、`changed`（新Patternと影響）を区別する。既存のaddSegment / changeSymmetryまで新しい結果型へ一括変更しない。
 
@@ -468,13 +468,13 @@ previewと確定はこの同じ操作を利用する。UIは返却された候�
 
 1. sourceの存在と変更対象端点を確認する。同じlogical Anchorへの要求はno-op。
 2. start / endのlogical Anchor identityが同一になる変更を拒否する。
-3. 編集対象を除いた他sourceとのFamily重複を拒否する。Family統合、他source削除、ID入れ替えによる救済は行わない。
-4. 候補sourceのcanonical instance同士、および候補instanceと他sourceの全instanceとの有限長overlapを拒否する。
+3. 依存先の移動に追従した全生存source間のFamily重複を拒否する。Family統合、他source削除、ID入れ替えによる救済は行わない。
+4. 全生存sourceの退化およびcanonical instance全pairの有限長overlapを拒否する。
 5. 制約を満たした場合だけ、次節の依存情報更新へ進む。
 
 overlapには#68と同じexpandPattern / intersectSegmentsを利用し、Design側の線分全体を比較する。編集前の自分自身のinstanceを比較対象へ残さない。stabilizerによる論理的自己一致をcanonicalizeした後に比較する。材なし状態を理由に重なりを許可しない。
 
-端点接触・通常の点交差・離れた同一直線上区間・重複しない辺上Segmentは許可する。退化判定を新たなepsilon・最小長・Anchor分数の約分へ拡張しない。現EditorはSegmentがある間division設定を固定しているため、通常の操作候補は同じdivision設定に属する。この前提を緩める機能や異なるAnchor identityが同座標へ解決される退化入力の一般対策は端点編集の責務には含めない。
+端点接触・通常の点交差・離れた同一直線上区間・重複しない辺上Segmentは許可する。退化判定には既存pointsAreCloseを使い、新たなepsilon・最小長・Anchor分数の約分は導入しない。異なるidentityの同座標端点も操作全体を拒否する。
 
 ### SplitRelationの継続規則
 
@@ -515,3 +515,89 @@ overlapには#68と同じexpandPattern / intersectSegmentsを利用し、Design�
 - 材なしの拡大は、新Design Geometry上で移行した有効区間のunionと、そのstabilizer closureとの差で判定する。旧座標の線分差分では判定しない。既存の区間演算責務を利用し、UIに別の区間演算を作らない。
 
 候補は常に有効なCellPatternとして返す。segmentsだけを変更して旧依存配列を残した不整合なPatternを、UIや一般のGeometry導出APIへ公開しない。検証用には必要なsegments / symmetryの狭い入力を使い、relation再構成→boundary移行→材正規化の順で完成させる。
+
+## 交点端点の依存と状態遷移
+
+### 1 データと解決責務
+
+`SegmentEndpointAnchor` にIntersectionAnchorを加える。CellPatternへAnchor registry・座標cache・依存graph・revisionを保存しない。依存graphと解決済みGeometryは1回の評価内の派生情報とする。
+
+`sourceGeometry.resolveIntersectionAnchor` と `designGeometry.resolveSplitIntersectionAnchor` を分け、次の責務を明確にする。
+
+1. pairが現在のsource Geometry上で一意な交点を作るかを解決する責務。split / 材に依存しない。
+2. 有向SplitRelation由来の境界が現在存在するかを判定する責務。MaterialExclusionとFragmentは必ずこちらを確認する。
+3. 新規端点候補としてEffective条件を満たすかを判定する責務。
+
+`deriveSplitIntersectionAnchors` はsplit由来のAnchorだけを列挙する。全幾何交点の列挙をFragment境界生成へ渡してはならない。一般resolverを導入してもsplit解除による材境界喪失を無効化しない。
+
+<!-- test-contract: ARCH-PATTERN-ENDPOINT-DEPENDENCY-DAG -->
+### 2 循環しないモジュール境界
+
+現在symmetryに同居するalgebra・logical canonicalization・Geometry展開を必要な範囲で分離する。
+
+- transform algebra / 型 / primitive key: source Geometry、split、材を参照しない。
+- logical Family / instance canonicalization: source定義と参照先sourceのcanonical情報を使う。参照先を先に処理する。Geometry近似を使わない。
+- source Geometry解決・instance展開: DAGに沿って端点を解決し、algebraで対称展開する。splitとEffective Geometryに依存しない。
+- Design Geometry: 解決済みinstanceにSplitRelationを適用して有向境界・Fragmentを導出する。
+- Material / Effective Geometry: 従来どおりDesign Geometryに材状態を適用する。
+- Pattern操作: 上記を編成し、完成した有効Patternと影響だけを公開する。
+
+`symmetry → designGeometry → symmetry` のruntime import循環や、端点resolverから高水準 `expandPattern` を再帰呼出しする構造にしない。pairの単純key/生成とalgebraが相互importする問題も避ける。低水準primitiveを小さく切り出すだけでよく、汎用graph / constraint / transaction frameworkは作らない。
+
+expandの入力は依存closureを含むsource定義とSymmetry。SplitRelation・MaterialExclusionを必要としない。編集sourceだけ、または参照先を除いたothersだけのPatternを解決しない。評価内ではsource ID別の解決結果を共有し、同じ依存木を毎回全再帰しない。永続cacheは不要。
+
+<!-- test-contract: ARCH-PATTERN-INTERSECTION-ENDPOINT-MAPPING -->
+### 3 交点へのSymmetry作用・Family
+
+交点 `I(A@g, B@h)` にtransform tを作用させるとき、両方のrefのtransformへ既存algebraのcomposeを作用させる。その後、各参照先sourceのstabilizerでcanonical instanceへ射影し、pairをunorderedに正規化する。作用の合成順は既存 `compose(a,b) = aの後にb` に従う。
+
+primitiveなalgebraはraw refへ作用し、source文脈が必要なcanonicalizationはFamily責務側で行う。algebra自身にPattern全体の探索を持ち込まない。
+
+Family keyはこの正規化済みlogical端点pairから導出する。Intersectionを座標へ解決してからstabilizerを決めない。依存先の自己一致により同じrefになるケースを正しく扱い、異なるpairが偶然同座標にあるだけなら別定義に保つ。その結果、Geometryだけが完全一致する異なるcanonical instanceはoverlapとして拒否される。
+
+生成instanceから端点変更する場合は、表示先Anchorの両refへ選択instanceの逆transformを作用させる。sourceのstart/end role、raw→canonical方向、編集後selection mappingは#71の規則を維持する。
+
+<!-- test-contract: ARCH-PATTERN-ENDPOINT-DEPENDENCY-ATOMICITY -->
+### 4 端点変更時の継続
+
+候補のendpoint差替え後、循環を先に拒否する。依存先から順に以下を実施する。
+
+1. 参照先が継続するなら保存済みsource IDとtransformをその新定義でcanonicalizeしてpairを再構成する。旧stabilizerに含まれる別raw transformを列挙して参照を増殖させない。
+2. 交点を解決できない既存利用sourceを除去し、その下位へ伝播する。新規要求・編集source自身の不正は拒否。
+3. 生存sourceの退化・Family重複・全canonical instance間overlapを検証する。変更されたsourceだけに限定しない。
+4. 生存source間の既存relationを#71の保存relative継続規則で再正規化・検証する。消滅sourceに依存するrelationは除去する。
+5. 旧有向境界の対応と材指定を移行し、既存材normalization / stabilizer closureを実施する。
+6. 旧source・relation・境界・材指定ごとの対応を追跡し、完成Patternと影響を返す。
+
+依存sourceの端点が動いてもそのSegmentIdとstart/end roleを維持する。編集sourceの変形へGeometry一致を要求するbasis mappingを流用しない。
+
+### 5 Symmetry変更とFamily統合
+
+交点端点のtransformは旧Symmetry文脈に属する。両refをそれぞれ `oldAlgebra.toRelative → newAlgebra.fromRelative` に通し、member semanticsを継続する。mirror軸変更は旧mirrorから新mirrorへ移る。noneへの変更でmirror / rotation memberをidentityへ潰さない。表現不能なら端点参照喪失とする。
+
+処理順を次のように確定する。
+
+1. 元DAGの依存先から処理する。各sourceの両端点について、transform文脈変換と、処理済み参照先のsource basis mappingを適用し、canonical pairへ正規化する。
+2. 参照不能・交点消失ならsourceを喪失扱いにし、下位へ伝播する。pairの両refが同一instanceへ写った場合も喪失。同じsourceでも異なるinstanceで交差するなら保持する。
+3. 正規化済み端点定義を新SymmetryのFamilyとしてまとめ、現在と同じ決定的代表規則を使う。代表変更が起きた場合、既に作った下位参照を含むmappingを合成して更新する。
+4. Family統合による参照書換えがさらに下位Familyを一致させることがある。source参照の正規化とFamily統合を、全参照が最終代表へ写るまで完了させる。変更の伝播は依存順、追加統合はsource数の厳密減少で有限に収束する。上限回数で途中結果を成功扱いにしない。
+5. mapping後のDAGを再確認する。もし循環を作る場合は操作全体を拒否し、循環部分の削除で救済しない。生存sourceの退化と全体overlapも拒否する。
+6. 元Patternから最終Patternへの合成mappingでSplitRelationとMaterialExclusionを一度移行する。中間統合ごとに材状態を削って結果を持ち越さない。
+
+代表の選択は入力配列順に依存させない。段階的に最初に見たsourceを固定代表にして既存仕様を変更しない。basis mappingのtransformとdirectionを合成し、材endpoint roleの反転を維持する。最終材状態は移行可能な全旧sourceのunionであり、代表sourceの旧材状態だけを採用しない。
+
+新しい代表へのlogical mappingがある場合はsource喪失ではない。mapping不能な交点端点のsourceとその下位だけを削除候補にし、同じ座標の別pairへ救済しない。
+
+### 6 APIとUI接続
+
+既存 `addSegment`、`removeSegment`、`changeSymmetry` の戻り値互換を必要なく破壊しない。新しい影響確認を必要とする削除・Symmetry変更にはpureな評価APIを用意し、既存APIも同じ評価処理へ委譲する。二重のcleanup実装を作らない。端点変更は既存result unionを拡張する。
+
+評価は `unchanged / rejected(reason) / changed(pattern, impact)` を区別できること。impactは削除source ID集合等の根拠を持ち、UIが配列長差分から連鎖喪失を推測しない。UIから任意のnextPatternを適用するsetterは公開しない。承認は確認済みの操作要求に対して行う。
+
+新規作成の拒否は既存addの評価を使って表示し、検証実装を複製しない。拒否された作成ではPatternを維持し、有効な始点contextを残して別終点を選べる。始点が消失・選択不可ならidleへ戻し理由を表示する。
+
+交点端点の候補導出は、同じPatternのDesign Geometry snapshotとEffective Geometry queryから全canonical instance pairの解決点と選択可能identity lookupを作る。`EndpointGeometryQuery`を通常reconcile・hit test・marker・preview描画で共有し、候補ごとの全交点列挙や座標取得ごとのsource再展開を行わない。同座標でも異なるpairは保持する。Appは現在のPatternに対応する派生値をmemo化してEditorとeffectへ渡すが、永続cacheやReact stateには保存しない。UI用の正確なidentity照合と、ドメイン操作の明示的canonicalizationを分離する。
+
+`evaluateAddSegment`は追加の可否、拒否理由、拒否後の始点再利用可否を返す。`addSegment`は同じ評価へ委譲し、拒否時に元Patternを返す互換性を保つ。UIは評価結果を表示し、重複・交点参照・材の条件を再実装しない。通常reconcileでの作成途中始点のDesign基準照合と、追加確定時のEffective基準検証を分離する。
+
+文脈なしの`resolveSegmentEndpoint`は`BoundaryAnchor`（Vertex / Edge Division）だけを受け取る。一般の`SegmentEndpointAnchor`はPattern文脈付き`resolveEndpoint`、一般Segment群は`resolveSourceDefinitions` / `expandPattern`で解決する。文脈なしの一般Segment resolverは公開しない。

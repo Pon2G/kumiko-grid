@@ -109,3 +109,16 @@ footer { display: flex; justify-content: space-between; padding: 18px 4vw; borde
 .endpoint-inspector > strong, .endpoint-inspector > p, .endpoint-inspector > .impact-warning { width: 100%; }
 
 .endpoint-rubber-band.invalid { stroke: #9c392d; stroke-dasharray: 3 4; }
+
+.generator-open { margin: 20px; min-height: 44px; }
+.generator-dialog { width: min(900px, calc(100% - 24px)); max-height: calc(100dvh - 32px); overflow-y: auto; border: 1px solid #8b958b; padding: 24px; background: #f5f2e9; color: #24362e; }
+.generator-dialog::backdrop { background: #162a24b3; }
+.generator-input { display: grid; gap: 8px; margin: 16px 0; }
+.generator-input textarea { width: 100%; resize: vertical; font: inherit; padding: 12px; }
+.generator-dialog button { min-height: 44px; padding: 8px 16px; }
+.generator-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.generator-dialog button:disabled { opacity: .45; }
+.generated-cell { display: block; width: min(100%, 360px); margin: 16px auto; }
+.generator-dialog .preview-panel { position: static; }
+.generator-dialog .preview-stage { height: 300px; }
+.generation-provenance { grid-column: 1 / -1; margin: 0; font-size: 14px; }

@@ -1,3 +1,6 @@
+import { generateCellPatternFromText, type CellPatternGenerationRecipe } from '../generator/cellPatternGenerator'
+import { PatternGenerator } from '../components/PatternGenerator/PatternGenerator'
+import { evaluateGenerationApply, type GeneratorSession } from './generatorSession'
 import { createEndpointGeometryQuery } from '../pattern/endpointCandidates'
 import type { EndpointEditImpact } from '../pattern/endpointEdit'
 import { segmentEndpointAnchorKey } from '../pattern/anchor'
@@ -34,6 +37,12 @@ export default function App() {
   const [symmetryNotice, setSymmetryNotice] = useState<string>()
   const [interaction, rawSetInteraction] = useState<EditorInteraction>(idleEditorInteraction)
 
+  const [generationRecipe, setGenerationRecipe] = useState<CellPatternGenerationRecipe | null>(null)
+  const [generationText, setGenerationText] = useState('')
+  const [generatorSession, rawSetGeneratorSession] = useState<GeneratorSession | null>(null)
+  const generatorSessionRef = useRef(generatorSession)
+  const setGeneratorSession = (value: GeneratorSession | null) => { generatorSessionRef.current = value; rawSetGeneratorSession(value) }
+
   const patternRef = useRef(pattern)
   const interactionRef = useRef(interaction)
   const setPattern = (value: SetStateAction<CellPattern>) => {
@@ -59,6 +68,7 @@ export default function App() {
   }, [divisions])
 
   const handleInteraction = (event: EditorInteractionEvent) => {
+    if (generatorSessionRef.current) return
     setSegmentNotice(undefined)
     if (event.kind === 'clear') setPendingOperation(null)
     const transition = transitionEditorInteraction(interactionRef.current, event, { pattern: patternRef.current, divisions })
@@ -142,6 +152,34 @@ export default function App() {
     if (next !== interaction) setInteraction(next)
   }, [pattern, interaction, geometry])
 
+  const finishInteraction = () => {
+    setInteraction(idleEditorInteraction())
+    setPendingOperation(null)
+    setSegmentNotice(undefined)
+    setSymmetryNotice(undefined)
+  }
+  const openGenerator = () => {
+    setGeneratorSession({ base: patternRef.current, divisions, candidate: null })
+    finishInteraction()
+  }
+  const generate = () => {
+    if (!generatorSessionRef.current) return
+    const result = generateCellPatternFromText(generationText)
+    setGeneratorSession({ base: patternRef.current, divisions, candidate: result.kind === 'generated' ? result.value : null, notice: result.kind === 'rejected' ? result.reason : undefined })
+  }
+  const applyGeneration = () => {
+    const session = generatorSessionRef.current
+    if (!session) return
+    const result = evaluateGenerationApply(session, patternRef.current, divisions)
+    if (result.kind === 'stale') { setGeneratorSession(result.session); return }
+    if (result.kind !== 'applied') return
+    setPattern(result.value.cellPattern)
+    setDivisions(result.value.editorDefaults.divisions)
+    setGenerationRecipe(result.value.generator)
+    finishInteraction()
+    setGeneratorSession(null)
+  }
+
   return (
     <>
       <header className="site-header">
@@ -152,6 +190,7 @@ export default function App() {
       </header>
       <main>
         <Settings
+          onGenerate={openGenerator}
           divisions={divisions}
           divisionsDisabled={pattern.segments.length > 0}
           symmetry={pattern.symmetry}
@@ -160,6 +199,7 @@ export default function App() {
           notice={symmetryNotice}
         />
         <div className="workspace">
+          {generationRecipe && <p className="generation-provenance">生成元：おまかせ v1<br /><small>生成条件は適用直後の文様を再現します。手動編集は含みません。</small></p>}
           <CellEditor
             geometry={geometry}
             dependencyConfirmation={pendingOperation?.base === pattern ? pendingOperation.impact : null}
@@ -180,6 +220,11 @@ export default function App() {
           <PatternPreview pattern={previewPattern ?? pattern} endpointPreview={previewPattern !== null} />
         </div>
       </main>
+      {generatorSession && <PatternGenerator
+        text={generationText} candidate={generatorSession.candidate} notice={generatorSession.notice}
+        onTextChange={text => { setGenerationText(text); setGeneratorSession({ ...generatorSession, candidate: null, notice: undefined }) }}
+        onGenerate={generate} onApply={applyGeneration} onClose={() => setGeneratorSession(null)}
+      />}
       <footer><span>正規化座標による幾何学設計</span><span>△ ▽ △ ▽ △</span></footer>
     </>
   )

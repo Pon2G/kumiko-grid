@@ -1,4 +1,4 @@
-import { selectableEndpoint } from '../pattern/endpointCandidates'
+import { createEndpointGeometryQuery, selectableEndpoint } from '../pattern/endpointCandidates'
 import type { EndpointEditImpact } from '../pattern/endpointEdit'
 import { segmentEndpointAnchorKey } from '../pattern/anchor'
 import { sourceEndpointDestination, endpointSelectionAfterEdit, endpointImpactNeedsConfirmation } from '../pattern/endpointEdit'
@@ -45,6 +45,7 @@ export default function App() {
   const editing = interaction.kind === 'editing-endpoint' && interaction.context.base === pattern && interaction.context.divisions === divisions ? interaction : null
   const previewAnchor = editing && endpointPreviewAnchor(editing)
   const previewAnchorKey = previewAnchor ? segmentEndpointAnchorKey(previewAnchor) : null
+  const geometry = useMemo(() => createEndpointGeometryQuery(pattern), [pattern])
   const endpointEvaluation = useMemo(() => {
     if (!editing || !previewAnchor) return null
     const anchor = sourceEndpointDestination(editing.context.base, editing.context.instance, previewAnchor)
@@ -137,9 +138,9 @@ export default function App() {
 
   useEffect(() => {
     if (pendingOperation && pendingOperation.base !== pattern) setPendingOperation(null)
-    const next = reconcileEditorInteraction(pattern, interaction)
+    const next = reconcileEditorInteraction(pattern, interaction, geometry)
     if (next !== interaction) setInteraction(next)
-  }, [pattern, interaction])
+  }, [pattern, interaction, geometry])
 
   return (
     <>
@@ -160,6 +161,7 @@ export default function App() {
         />
         <div className="workspace">
           <CellEditor
+            geometry={geometry}
             dependencyConfirmation={pendingOperation?.base === pattern ? pendingOperation.impact : null}
             onApproveDependency={approveOperation}
             onCancelDependency={() => setPendingOperation(null)}

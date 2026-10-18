@@ -235,6 +235,8 @@ export class EffectiveGeometryQuery {
     }))
   }
 
+  get design(): DesignGeometrySnapshot { return this.#design }
+
   get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#geometry }
 
   copyGeometry(): PatternFragment[] {

@@ -518,4 +518,4 @@ keyboardで交点Anchorと曖昧候補へ到達し、選択・確定・取消し
 - 端点編集のpreview・hit候補は開始Patternを基準とし、候補Patternを次の評価基準にしない。preview中に消える依存sourceや交点を候補導出の基準へ逆流させない。
 - 編集/影響確認中に外部Patternが変更されたら中断する。古い承認を新Patternへ適用しない。
 - 通常の作成途中は始点Intersectionを現在Patternで再照合する。消滅したら作成contextを破棄。存続なら同じidentityの現在座標へ更新し、終点確定時に新規操作条件も再検証する。
-- 曖昧候補の消滅は既存reconcile方針（previewだけ解除、残る候補維持、1件になっても自動確定しない）を維持する。別pairへ座標で付け替えない。
+- 曖昧候補の消滅は既存reconcile方針（previewだけ解除、残る候補維持、1件になっても自動確定しない）を維持する。別pairへ座標で付け替えない。通常のUI再照合では現在のcanonical pairとのidentity一致を確認し、stabilizer変化で消えたpairを再正規化して存続させない。永続端点の明示的な継続と端点編集成功時のselection mappingは維持する。

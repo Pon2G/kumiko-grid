@@ -595,3 +595,5 @@ Family keyはこの正規化済みlogical端点pairから導出する。Intersec
 評価は `unchanged / rejected(reason) / changed(pattern, impact)` を区別できること。impactは削除source ID集合等の根拠を持ち、UIが配列長差分から連鎖喪失を推測しない。UIから任意のnextPatternを適用するsetterは公開しない。承認は確認済みの操作要求に対して行う。
 
 新規作成の拒否は既存addの評価を使って表示し、検証実装を複製しない。拒否された作成ではPatternを維持し、有効な始点contextを残して別終点を選べる。始点が消失・選択不可ならidleへ戻し理由を表示する。
+
+交点端点の候補導出は、同じPatternのDesign Geometry snapshotとEffective Geometry queryから全canonical instance pairの解決点と選択可能identity lookupを作る。`EndpointGeometryQuery`を通常reconcile・hit test・marker・preview描画で共有し、候補ごとの全交点列挙や座標取得ごとのsource再展開を行わない。同座標でも異なるpairは保持する。Appは現在のPatternに対応する派生値をmemo化してEditorとeffectへ渡すが、永続cacheやReact stateには保存しない。UI用の正確なidentity照合と、ドメイン操作の明示的canonicalizationを分離する。

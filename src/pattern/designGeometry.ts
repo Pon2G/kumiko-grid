@@ -312,6 +312,8 @@ export class DesignGeometrySnapshot {
     })
   }
 
+  get instances(): ReadonlyArray<DeepReadonly<RenderedSegment>> { return [...this.#state.instancesByRef.values()] }
+
   get logicalFragments(): ReadonlyArray<ReadonlyResolvedLogicalFragment> { return this.#state.logicalFragments }
   get geometry(): ReadonlyArray<ReadonlyPatternFragment> { return this.#state.geometry }
 

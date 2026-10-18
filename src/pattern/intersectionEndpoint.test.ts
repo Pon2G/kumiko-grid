@@ -1,3 +1,4 @@
+import { intersectSegments, pointsAreClose } from '../geometry/intersections'
 import { expect } from 'vitest'
 import { contractTest } from '../test/contractTest'
 import type { CellPattern, SegmentInstanceRef } from './cellPattern'
@@ -6,7 +7,7 @@ import { addSegment, removeSegment, addSplitRelation, removeSplitRelation, chang
 import { changeSegmentEndpoint, sourceEndpointDestination } from './endpointEdit'
 import { createIntersectionAnchor, intersectionAnchorKey } from './intersectionAnchor'
 import { expandPattern, resolveEndpoint } from './sourceGeometry'
-import { intersectionEndpointCandidates } from './endpointCandidates'
+import { createEndpointGeometryQuery, intersectionEndpointCandidates } from './endpointCandidates'
 import { deriveLogicalFragments } from './designGeometry'
 import { excludeMaterial, restoreMaterial } from './materialExclusion'
 
@@ -189,4 +190,25 @@ contractTest({ contract: 'ARCH-PATTERN-INTERSECTION-ENDPOINT-MAPPING' }, '回転
   const result = evaluateSymmetryChange(pattern, { type: 'none' })
   expect(result.kind).toBe('changed')
   if (result.kind === 'changed') expect(result.impact.lostSourceIds).toEqual(['d'])
+})
+
+contractTest({ contract: 'SPEC-ANCHOR-INTERSECTION-ENDPOINT', regression: 72 }, '12分割の回転対称11 sourceで全pairの候補と解決点を保持し同座標pairを統合しない', () => {
+  let pattern: CellPattern = { segments: [], symmetry: { type: 'rotational' }, splitRelations: [], materialExclusions: [] }
+  for (let i = 1; i < 12; i++) pattern = addSegment(pattern, { id: `s${i}`, start: edge('AB', i, 12), end: edge('CA', i, 12) })
+  expect(pattern.segments).toHaveLength(11)
+  const instances = expandPattern(pattern)
+  const expected = new Map<string, { x: number; y: number }>()
+  for (let i = 0; i < instances.length; i++) for (let j = i + 1; j < instances.length; j++) {
+    const hit = intersectSegments(instances[i], instances[j])
+    if (hit.kind === 'cross' || hit.kind === 'touch') expected.set(intersectionAnchorKey(createIntersectionAnchor(instances[i].instanceRef, instances[j].instanceRef)), hit.point)
+  }
+  const query = createEndpointGeometryQuery(pattern)
+  expect(new Set(query.candidates.map(intersectionAnchorKey))).toEqual(new Set(expected.keys()))
+  const positions = query.candidates.map(anchor => {
+    const point = query.resolve(anchor)!
+    expect(query.selectable(anchor)).toBe(true)
+    expect(pointsAreClose(point, expected.get(intersectionAnchorKey(anchor))!)).toBe(true)
+    return point
+  })
+  expect(positions.some((point, i) => positions.some((other, j) => i !== j && pointsAreClose(point, other)))).toBe(true)
 })

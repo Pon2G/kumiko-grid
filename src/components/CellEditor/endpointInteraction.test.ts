@@ -80,3 +80,26 @@ contractTest({ contract: 'SPEC-EDITOR-INTERSECTION-ENDPOINT-INTERACTION' }, '交
   const choosing: EditorInteraction = { kind: 'choosing-target', context: { kind: 'normal' }, candidates: [candidate, { kind: 'anchor', anchor: c }], previewKey: canvasHitCandidateKey(candidate) }
   expect(reconcileEditorInteraction(missing, choosing)).toEqual({ ...choosing, candidates: [{ kind: 'anchor', anchor: c }], previewKey: null })
 })
+
+contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 72 }, '鏡映sourceのstabilizer変更で消えた交点pairをUIの始点・候補・previewへ移行しない', () => {
+  const pattern: CellPattern = { ...base, symmetry: { type: 'mirror', axis: 'A' }, segments: [
+    { id: 'a', start: a, end: { kind: 'edge-division', edge: 'BC', divisions: 4, index: 1 } },
+    { id: 'b', start: b, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } },
+  ] }
+  const anchor = createIntersectionAnchor({ sourceSegmentId: 'a', transform: { type: 'mirror', axis: 'A' } }, { sourceSegmentId: 'b', transform: { type: 'identity' } })
+  const candidate = { kind: 'anchor' as const, anchor }
+  const survivor = { kind: 'anchor' as const, anchor: c }
+  const choosing: EditorInteraction = { kind: 'choosing-target', context: { kind: 'normal' }, candidates: [candidate, survivor], previewKey: canvasHitCandidateKey(candidate) }
+  expect(reconcileEditorInteraction(pattern, choosing)).toBe(choosing)
+  const changed = changeSegmentEndpoint(pattern, 'a', 'end', { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 })
+  expect(changed.kind).toBe('changed')
+  if (changed.kind !== 'changed') return
+  // 永続参照の継続は可能でも、通常のUI照合には適用しない。
+  expect(resolveEndpoint(changed.pattern, anchor)).not.toBeNull()
+  expect(reconcileEditorInteraction(changed.pattern, { kind: 'creating-segment', startAnchor: anchor })).toEqual({ kind: 'idle' })
+  expect(reconcileEditorInteraction(changed.pattern, { ...choosing, context: { kind: 'segment-endpoint', startAnchor: anchor } })).toEqual({ kind: 'idle' })
+  expect(reconcileEditorInteraction(changed.pattern, choosing)).toEqual({ ...choosing, candidates: [survivor], previewKey: null })
+  expect(reconcileEditorInteraction(changed.pattern, { ...choosing, candidates: [candidate] })).toEqual({ kind: 'idle' })
+  const survivingPreview = { ...choosing, previewKey: canvasHitCandidateKey(survivor) }
+  expect(reconcileEditorInteraction(changed.pattern, survivingPreview)).toEqual({ ...survivingPreview, candidates: [survivor] })
+})

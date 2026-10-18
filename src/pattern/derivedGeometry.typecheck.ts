@@ -1,3 +1,4 @@
+import { createEndpointGeometryQuery, type EndpointGeometryQuery } from './endpointCandidates'
 import type { CellPattern, SplitRelation } from './cellPattern'
 import {
   deriveDesignGeometrySnapshot,
@@ -13,6 +14,17 @@ import {
 function verifyDerivedGeometryTypes(patternA: CellPattern, patternB: CellPattern, relation: SplitRelation): void {
   const snapshot = deriveDesignGeometrySnapshot(patternA)
   const query = createEffectiveGeometryQuery(patternA)
+  const endpoints = createEndpointGeometryQuery(patternA)
+  // @ts-expect-error spreadで元Patternや問い合わせを差し替えた値は正規queryにならない
+  const mixedEndpoints: EndpointGeometryQuery = { ...endpoints, matches: () => true }
+  // @ts-expect-error 候補のpairは読み取り専用
+  endpoints.candidates[0].first = { sourceSegmentId: 'other', transform: { type: 'identity' } }
+  // @ts-expect-error 共有instanceの座標は読み取り専用
+  endpoints.instances[0].start.x = 0
+  const point = endpoints.resolve({ kind: 'vertex', vertex: 'A' })
+  // @ts-expect-error 解決点は読み取り専用
+  if (point) point.x = 0
+  void mixedEndpoints
   const orbit = validateSplitRelationOrbitFromSnapshot(snapshot, relation)
   query.validateSplitRelationOrbit(relation)
 

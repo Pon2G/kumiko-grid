@@ -2,7 +2,7 @@ import { hasOverlap } from './segmentOverlap'
 import { pointsAreClose } from '../geometry/intersections'
 import type { EndpointEditResult, EndpointEditImpact } from './endpointEdit'
 import { continueEndpointSources, validateEndpointSources, validEndpointAnchor } from './endpointDependencies'
-import { selectableEndpoint } from './endpointCandidates'
+import { createEndpointGeometryQuery, selectableEndpoint } from './endpointCandidates'
 import { createIntersectionAnchor } from './intersectionAnchor'
 import { dependencyOrder, segmentDefinitionKey, expandPattern, segmentFamilyKey } from './sourceGeometry'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
@@ -25,7 +25,8 @@ export function addSegment(pattern: CellPattern, segment: Segment): CellPattern 
   if (!validEndpointAnchor(segment.start) || !validEndpointAnchor(segment.end)) return pattern
   if (pattern.segments.some(s => s.id === segment.id)) return pattern
   try {
-    if (!selectableEndpoint(pattern, segment.start) || !selectableEndpoint(pattern, segment.end)) return pattern
+    const geometry = segment.start.kind === 'intersection' || segment.end.kind === 'intersection' ? createEndpointGeometryQuery(pattern) : undefined
+    if (!selectableEndpoint(pattern, segment.start, geometry) || !selectableEndpoint(pattern, segment.end, geometry)) return pattern
     const requested = [...pattern.segments, segment]
     dependencyOrder(requested)
     const segments = continueEndpointSources(requested, pattern.symmetry)

@@ -1,3 +1,6 @@
+import { resolveSegmentEndpoint } from './anchor'
+import type { Segment } from './segment'
+import type { IntersectionAnchor } from './intersectionAnchor'
 import { createEndpointGeometryQuery, type EndpointGeometryQuery } from './endpointCandidates'
 import type { CellPattern, SplitRelation } from './cellPattern'
 import {
@@ -81,3 +84,14 @@ function verifyDerivedGeometryTypes(patternA: CellPattern, patternB: CellPattern
 }
 
 void verifyDerivedGeometryTypes
+
+/** 文脈なしresolverへ一般端点を渡せないことを型で保証する。 */
+function verifyBoundaryResolverTypes(segment: Segment, intersection: IntersectionAnchor): void {
+  resolveSegmentEndpoint({ kind: 'vertex', vertex: 'A' })
+  resolveSegmentEndpoint({ kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 })
+  // @ts-expect-error Intersectionの解決にはPattern文脈が必要
+  resolveSegmentEndpoint(intersection)
+  // @ts-expect-error 一般Segmentの端点は境界Anchorに限定されない
+  resolveSegmentEndpoint(segment.start)
+}
+void verifyBoundaryResolverTypes

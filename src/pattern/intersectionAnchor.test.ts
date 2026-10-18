@@ -6,7 +6,8 @@ import {
   createIntersectionAnchor,
   intersectionAnchorKey,
 } from './intersectionAnchor'
-import { resolveSegment, type Segment } from './segment'
+import type { Segment } from './segment'
+import { expandPattern } from './sourceGeometry'
 import {
   deriveSplitIntersectionAnchors,
   deriveLogicalFragments,
@@ -128,7 +129,8 @@ describe('IntersectionAnchorと論理Fragment', () => {
     const anchor = deriveSplitIntersectionAnchors(withRelation)[0]
     const withoutRelation = removeSplitRelation(withRelation, aToB)
 
-    expect(intersectSegments(resolveSegment(target), resolveSegment(cutterB)).kind).toBe('cross')
+    const instances = expandPattern(withoutRelation)
+    expect(intersectSegments(instances.find(s => s.sourceId === target.id)!, instances.find(s => s.sourceId === cutterB.id)!).kind).toBe('cross')
     expect(deriveSplitIntersectionAnchors(withoutRelation)).toEqual([])
     expect(resolveSplitIntersectionAnchor(withoutRelation, anchor)).toBeNull()
   })

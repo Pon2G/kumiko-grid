@@ -1,4 +1,4 @@
-import { createEndpointGeometryQuery, selectableEndpoint } from '../pattern/endpointCandidates'
+import { createEndpointGeometryQuery } from '../pattern/endpointCandidates'
 import type { EndpointEditImpact } from '../pattern/endpointEdit'
 import { segmentEndpointAnchorKey } from '../pattern/anchor'
 import { sourceEndpointDestination, endpointSelectionAfterEdit, endpointImpactNeedsConfirmation } from '../pattern/endpointEdit'
@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type SetStateAction } from 'react
 import type { Segment } from '../pattern/segment'
 import type { CellPattern, SplitRelation, Symmetry } from '../pattern/cellPattern'
 import { splitRelationKey } from '../pattern/designGeometry'
-import { changeSegmentEndpoint, addSegment, addSplitRelation, evaluateSymmetryChange, evaluateRemoveSegment, removeSplitRelation } from '../pattern/patternOperations'
+import { changeSegmentEndpoint, evaluateAddSegment, addSplitRelation, evaluateSymmetryChange, evaluateRemoveSegment, removeSplitRelation } from '../pattern/patternOperations'
 import { excludeMaterial, restoreMaterial } from '../pattern/materialExclusion'
 import { CellEditor } from '../components/CellEditor/CellEditor'
 import {
@@ -92,10 +92,10 @@ export default function App() {
         end: transition.command.endAnchor,
       }
       const current = patternRef.current
-      const next = addSegment(current, segment)
-      setSegmentNotice(next === current ? '端点参照が無効か線分が重複するため追加できません' : undefined)
-      if (next === current && selectableEndpoint(current, segment.start)) setInteraction({ kind: 'creating-segment', startAnchor: segment.start })
-      setPattern(next)
+      const result = evaluateAddSegment(current, segment)
+      setSegmentNotice(result.kind === 'rejected' ? result.reason : undefined)
+      if (result.kind === 'rejected' && result.startSelectable) setInteraction({ kind: 'creating-segment', startAnchor: segment.start })
+      if (result.kind === 'changed') setPattern(result.pattern)
     }
   }
 

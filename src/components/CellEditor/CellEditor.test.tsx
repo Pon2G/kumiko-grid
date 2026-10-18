@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, vi } from 'vitest'
 import { contractTest } from '../../test/contractTest'
-import { createSegmentEndpointAnchors, resolveSegmentEndpoint, type SegmentEndpointAnchor } from '../../pattern/anchor'
+import { createSegmentEndpointAnchors, resolveSegmentEndpoint, type BoundaryAnchor, type SegmentEndpointAnchor } from '../../pattern/anchor'
 import type { CellPattern } from '../../pattern/cellPattern'
 import { deriveLogicalFragments, derivePatternGeometry, splitRelationKey } from '../../pattern/designGeometry'
 import { excludeMaterial, restoreMaterial } from '../../pattern/materialExclusion'
@@ -259,7 +259,7 @@ describe('Cell Editor直接操作', () => {
     const nearbyStart = { ...start, index: 2 } as const
     const end = { kind: 'edge-division', edge: 'AB', divisions: 12, index: 2 } as const
     const nearbyEnd = { ...end, index: 3 } as const
-    const midpoint = (first: SegmentEndpointAnchor, second: SegmentEndpointAnchor) => {
+    const midpoint = (first: BoundaryAnchor, second: BoundaryAnchor) => {
       const a = resolveSegmentEndpoint(first)
       const b = resolveSegmentEndpoint(second)
       return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }

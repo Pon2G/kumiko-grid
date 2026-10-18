@@ -1,10 +1,11 @@
+import { resolveSegmentEndpoint, type SegmentEndpointAnchor } from './anchor'
 import { hasOverlap } from './segmentOverlap'
 import { pointsAreClose } from '../geometry/intersections'
 import type { EndpointEditResult, EndpointEditImpact } from './endpointEdit'
 import { continueEndpointSources, validateEndpointSources, validEndpointAnchor } from './endpointDependencies'
 import { createEndpointGeometryQuery, selectableEndpoint } from './endpointCandidates'
 import { createIntersectionAnchor } from './intersectionAnchor'
-import { dependencyOrder, segmentDefinitionKey, expandPattern, segmentFamilyKey } from './sourceGeometry'
+import { dependencyOrder, segmentDefinitionKey, expandPattern, transformEndpoint, segmentFamilyKey } from './sourceGeometry'
 import type { CellPattern, MaterialBoundaryRef, MaterialExclusion, SegmentInstanceRef, SplitRelation, Symmetry } from './cellPattern'
 import {
   canonicalizeSplitRelation,
@@ -20,26 +21,48 @@ import { canonicalizeSegmentFamilies, mapCanonicalInstance } from './segmentFami
 import type { Segment } from './segment'
 import { instanceRefKey, symmetryTransformAlgebra, type SegmentInstanceBasisMapping } from './symmetry'
 
-/** source Segment追加時点でdefinition / Family invariantを回復する唯一の公開操作。 */
-export function addSegment(pattern: CellPattern, segment: Segment): CellPattern {
-  if (!validEndpointAnchor(segment.start) || !validEndpointAnchor(segment.end)) return pattern
-  if (pattern.segments.some(s => s.id === segment.id)) return pattern
+export type SegmentAdditionResult =
+  | { kind: 'changed'; pattern: CellPattern }
+  | { kind: 'rejected'; reason: string; startSelectable: boolean }
+
+/** 拒否理由と始点の再利用可否も、追加と同じPattern評価で決める。 */
+export function evaluateAddSegment(pattern: CellPattern, segment: Segment): SegmentAdditionResult {
+  let startSelectable = false
+  const reject = (reason: string): SegmentAdditionResult => ({ kind: 'rejected', reason, startSelectable })
   try {
-    const geometry = segment.start.kind === 'intersection' || segment.end.kind === 'intersection' ? createEndpointGeometryQuery(pattern) : undefined
-    if (!selectableEndpoint(pattern, segment.start, geometry) || !selectableEndpoint(pattern, segment.end, geometry)) return pattern
+    if (!validEndpointAnchor(segment.start)) return reject('端点の指定が不正なため追加できません')
+    const endValid = validEndpointAnchor(segment.end)
+    const geometry = segment.start.kind === 'intersection' || (endValid && segment.end.kind === 'intersection') ? createEndpointGeometryQuery(pattern) : undefined
+    startSelectable = selectableEndpoint(pattern, segment.start, geometry)
+    if (!endValid) return reject('端点の指定が不正なため追加できません')
+    if (pattern.segments.some(s => s.id === segment.id)) return reject('線分IDが使用済みのため追加できません')
     const requested = [...pattern.segments, segment]
-    dependencyOrder(requested)
+    try { dependencyOrder(requested) } catch { return reject('端点参照が循環するため追加できません') }
+    const resolve = (anchor: SegmentEndpointAnchor) => {
+      if (anchor.kind !== 'intersection') return resolveSegmentEndpoint(anchor)
+      const canonical = transformEndpoint(pattern.symmetry, anchor, { type: 'identity' }, pattern.segments)
+      return canonical ? geometry?.resolve(canonical) ?? null : null
+    }
+    const start = resolve(segment.start), end = resolve(segment.end)
+    if (!start || !end) return reject('参照する交点が存在しないため追加できません')
+    if (!startSelectable || !selectableEndpoint(pattern, segment.end, geometry)) return reject('交点を構成する線分に材がないため追加できません')
+    if (pointsAreClose(start, end)) return reject('両端が同じ位置になる線分は作成できません')
     const segments = continueEndpointSources(requested, pattern.symmetry)
-    if (segments.length !== requested.length) return pattern
+    if (segments.length !== requested.length) return reject('参照する交点が存在しないため追加できません')
     const candidate = segments.find(s => s.id === segment.id)!
     const family = segmentFamilyKey(pattern.symmetry, candidate, segments)
-    if (pattern.segments.some(s => segmentFamilyKey(pattern.symmetry, s, segments) === family)) return pattern
+    if (pattern.segments.some(s => segmentFamilyKey(pattern.symmetry, s, segments) === family)) return reject('線分が重複するため追加できません')
     const all = expandPattern({ segments, symmetry: pattern.symmetry })
     const added = all.filter(s => s.sourceId === segment.id)
-    if (added.some(s => pointsAreClose(s.start, s.end)) || hasOverlap(added, all.filter(s => s.sourceId !== segment.id))) return pattern
-    return { ...pattern, segments }
-  } catch { return pattern }
+    if (hasOverlap(added, all.filter(s => s.sourceId !== segment.id))) return reject('線分が重複するため追加できません')
+    return { kind: 'changed', pattern: { ...pattern, segments } }
+  } catch { return reject('端点参照を解決できないため追加できません') }
+}
 
+/** 既存APIは拒否時に元Patternを返す互換性を保つ。 */
+export function addSegment(pattern: CellPattern, segment: Segment): CellPattern {
+  const result = evaluateAddSegment(pattern, segment)
+  return result.kind === 'changed' ? result.pattern : pattern
 }
 
 /** SplitRelationとMaterialExclusionの両invariantを保つPattern状態遷移。 */

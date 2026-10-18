@@ -1,3 +1,6 @@
+import { evaluateAddSegment, addSegment } from '../../pattern/patternOperations'
+import { excludeMaterial } from '../../pattern/materialExclusion'
+import { deriveLogicalFragments } from '../../pattern/designGeometry'
 import { createIntersectionAnchor } from '../../pattern/intersectionAnchor'
 import { changeSegmentEndpoint } from '../../pattern/endpointEdit'
 import { resolveEndpoint } from '../../pattern/sourceGeometry'
@@ -102,4 +105,19 @@ contractTest({ contract: 'ARCH-EDITOR-SELECTION-STATE', regression: 72 }, '鏡�
   expect(reconcileEditorInteraction(changed.pattern, { ...choosing, candidates: [candidate] })).toEqual({ kind: 'idle' })
   const survivingPreview = { ...choosing, previewKey: canvasHitCandidateKey(survivor) }
   expect(reconcileEditorInteraction(changed.pattern, survivingPreview)).toEqual({ ...survivingPreview, candidates: [survivor] })
+})
+
+contractTest({ contract: 'SPEC-ANCHOR-INTERSECTION-ENDPOINT-MATERIAL', regression: 72 }, '作成途中始点は材除外だけでは破棄せず確定時には材なしの追加を拒否する', () => {
+  const pattern: CellPattern = { ...base, segments: [
+    { id: 'T', start: a, end: { kind: 'edge-division', edge: 'BC', divisions: 2, index: 1 } },
+    { id: 'U', start: b, end: { kind: 'edge-division', edge: 'CA', divisions: 2, index: 1 } },
+  ] }
+  const anchor = createIntersectionAnchor({ sourceSegmentId: 'T', transform: { type: 'identity' } }, { sourceSegmentId: 'U', transform: { type: 'identity' } })
+  const creating: EditorInteraction = { kind: 'creating-segment', startAnchor: anchor }
+  const excluded = excludeMaterial(pattern, deriveLogicalFragments(pattern).find(f => f.segmentInstanceRef.sourceSegmentId === 'T')!)
+  expect(reconcileEditorInteraction(excluded, creating)).toBe(creating)
+  const segment = { id: 'new', start: anchor, end: c }
+  expect(evaluateAddSegment(excluded, segment)).toEqual({ kind: 'rejected', reason: '交点を構成する線分に材がないため追加できません', startSelectable: false })
+  expect(addSegment(excluded, segment)).toBe(excluded)
+  expect(evaluateAddSegment(excluded, { ...segment, start: c, end: anchor })).toEqual({ kind: 'rejected', reason: '交点を構成する線分に材がないため追加できません', startSelectable: true })
 })

@@ -597,3 +597,7 @@ Family keyはこの正規化済みlogical端点pairから導出する。Intersec
 新規作成の拒否は既存addの評価を使って表示し、検証実装を複製しない。拒否された作成ではPatternを維持し、有効な始点contextを残して別終点を選べる。始点が消失・選択不可ならidleへ戻し理由を表示する。
 
 交点端点の候補導出は、同じPatternのDesign Geometry snapshotとEffective Geometry queryから全canonical instance pairの解決点と選択可能identity lookupを作る。`EndpointGeometryQuery`を通常reconcile・hit test・marker・preview描画で共有し、候補ごとの全交点列挙や座標取得ごとのsource再展開を行わない。同座標でも異なるpairは保持する。Appは現在のPatternに対応する派生値をmemo化してEditorとeffectへ渡すが、永続cacheやReact stateには保存しない。UI用の正確なidentity照合と、ドメイン操作の明示的canonicalizationを分離する。
+
+`evaluateAddSegment`は追加の可否、拒否理由、拒否後の始点再利用可否を返す。`addSegment`は同じ評価へ委譲し、拒否時に元Patternを返す互換性を保つ。UIは評価結果を表示し、重複・交点参照・材の条件を再実装しない。通常reconcileでの作成途中始点のDesign基準照合と、追加確定時のEffective基準検証を分離する。
+
+文脈なしの`resolveSegmentEndpoint`は`BoundaryAnchor`（Vertex / Edge Division）だけを受け取る。一般の`SegmentEndpointAnchor`はPattern文脈付き`resolveEndpoint`、一般Segment群は`resolveSourceDefinitions` / `expandPattern`で解決する。文脈なしの一般Segment resolverは公開しない。

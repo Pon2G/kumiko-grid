@@ -25,4 +25,3 @@ export const validEndpointAnchor = (anchor: SegmentEndpointAnchor): boolean => !
     : anchor.kind === 'edge-division' && ['AB', 'BC', 'CA'].includes(anchor.edge)
       && Number.isInteger(anchor.divisions) && Number.isInteger(anchor.index)
       && anchor.divisions >= 2 && anchor.index > 0 && anchor.index < anchor.divisions)
-

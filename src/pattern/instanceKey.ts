@@ -5,4 +5,3 @@ export const instanceTransformKey = (transform: SegmentInstanceTransform): strin
 
 export const instanceRefKey = (ref: SegmentInstanceRef): string =>
   JSON.stringify([ref.sourceSegmentId, instanceTransformKey(ref.transform)])
-

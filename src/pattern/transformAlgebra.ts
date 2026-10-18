@@ -218,4 +218,3 @@ export function mapSegmentInstance(
   const transform = algebra.compose(mapping.toTransform, instance.transform)
   return transform ? { sourceSegmentId: mapping.toSourceSegmentId, transform } : null
 }
-

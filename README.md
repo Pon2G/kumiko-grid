@@ -30,6 +30,9 @@ npm test
 npm run build
 ```
 
+カバレッジは `npm run test:coverage` で計測し、`coverage/index.html` から確認できます。
+[デプロイ後の最新カバレッジ](https://pon2g.github.io/kumiko-grid/coverage/)はブラウザで閲覧できます。計測対象と公開手順は[開発手順](docs/development.md#カバレッジの計測と閲覧)を参照してください。
+
 ## ドキュメント
 
 - [プロダクト仕様](docs/spec.md)

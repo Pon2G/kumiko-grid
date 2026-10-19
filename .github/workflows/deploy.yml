@@ -13,10 +13,12 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  # 2回の公開を含む実行全体を直列化し、古い成果物による上書きを防ぐ。
+  cancel-in-progress: false
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -44,10 +46,17 @@ jobs:
       - name: アプリケーションをBuild
         run: npm run build
 
-      - name: GitHub Pages用artifactをアップロード
-        uses: actions/upload-pages-artifact@v5
+      - name: 計測待ちページを用意
+        run: node scripts/coverage-report.mjs pending dist/coverage
+
+      - name: アプリケーションの成果物を保存
+        uses: actions/upload-artifact@v7
         with:
+          name: app-build
           path: ./dist
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
 
   deploy:
     environment:
@@ -57,6 +66,94 @@ jobs:
     needs: build
 
     steps:
+      - name: 同じコミットをチェックアウト
+        uses: actions/checkout@v7
+
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: GitHub Pagesを設定
+        uses: actions/configure-pages@v6
+
+      - name: アプリケーションの成果物を取得
+        uses: actions/download-artifact@v8
+        with:
+          name: app-build
+          path: ./dist
+
+      - name: 古いコミットの再デプロイを防止
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse FETCH_HEAD)" != "$GITHUB_SHA" ]; then
+            echo 'mainが更新されているため、この実行では公開しません。' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      - name: アプリ用Pages artifactをアップロード
+        uses: actions/upload-pages-artifact@v5
+        with:
+          name: app-site-${{ github.run_attempt }}
+          path: ./dist
+
       - name: GitHub Pagesへデプロイ
         id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          artifact_name: app-site-${{ github.run_attempt }}
+
+      - name: デプロイ成功後にカバレッジを計測
+        id: coverage
+        continue-on-error: true
+        run: npm ci --no-audit --no-fund && npm run test:coverage
+
+      - name: 公開するレポートを用意
+        env:
+          COVERAGE_OUTCOME: ${{ steps.coverage.outcome }}
+        shell: bash
+        run: |
+          rm -rf dist/coverage
+          if [ "$COVERAGE_OUTCOME" = 'success' ]; then
+            cp -R coverage dist/coverage
+          else
+            node scripts/coverage-report.mjs failed dist/coverage
+          fi
+
+      - name: レポート公開前にmainの更新を確認
+        id: latest
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          if [ "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA" ]; then
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+            echo 'mainが更新されたため、レポートの公開は次の実行へ引き継ぎます。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: レポートを加えたPages artifactをアップロード
+        if: steps.latest.outputs.publish == 'true'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          name: coverage-site-${{ github.run_attempt }}
+          path: ./dist
+
+      - name: 同じアプリ成果物とレポートを公開
+        if: steps.latest.outputs.publish == 'true'
+        id: coverage-deployment
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: coverage-site-${{ github.run_attempt }}
+
+      - name: レポートURLを表示
+        if: steps.latest.outputs.publish == 'true'
+        env:
+          PAGE_URL: ${{ steps.coverage-deployment.outputs.page_url }}
+        run: echo "[カバレッジレポート](${PAGE_URL}coverage/)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 計測失敗を実行結果に反映
+        if: steps.coverage.outcome == 'failure'
+        run: exit 1

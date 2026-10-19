@@ -1,6 +1,7 @@
 import type { Symmetry } from '../../pattern/cellPattern'
 
 interface SettingsProps {
+  onGenerate: () => void
   notice?: string
   divisions: number
   divisionsDisabled: boolean
@@ -9,7 +10,7 @@ interface SettingsProps {
   onSymmetryChange: (value: Symmetry) => void
 }
 
-export function Settings({ notice, divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
+export function Settings({ onGenerate, notice, divisions, divisionsDisabled, symmetry, onDivisionsChange, onSymmetryChange }: SettingsProps) {
   const changeDivisions = (value: number) => {
     if (Number.isInteger(value)) {
       onDivisionsChange(Math.min(12, Math.max(2, value)))
@@ -66,6 +67,8 @@ export function Settings({ notice, divisions, divisionsDisabled, symmetry, onDiv
       </fieldset>
 
       {notice && <p role="status" className="operation-notice">{notice}</p>}
+
+      <button type="button" className="generator-open" onClick={onGenerate}>文様を生成</button>
 
       <div className="help-card">
         <strong>線分の描き方</strong>

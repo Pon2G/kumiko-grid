@@ -519,3 +519,25 @@ keyboardで交点Anchorと曖昧候補へ到達し、選択・確定・取消し
 - 編集/影響確認中に外部Patternが変更されたら中断する。古い承認を新Patternへ適用しない。
 - 通常の作成途中は始点Intersectionを現在Patternで再照合する。消滅したら作成contextを破棄。存続なら同じidentityの現在座標へ更新し、終点確定時に新規操作条件も再検証する。
 - 曖昧候補の消滅は既存reconcile方針（previewだけ解除、残る候補維持、1件になっても自動確定しない）を維持する。別pairへ座標で付け替えない。通常のUI再照合では現在のcanonical pairとのidentity一致を確認し、stabilizer変化で消えたpairを再正規化して存続させない。永続端点の明示的な継続と端点編集成功時のselection mappingは維持する。
+
+
+## 文様生成
+
+設定の「文様を生成」から「おまかせ v1」（structured-lines / algorithmVersion 1）を利用できる。文字列から輪郭・放射・風車の3構成のいずれかを生成する。全構成が回転対称、sourceは1〜2本、展開後は3〜6本。生成時のsplit・材除外は空。生成空間は小さく異なる文字列で同じ文様が出る。連結性、加工可能性、境界の連続性、美しさ、伝統文様の再現は保証しない。細かな生成条件・版切替・保存・共有・Undoは提供しない。
+
+<!-- test-contract: SPEC-GENERATOR-TEXT-INPUT -->
+入力のCRLF・単独CRをLFへ変換しUnicode NFC正規化する。空・trimで空の入力、正規化後UTF-16 code unitで1,024超、孤立surrogateは生成APIでも拒否し、日本語で理由を示す。切詰めない。seed計算ではtrimせず、前後の空白・改行を保持する。UTF-8のFNV-1aによるseedを使う（詳細と固定ベクトルは[Generator Architecture](architecture/generator.md)）。
+
+<!-- test-contract: SPEC-GENERATOR-REPRODUCIBILITY -->
+同じ文字列正規化結果、Generator ID、algorithmVersionから同じ論理Patternと編集分割数を返す。成功結果のrecipeを再入力しても同じ結果になる。現在のEditor、Layout、時刻、非決定的乱数に依存しない。ハッシュ衝突や異なるseedの同一文様を許容する。出力を変える際はalgorithmVersionを変更し、未対応版を最新へ黙って読み替えない。
+
+<!-- test-contract: SPEC-GENERATOR-CANDIDATE -->
+入力欄は初期空・例「組子」。開く時や入力変更だけでは生成せず、「生成」で読み取り専用セル図と既存4×9敷き詰め図を「生成候補・未適用」として表示する。生成しても確定Patternを変えない。入力変更・失敗で旧候補を消去し適用不可にする。閉じる・Escapeは候補を破棄し、確定Pattern・divisions・生成元を維持する。modalで背景操作を遮断し、focusを内側に保ち、終了時は起点ボタンへ戻す。タッチ操作可能で小画面ではdialog内をスクロールできる。
+
+<!-- test-contract: SPEC-GENERATOR-APPLY -->
+開いた時点で旧interaction、pendingOperation、端点preview、通知を終了する。取消しでも復元しない。開始Pattern参照・divisionsと適用直前の状態が異なれば候補を失効し「文様が変更されたため、もう一度生成してください」と表示し、現状態から再生成できる。
+
+「この文様に置き換える」は生成とは別の操作。適用前に全置換・Undoなしを明示し、追加の確認dialogは設けない。成功時はPattern・編集分割数・生成元をまとめて置換し、候補と旧interactionを破棄して閉じる。同じsource IDでも旧selectionや端点編集を復活させず遅延pointer入力を引き継がない。旧split・材除外・Symmetryを混入しない。通常設定で線分がある間の分割数変更は禁止のままで、生成では文様全体の置換として新しい分割数を採用する。Layoutの行列数・向き・sideは維持する。適用後は通常の追加・削除・端点変更・split・材操作を利用でき、編集時にGeneratorを再実行しない。
+
+<!-- test-contract: SPEC-GENERATOR-PROVENANCE -->
+生成元recipe（ID / algorithmVersion / seed）はCellPatternと別に保持する。初期手描き状態はnull。成功適用時のみ更新し、手動編集・候補生成・入力変更・取消し・失敗では変更しない。「生成元：おまかせ v1」「生成条件は適用直後の文様を再現します。手動編集は含みません。」と表示する。入力欄の現在値を生成元とみなさない。recipeなしの通常Patternも独立に編集・描画できる。

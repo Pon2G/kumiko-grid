@@ -79,6 +79,10 @@ Pattern内部では、Symmetryの離散transformに関する列挙・合成・�
 
 Cell Patternをどこへどの向きで配置するかを担当する。Layout StrategyはCell Patternの内容を知らない。
 
+### generator
+
+文字列とversion付きrecipeからCellPatternと編集用初期値を生成する。詳細は[Generator Architecture](architecture/generator.md)。Pattern操作・検証を利用し、pattern / layoutからgeneratorへ依存しない。
+
 ### components
 
 表示とユーザー操作を担当する。幾何学の数式や座標変換ルールはここへ直接実装しない。

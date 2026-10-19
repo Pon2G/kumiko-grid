@@ -4,13 +4,13 @@
 
 ## 自動検証
 
-実行結果: `npm run test:contracts`（72契約）、`npm test`（19ファイル・207件）、`npm run build`、`git diff --check`はすべて成功。
+実行結果: `npm run test:contracts`（72契約）、`npm test`（19ファイル・209件）、`npm run build`、`git diff --check`はすべて成功。
 
 - 固定入力6件のseed、論理Anchor、source ID、Symmetry、分割数を設計時の固定値と比較。風車の両向き、3構成、raw seed 0の経路を確認。
 - 改行・NFC、前後空白、UTF-16境界長、孤立surrogate、未対応recipe、入力不変と別呼出し間の独立性を確認。
 - 有限空間の全48組合せ（3構成×8個のn/k×2向き）が成功し、source数、展開数、非退化、overlapなしを確認。
 - UI統合で、手描きからの候補生成・失敗・入力変更・取消し、split・材なしを含むPatternの全置換、同ID再生成時の旧端点編集終了、適用後の追加・削除・端点変更、生成元表示を確認。
-- Pattern参照または分割数が競合した古い適用をpure helperで拒否し、現状態を基準に再生成できることを確認。
+- Pattern参照または分割数が競合した古い適用をpure helperで拒否し、現状態を基準に再生成できることを確認。App統合でもdialog開始後の文様変更・分割数変更を個別に再現し、生成→適用で競合通知と現状態維持、通知後の再生成→適用成功を確認。追加した2件は修正前には競合通知が出ず失敗し、生成時の基準上書きを検出した。
 - jsdomのdialog APIだけをテストで代替。modalの実動作は次のブラウザ確認と区別する。
 
 ## ブラウザ操作

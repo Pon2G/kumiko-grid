@@ -163,9 +163,10 @@ export default function App() {
     finishInteraction()
   }
   const generate = () => {
-    if (!generatorSessionRef.current) return
+    const session = generatorSessionRef.current
+    if (!session) return
     const result = generateCellPatternFromText(generationText)
-    setGeneratorSession({ base: patternRef.current, divisions, candidate: result.kind === 'generated' ? result.value : null, notice: result.kind === 'rejected' ? result.reason : undefined })
+    setGeneratorSession({ ...session, candidate: result.kind === 'generated' ? result.value : null, notice: result.kind === 'rejected' ? result.reason : undefined })
   }
   const applyGeneration = () => {
     const session = generatorSessionRef.current

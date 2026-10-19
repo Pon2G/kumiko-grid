@@ -146,3 +146,45 @@ contractTest({ contract: 'SPEC-GENERATOR-PROVENANCE' }, '適用した生成元�
   expect(screen.getByText('生成元：おまかせ v1')).toBeTruthy()
   expect(screen.getByLabelText('三角形グリッドプレビュー').innerHTML).toBe(before)
 })
+
+for (const change of ['pattern', 'divisions'] as const) {
+  contractTest({ contract: 'SPEC-GENERATOR-APPLY', regression: 74 }, `dialog開始後の${change === 'pattern' ? '文様' : '分割数'}変更を生成で追認せず適用時に通知し再生成で復帰する`, async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    if (change === 'pattern') {
+      anchor('頂点A'); anchor('BC辺を4等分した2番目の点')
+    }
+    await user.click(button('文様を生成'))
+    // 実ブラウザのmodalは背景操作を遮断する。ここではjsdomで背景の既存callbackを
+    // 発火し、dialog存続中の外部変更を再現する。Appのstateや適用helperはmockしない。
+    if (change === 'pattern') fireEvent.click(button('なし'))
+    else fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '8' } })
+    const expectedCount = change === 'pattern' ? 1 : 0
+    const expectedDivisions = change === 'pattern' ? '4' : '8'
+    const expectedSymmetry = change === 'pattern' ? 'なし' : '回転'
+    const assertCurrent = () => {
+      count(expectedCount)
+      expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe(expectedDivisions)
+      expect(button(expectedSymmetry).getAttribute('aria-pressed')).toBe('true')
+      expect(screen.queryByText('生成元：おまかせ v1')).toBeNull()
+    }
+    assertCurrent()
+    await generate(user, '組子')
+    assertCurrent()
+    await user.click(button('この文様に置き換える'))
+    expect(screen.getByRole('alert').textContent).toBe('文様が変更されたため、もう一度生成してください')
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.queryByLabelText('生成候補・未適用')).toBeNull()
+    expect((button('この文様に置き換える') as HTMLButtonElement).disabled).toBe(true)
+    assertCurrent()
+
+    await user.click(button('生成'))
+    expect(screen.queryByRole('alert')).toBeNull()
+    await user.click(button('この文様に置き換える'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    count(2)
+    expect((screen.getByRole('spinbutton') as HTMLInputElement).value).toBe('6')
+    expect(button('回転').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByText('生成元：おまかせ v1')).toBeTruthy()
+  })
+}
